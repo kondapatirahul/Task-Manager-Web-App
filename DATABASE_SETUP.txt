@@ -1,0 +1,100 @@
+TASK MANAGER WEB APP - DATABASE SETUP GUIDE
+
+1. DATABASE
+The project uses SQLite with Flask-SQLAlchemy for local development.
+
+Database configuration is located in:
+app/__init__.py
+
+2. INSTALLATION
+
+Create and activate the virtual environment:
+
+python -m venv venv
+
+Windows PowerShell:
+.\venv\Scripts\Activate.ps1
+
+Install dependencies:
+
+pip install -r requirements.txt
+
+3. CREATE DATABASE
+
+Start the Flask application:
+
+python run.py
+
+The application uses db.create_all() to create the required database
+tables when the application starts.
+
+4. SEED DEMO DATA
+
+To create demo users, categories, and sample tasks:
+
+python seed.py
+
+WARNING:
+seed.py clears the existing User, Category, and Task records before
+creating the demo data. Use it only when you want to reset the local
+database with the demo data.
+
+5. DEMO LOGIN
+
+Demo User 1:
+Email: demo1@example.com
+Password: password123
+
+Demo User 2:
+Email: demo2@example.com
+Password: password123
+
+6. DATABASE MODELS
+
+Database models are defined in:
+
+app/models.py
+
+Models:
+- User
+- Category
+- Task
+
+7. DATABASE CONFIGURATION
+
+The application reads the database connection from:
+
+DATABASE_URL
+
+If DATABASE_URL is not provided, the project uses the default SQLite
+database configured in app/__init__.py.
+
+8. SECRET KEY
+
+The application also uses:
+
+SECRET_KEY
+
+For local development a default development key is available, but for
+deployment a secure SECRET_KEY should be configured.
+
+9. TEAM INTEGRATION
+
+When integrating the complete project:
+
+1. Pull the latest code from GitHub.
+2. Create and activate the virtual environment.
+3. Install dependencies using requirements.txt.
+4. Configure DATABASE_URL and SECRET_KEY if required.
+5. Run python run.py.
+6. Run python seed.py only if demo/sample data is required.
+7. Test authentication, categories, tasks, and statistics APIs.
+
+10. IMPORTANT
+
+Do NOT commit the local SQLite database file to GitHub.
+
+Each developer can use their own local database during development.
+
+The database structure is recreated from the SQLAlchemy models when the
+application is initialized.
