@@ -1,100 +1,601 @@
-TASK MANAGER WEB APP - DATABASE SETUP GUIDE
+TASK MANAGER WEB APP - COMPLETE DATABASE SETUP GUIDE
 
-1. DATABASE
-The project uses SQLite with Flask-SQLAlchemy for local development.
+==================================================
+1. DATABASE OVERVIEW
+==================================================
 
-Database configuration is located in:
+The Task Manager Web App uses:
+
+- Flask
+- Flask-SQLAlchemy
+- SQLite for local development
+- SQLAlchemy ORM
+
+The database configuration is located in:
+
 app/__init__.py
 
-2. INSTALLATION
+The default local database is:
 
-Create and activate the virtual environment:
+tasks.db
+
+The application can also use another database by setting:
+
+DATABASE_URL
+
+If DATABASE_URL is not provided, the application uses the default SQLite database.
+
+IMPORTANT:
+Do NOT commit the local SQLite database file to GitHub.
+
+
+==================================================
+2. PROJECT DATABASE STRUCTURE
+==================================================
+
+The main database models are defined in:
+
+app/models.py
+
+The project contains three main models:
+
+1. User
+2. Category
+3. Task
+
+
+--------------------------------------------------
+USER
+--------------------------------------------------
+
+The User table stores registered users.
+
+Main fields:
+
+- id
+- username
+- email
+- password_hash
+
+A user can have multiple tasks.
+
+A user can also have multiple categories.
+
+Passwords are stored as password hashes and should NOT be stored as plain text.
+
+
+--------------------------------------------------
+CATEGORY
+--------------------------------------------------
+
+The Category table stores task categories belonging to users.
+
+Main fields:
+
+- id
+- name
+- user_id
+
+Each category belongs to a user.
+
+Categories can be used to organize tasks.
+
+
+--------------------------------------------------
+TASK
+--------------------------------------------------
+
+The Task table stores tasks created by users.
+
+Main fields:
+
+- id
+- title
+- description
+- status
+- priority
+- due_date
+- created_at
+- user_id
+- category_id
+
+Task status values include:
+
+- pending
+- in_progress
+- done
+
+Task priority values include:
+
+- low
+- medium
+- high
+
+Each task belongs to a user.
+
+A task can optionally belong to a category.
+
+
+==================================================
+3. DATABASE RELATIONSHIPS
+==================================================
+
+The database relationships are:
+
+User
+ |
+ +---- Categories
+ |
+ +---- Tasks
+
+Category
+ |
+ +---- Tasks
+
+In simple terms:
+
+One User -> Many Categories
+
+One User -> Many Tasks
+
+One Category -> Many Tasks
+
+
+==================================================
+4. DATABASE CONFIGURATION
+==================================================
+
+Database configuration is handled in:
+
+app/__init__.py
+
+The application reads:
+
+DATABASE_URL
+
+Example:
+
+DATABASE_URL=sqlite:///tasks.db
+
+If DATABASE_URL is not configured, the application uses the project's default SQLite database.
+
+
+==================================================
+5. SECRET KEY
+==================================================
+
+The application uses:
+
+SECRET_KEY
+
+For local development, a default development key may be available.
+
+For deployment, configure a secure SECRET_KEY using environment variables.
+
+Do NOT commit real production secrets to GitHub.
+
+
+==================================================
+6. REQUIREMENTS INSTALLATION
+==================================================
+
+First create a virtual environment:
 
 python -m venv venv
 
-Windows PowerShell:
+Activate the virtual environment on Windows PowerShell:
+
 .\venv\Scripts\Activate.ps1
 
-Install dependencies:
+Install the project dependencies:
 
 pip install -r requirements.txt
 
-3. CREATE DATABASE
+
+==================================================
+7. CREATE / INITIALIZE DATABASE
+==================================================
 
 Start the Flask application:
 
 python run.py
 
-The application uses db.create_all() to create the required database
-tables when the application starts.
+The application initializes the database using:
 
-4. SEED DEMO DATA
+db.create_all()
 
-To create demo users, categories, and sample tasks:
+The required tables are created from the SQLAlchemy models.
+
+The database is normally created automatically when the application starts.
+
+
+==================================================
+8. SEED DEMO DATA
+==================================================
+
+If the project contains the seed script, demo/sample data can be created using:
 
 python seed.py
 
-WARNING:
-seed.py clears the existing User, Category, and Task records before
-creating the demo data. Use it only when you want to reset the local
-database with the demo data.
+The seed script may create:
 
-5. DEMO LOGIN
+- Demo users
+- Demo categories
+- Sample tasks
+
+IMPORTANT:
+
+The seed script clears existing User, Category, and Task records before creating demo data.
+
+Therefore, use:
+
+python seed.py
+
+only when you want to reset the local database with the demo data.
+
+Do NOT run the seed script on a database containing data that you want to keep.
+
+
+==================================================
+9. DEMO LOGIN
+==================================================
 
 Demo User 1:
-Email: demo1@example.com
-Password: password123
+
+Email:
+demo1@example.com
+
+Password:
+password123
+
 
 Demo User 2:
-Email: demo2@example.com
-Password: password123
 
-6. DATABASE MODELS
+Email:
+demo2@example.com
 
-Database models are defined in:
+Password:
+password123
 
-app/models.py
 
-Models:
-- User
+These credentials are intended for local development/testing if the seed data is available.
+
+
+==================================================
+10. AUTHENTICATION AND DATABASE
+==================================================
+
+Authentication uses the User database table.
+
+The authentication API is located in:
+
+app/routes/auth.py
+
+Main authentication operations include:
+
+POST /api/auth/register
+
+POST /api/auth/login
+
+POST /api/auth/logout
+
+GET /api/auth/me
+
+User passwords are stored using password hashing.
+
+Authenticated API requests use the currently logged-in user.
+
+Users should only be able to access their own:
+
+- Tasks
+- Categories
+- Statistics
+
+
+==================================================
+11. TASK DATABASE OPERATIONS
+==================================================
+
+Task API routes are located in:
+
+app/routes/tasks.py
+
+Tasks are associated with the logged-in user through:
+
+user_id
+
+The application supports operations such as:
+
+GET /api/tasks
+
+POST /api/tasks
+
+PUT /api/tasks/<task_id>
+
+DELETE /api/tasks/<task_id>
+
+Task records can contain:
+
+- Title
+- Description
+- Status
+- Priority
+- Due date
 - Category
-- Task
+- User ownership
 
-7. DATABASE CONFIGURATION
 
-The application reads the database connection from:
+==================================================
+12. CATEGORY DATABASE OPERATIONS
+==================================================
 
-DATABASE_URL
+Category API routes are located in:
 
-If DATABASE_URL is not provided, the project uses the default SQLite
-database configured in app/__init__.py.
+app/routes/categories.py
 
-8. SECRET KEY
+Categories are associated with the logged-in user through:
 
-The application also uses:
+user_id
 
-SECRET_KEY
+The application supports category operations such as:
 
-For local development a default development key is available, but for
-deployment a secure SECRET_KEY should be configured.
+GET /api/categories
 
-9. TEAM INTEGRATION
+POST /api/categories
 
-When integrating the complete project:
+DELETE /api/categories/<cat_id>
+
+Categories help organize tasks.
+
+
+==================================================
+13. STATISTICS
+==================================================
+
+Statistics API routes are located in:
+
+app/routes/stats.py
+
+Statistics are calculated for the currently authenticated user.
+
+The statistics API can provide:
+
+- Total tasks
+- Pending tasks
+- Completed tasks
+- Overdue tasks
+- Tasks grouped by priority
+
+The statistics are calculated from the Task table.
+
+
+==================================================
+14. DATABASE INDEX
+==================================================
+
+The Task model contains an index for frequently used user/task queries.
+
+The index uses:
+
+user_id
+status
+due_date
+
+This can improve query performance for operations involving:
+
+- User-specific tasks
+- Task status
+- Due dates
+
+
+==================================================
+15. LOCAL DATABASE FILE
+==================================================
+
+The local SQLite database file may be created in the project environment.
+
+Example:
+
+tasks.db
+
+The database file is local development data.
+
+IMPORTANT:
+
+Do NOT commit:
+
+*.db
+
+to GitHub.
+
+Each team member can maintain their own local database.
+
+
+==================================================
+16. CLEAN DATABASE RESET
+==================================================
+
+If the local database needs to be recreated during development:
+
+1. Stop the Flask server.
+
+2. Remove the local SQLite database file if appropriate.
+
+3. Start the application again:
+
+python run.py
+
+The application will recreate the required database tables using the SQLAlchemy models.
+
+WARNING:
+
+Only delete the local database when you are sure that you do not need the existing local data.
+
+
+==================================================
+17. TESTING THE DATABASE
+==================================================
+
+After starting the application:
+
+python run.py
+
+Test the following areas:
+
+1. User registration
+2. User login
+3. User logout
+4. Current-user authentication
+5. Category creation
+6. Category listing
+7. Task creation
+8. Task listing
+9. Task update
+10. Task deletion
+11. Statistics
+12. Unauthorized API access
+
+
+==================================================
+18. AUTOMATED TESTS
+==================================================
+
+The project may contain automated tests under:
+
+tests/
+
+Authentication tests:
+
+tests/test_auth.py
+
+API error tests:
+
+tests/test_api_errors.py
+
+Run the project's test suite using the test command configured for the project.
+
+If pytest is installed:
+
+pytest
+
+
+==================================================
+19. FINAL TEAM INTEGRATION
+==================================================
+
+Before integrating the complete project:
 
 1. Pull the latest code from GitHub.
-2. Create and activate the virtual environment.
-3. Install dependencies using requirements.txt.
-4. Configure DATABASE_URL and SECRET_KEY if required.
-5. Run python run.py.
-6. Run python seed.py only if demo/sample data is required.
-7. Test authentication, categories, tasks, and statistics APIs.
 
-10. IMPORTANT
+2. Switch to the required branch.
 
-Do NOT commit the local SQLite database file to GitHub.
+3. Create and activate the virtual environment:
 
-Each developer can use their own local database during development.
+python -m venv venv
 
-The database structure is recreated from the SQLAlchemy models when the
-application is initialized.
+.\venv\Scripts\Activate.ps1
+
+4. Install dependencies:
+
+pip install -r requirements.txt
+
+5. Configure environment variables if required:
+
+DATABASE_URL
+SECRET_KEY
+
+6. Start the application:
+
+python run.py
+
+7. If demo data is required, run:
+
+python seed.py
+
+8. Test:
+
+- Authentication
+- Categories
+- Tasks
+- Statistics
+- Frontend
+- API endpoints
+
+
+==================================================
+20. TEAM DATABASE RULES
+==================================================
+
+All team members should follow these rules:
+
+- Do NOT commit the local SQLite database.
+- Do NOT commit .env files containing secrets.
+- Do NOT commit passwords or production credentials.
+- Keep database models synchronized with the final project.
+- Test database-dependent APIs after merging changes.
+- Use the latest project code before final integration.
+
+
+==================================================
+21. FINAL PROJECT DATABASE FILES
+==================================================
+
+Important database-related files:
+
+app/__init__.py
+app/models.py
+app/routes/auth.py
+app/routes/categories.py
+app/routes/tasks.py
+app/routes/stats.py
+seed.py
+requirements.txt
+DATABASE_SETUP.txt
+
+Documentation/API information may also be available in:
+
+docs/api-contract.md
+
+
+==================================================
+22. FINAL DATABASE CHECKLIST
+==================================================
+
+[ ] Flask-SQLAlchemy installed
+
+[ ] Database configuration is working
+
+[ ] User model is working
+
+[ ] Category model is working
+
+[ ] Task model is working
+
+[ ] User-task relationship is working
+
+[ ] User-category relationship is working
+
+[ ] Category-task relationship is working
+
+[ ] Authentication is working
+
+[ ] Tasks API is working
+
+[ ] Categories API is working
+
+[ ] Statistics API is working
+
+[ ] Demo data works if required
+
+[ ] Automated tests pass
+
+[ ] Local database is NOT committed
+
+[ ] .env is NOT committed
+
+[ ] Production secrets are NOT committed
+
+
+==================================================
+END OF DATABASE SETUP GUIDE
+==================================================
