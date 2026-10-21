@@ -1,13 +1,13 @@
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, g
 from app.models import Task
+from app.routes.auth import login_required
 
 stats_bp = Blueprint('stats', __name__, url_prefix='/api/stats')
 
 @stats_bp.route('', methods=['GET'])
+@login_required
 def get_stats():
-    uid = session.get('user_id')
-    if not uid:
-        return jsonify({'error': 'Unauthorized'}), 401
+    uid = g.current_user.id
     tasks = Task.query.filter_by(user_id=uid).all()
     return jsonify({
         'total': len(tasks),

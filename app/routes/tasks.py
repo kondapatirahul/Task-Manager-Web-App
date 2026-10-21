@@ -1,17 +1,14 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, g
 from app import db
 from app.models import Task
+from app.routes.auth import login_required
 
 tasks_bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
 
-def current_user_id():
-    return session.get('user_id')
-
 @tasks_bp.route('', methods=['GET'])
+@login_required
 def get_tasks():
-    uid = current_user_id()
-    if not uid:
-        return jsonify({'error': 'Unauthorized'}), 401
+    uid = g.current_user.id
     tasks = Task.query.filter_by(user_id=uid).all()
     return jsonify([{
         'id': t.id, 'title': t.title, 'description': t.description,
@@ -21,10 +18,9 @@ def get_tasks():
     } for t in tasks])
 
 @tasks_bp.route('', methods=['POST'])
+@login_required
 def create_task():
-    uid = current_user_id()
-    if not uid:
-        return jsonify({'error': 'Unauthorized'}), 401
+    uid = g.current_user.id
     data = request.get_json()
     task = Task(title=data['title'], description=data.get('description'),
                 status=data.get('status', 'pending'), priority=data.get('priority', 'medium'),
@@ -34,8 +30,9 @@ def create_task():
     return jsonify({'id': task.id, 'title': task.title}), 201
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
+@login_required
 def update_task(task_id):
-    uid = current_user_id()
+    uid = g.current_user.id
     task = Task.query.filter_by(id=task_id, user_id=uid).first_or_404()
     data = request.get_json()
     for field in ('title', 'description', 'status', 'priority', 'category_id'):
@@ -45,8 +42,9 @@ def update_task(task_id):
     return jsonify({'message': 'Updated'})
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
+@login_required
 def delete_task(task_id):
-    uid = current_user_id()
+    uid = g.current_user.id
     task = Task.query.filter_by(id=task_id, user_id=uid).first_or_404()
     db.session.delete(task)
     db.session.commit()
