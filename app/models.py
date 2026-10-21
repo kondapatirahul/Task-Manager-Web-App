@@ -53,7 +53,6 @@ class Task(db.Model):
     )  # low, medium, high
 
     due_date = db.Column(db.DateTime)
-
     created_at = db.Column(
         db.DateTime,
         default=datetime.utcnow
@@ -68,16 +67,6 @@ class Task(db.Model):
     category_id = db.Column(
         db.Integer,
         db.ForeignKey('category.id')
-    )
-
-    # Phase 2: index for faster user/status/due-date queries
-    __table_args__ = (
-        db.Index(
-            'ix_task_user_status_due_date',
-            'user_id',
-            'status',
-            'due_date'
-        ),
     )
 
     def to_dict(self):
