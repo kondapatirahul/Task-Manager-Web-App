@@ -5,7 +5,7 @@
 {% block content %}
 <div class="dashboard-header" style="margin-bottom: 24px;">
   <h1 style="font-size: 26px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">
-    Good morning, <span id="dashboardGreetingUser">Alex</span>! ☀️
+    Good morning, <span id="dashboardGreetingUser">{{ user.username if user and user.username else 'Alex' }}</span>! ☀️
   </h1>
   <p style="font-size: 14px; color: var(--text-muted);">
     Here's your task overview for today.
@@ -84,3 +84,4 @@
 {% endblock %}
 
 {% endblock %}
+

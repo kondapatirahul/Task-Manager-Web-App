@@ -11,3 +11,4 @@ A modern full-stack task manager application built with Python Flask, SQLite, an
 - M6: Frontend 2 - Task UI
 - M7: Frontend 3 - Dashboard & Filters
 - M8: QA / Docs / Demo
+

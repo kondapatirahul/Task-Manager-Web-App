@@ -20,8 +20,8 @@
     </button>
 
     <div class="user-profile-chip" id="userMenuBtn" role="button" tabindex="0" aria-label="User Profile">
-      <div class="avatar-circle" id="userAvatar">A</div>
-      <span class="user-name" id="userNameDisplay">Alex</span>
+      <div class="avatar-circle" id="userAvatar">{{ user.username[0]|upper if user and user.username else 'A' }}</div>
+      <span class="user-name" id="userNameDisplay">{{ user.username if user and user.username else 'User' }}</span>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="6 9 12 15 18 9"/>
       </svg>
