@@ -1,19 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Task Manager{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="description" content="TaskNest - A calm, focused, and intuitive task management application. Organize today, build a better tomorrow.">
+  <title>{% block title %}TaskNest — Organize Today. Build a Better Tomorrow.{% endblock %}</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
-    <nav>
-        <span>Task Manager</span>
-        <div id="nav-auth"></div>
-    </nav>
-    <main>{% block content %}{% endblock %}</main>
-    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+
+  {% block body %}
+  {% endblock %}
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container"></div>
+
+  <!-- Reusable Task Modal (Add / Edit) -->
+  {% if current_user.is_authenticated %}
+  <div class="modal-overlay" id="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="task-modal-title">Add New Task</h3>
+        <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+          <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <form id="task-form">
+        <div class="modal-body">
+          <input type="hidden" id="task-id" value="">
+          
+          <div class="form-group">
+            <label class="form-label" for="task-title-input">Task Title <span class="required">*</span></label>
+            <input type="text" id="task-title-input" class="form-control" placeholder="e.g., Review project roadmap" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="task-desc-input">Description</label>
+            <textarea id="task-desc-input" class="form-control" placeholder="Add additional details, notes, or subtasks..."></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="task-priority-select">Priority</label>
+              <select id="task-priority-select" class="form-control">
+                <option value="low">Low Priority</option>
+                <option value="medium" selected>Medium Priority</option>
+                <option value="high">High Priority</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-status-select">Status</label>
+              <select id="task-status-select" class="form-control">
+                <option value="pending" selected>Pending</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="task-category-select">Category</label>
+              <select id="task-category-select" class="form-control">
+                <option value="">No Category</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-due-date-input">Due Date</label>
+              <input type="date" id="task-due-date-input" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Core Scripts -->
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>
