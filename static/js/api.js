@@ -1,12 +1,32 @@
+
 async function api(method, path, body = null) {
-    const opts = {
+    const options = {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+        headers: {
+            "Content-Type": "application/json"
+        },
+        credentials: "same-origin"
     };
-    if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(`/api${path}`, opts);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+
+    if (body !== null && body !== undefined) {
+        options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(`/api${path}`, options);
+
+    let data = null;
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+        data = await response.json();
+    }
+
+    if (!response.ok || data?.ok === false) {
+        throw new Error(
+            data?.error || data?.message || "Request failed"
+        );
+    }
+
     return data;
 }
