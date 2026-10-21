@@ -16,6 +16,9 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+  <!-- Accessible Skip Link for Keyboard/Screen Reader Navigation -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
   {% include 'partials/_toast.html' %}
 
   {% block page_wrapper %}
@@ -26,7 +29,7 @@
       <div class="app-main">
         {% include 'partials/_topbar.html' %}
         
-        <main class="app-content">
+        <main class="app-content" id="main-content" tabindex="-1">
           {% block content %}
           <!-- Main workspace content injected by M6 and M7 -->
           {% endblock %}

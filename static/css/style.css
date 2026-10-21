@@ -154,6 +154,31 @@ img, svg {
 
 :focus-visible {
   outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+/* ============================================================================
+   ACCESSIBILITY: SKIP LINK
+   ============================================================================ */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 20px;
+  background-color: var(--primary);
+  color: #FFFFFF;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  z-index: 99999;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: top 200ms ease;
+}
+
+.skip-link:focus {
+  top: 16px;
+  outline: 3px solid #F59E0B;
   outline-offset: 2px;
 }
 
@@ -515,6 +540,11 @@ img, svg {
   padding: 24px;
   box-shadow: var(--shadow-card);
   border: 1px solid rgba(0, 0, 0, 0.02);
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.card:hover {
+  box-shadow: 0 6px 20px rgba(27, 61, 54, 0.06);
 }
 
 .stat-card-grid {
@@ -1192,7 +1222,10 @@ img, svg {
     color: var(--text-muted);
     flex: 1;
     height: 100%;
+    min-height: 48px;
+    min-width: 48px;
     text-decoration: none;
+    transition: color var(--transition-fast);
   }
 
   .mobile-nav-item.active {

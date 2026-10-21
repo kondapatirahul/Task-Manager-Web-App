@@ -115,8 +115,10 @@ function highlightActiveNav() {
     const href = link.getAttribute('href');
     if (href && (href === currentPath || (href !== '/' && currentPath.startsWith(href)))) {
       link.classList.add('active');
+      link.setAttribute('aria-current', 'page');
     } else {
       link.classList.remove('active');
+      link.removeAttribute('aria-current');
     }
   });
 }
