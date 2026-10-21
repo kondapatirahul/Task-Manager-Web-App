@@ -1,0 +1,70 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Profile — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">User Profile</h1>
+    <p class="page-subtitle">View your account information and workspace membership status.</p>
+  </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+  <!-- Account Details Card -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Account Details</h2>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem;">
+      <div style="width: 4rem; height: 4rem; border-radius: var(--radius-pill); background-color: var(--color-primary); color: #fff; font-size: 1.75rem; font-weight: 800; display: flex; align-items: center; justify-content: center;">
+        {{ (current_user.full_name or current_user.username)[:1].upper() }}
+      </div>
+      <div>
+        <h3 style="font-size: var(--font-size-lg); color: var(--color-primary);">{{ current_user.full_name or current_user.username }}</h3>
+        <p class="text-muted" style="font-size: var(--font-size-sm);">@{{ current_user.username }}</p>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 0.85rem; font-size: var(--font-size-sm);">
+      <div style="display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--color-border-subtle);">
+        <span class="text-muted">Email</span>
+        <span style="font-weight: 600;">{{ current_user.email }}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--color-border-subtle);">
+        <span class="text-muted">Account Status</span>
+        <span class="badge badge-completed">Active</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; padding: 0.6rem 0;">
+        <span class="text-muted">Member Since</span>
+        <span style="font-weight: 600;">{{ current_user.created_at.strftime('%B %d, %Y') if current_user.created_at else 'Recent' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security & Session Card -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Session & Security</h2>
+    </div>
+    <p class="text-muted" style="font-size: var(--font-size-sm); margin-bottom: 1.5rem;">
+      You are currently authenticated in a secure session. When you are finished managing tasks on shared devices, be sure to log out.
+    </p>
+
+    <div style="background-color: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem;">
+      <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary); margin-bottom: 0.25rem;">
+        Data Protection
+      </div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted);">
+        Your credentials and passwords are encrypted using industry standard Werkzeug SHA-256 password hashing.
+      </div>
+    </div>
+
+    <button type="button" class="btn btn-secondary logout-btn" style="width: 100%;">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      <span>Sign Out of TaskNest</span>
+    </button>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Categories — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">Categories</h1>
+    <p class="page-subtitle">Group your tasks into logical workspaces and projects.</p>
+  </div>
+</div>
+
+<!-- Add Category Card -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-header">
+    <h2 class="card-title">Create New Category</h2>
+  </div>
+  <form id="category-form" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: flex-end;">
+    <div style="flex: 1; min-width: 240px;">
+      <label class="form-label" for="new-category-name">Category Name <span class="required">*</span></label>
+      <input type="text" id="new-category-name" class="form-control" placeholder="e.g., Marketing, Personal, Client Work" required style="margin-bottom: 0;">
+    </div>
+    <button type="submit" class="btn btn-primary" style="height: 42px;">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>Add Category</span>
+    </button>
+  </form>
+</div>
+
+<!-- Category List -->
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Your Categories</h2>
+  </div>
+  <div id="categories-list-container">
+    <div style="text-align: center; padding: 2rem; color: var(--color-muted);">Loading categories...</div>
+  </div>
+</div>
+{% endblock %}

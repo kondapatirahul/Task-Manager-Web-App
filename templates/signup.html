@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Create Account — TaskNest{% endblock %}
+
+{% block body %}
+<div class="auth-container">
+  <div class="auth-header">
+    <a href="/" class="brand-logo" style="justify-content: center; margin-bottom: 0.75rem;">
+      <div class="brand-icon">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+      </div>
+      <span>TaskNest</span>
+    </a>
+  </div>
+
+  <div class="auth-card">
+    <h1 class="auth-card-title">Create Account</h1>
+    <p class="auth-card-subtitle">Start organizing your life and projects in a calm, clear workspace.</p>
+
+    <!-- Error message banner -->
+    <div id="signup-error" class="alert alert-danger" style="display: none;" role="alert"></div>
+
+    <form id="signup-form">
+      <div class="form-group">
+        <label class="form-label" for="full_name">Full Name <span class="required">*</span></label>
+        <div class="input-with-icon">
+          <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          <input type="text" id="full_name" class="form-control" placeholder="Alex Mercer" required autocomplete="name">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">Email Address <span class="required">*</span></label>
+        <div class="input-with-icon">
+          <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+          <input type="email" id="email" class="form-control" placeholder="alex@example.com" required autocomplete="email">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password <span class="required">*</span></label>
+        <div class="password-wrapper">
+          <div class="input-with-icon">
+            <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <input type="password" id="password" class="form-control" placeholder="At least 6 characters" required autocomplete="new-password">
+          </div>
+          <button type="button" class="password-toggle" aria-label="Toggle password visibility">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="confirm_password">Confirm Password <span class="required">*</span></label>
+        <div class="password-wrapper">
+          <div class="input-with-icon">
+            <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <input type="password" id="confirm_password" class="form-control" placeholder="Re-enter password" required autocomplete="new-password">
+          </div>
+          <button type="button" class="password-toggle" aria-label="Toggle confirm password visibility">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
+        Create Account
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      Already have an account? <a href="{{ url_for('web.login_page') }}">Sign in here</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,9 +1,14 @@
 .venv/
 venv/
+ENV/
 __pycache__/
 *.py[cod]
+*$py.class
 .env
 instance/*.db
 instance/*.sqlite
+*.db
+*.sqlite3
 .pytest_cache/
 .coverage
+.env
