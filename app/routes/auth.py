@@ -42,6 +42,8 @@ def login_required(view):
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 415
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
@@ -109,6 +111,8 @@ def register():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 415
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
