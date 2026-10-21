@@ -7,7 +7,11 @@ Base URL: `/api`
 |--------|----------|------|----------|
 | POST | `/auth/register` | `{username, email, password}` | `201 {message}` |
 | POST | `/auth/login` | `{email, password}` | `200 {message, user}` |
+| GET | `/auth/me` | — | `200 {id, username, email}` |
 | POST | `/auth/logout` | — | `200 {message}` |
+
+Login uses a Flask session cookie. Task, category, stats, and current-user endpoints
+require an authenticated session and return `401 {error}` otherwise.
 
 ## Tasks
 | Method | Endpoint | Body | Response |
