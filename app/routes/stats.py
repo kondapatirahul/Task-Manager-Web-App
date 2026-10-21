@@ -6,6 +6,7 @@ from app.routes.utils import api_success
 
 stats_bp = Blueprint('stats', __name__, url_prefix='/api/stats')
 
+
 @stats_bp.route('', methods=['GET'])
 @login_required
 def get_stats():

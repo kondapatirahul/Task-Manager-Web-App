@@ -34,6 +34,14 @@ class User(UserMixin, db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email
+        }
+
+
 class Category(db.Model):
     __tablename__ = 'categories'
 
@@ -52,6 +60,14 @@ class Category(db.Model):
             'task_count': self.tasks.count() if hasattr(self.tasks, 'count') else 0,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'user_id': self.user_id
+        }
+
 
 class Task(db.Model):
     __tablename__ = 'tasks'

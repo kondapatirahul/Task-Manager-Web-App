@@ -5,6 +5,7 @@ from app import db
 from app.models import User, Category
 from app.routes.utils import api_success, api_error
 
+
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
 EMAIL_REGEX = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
@@ -55,6 +56,7 @@ def signup():
 
     login_user(user, remember=True)
     return api_success(user.to_dict(), message='User registered successfully', status_code=201)
+
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
