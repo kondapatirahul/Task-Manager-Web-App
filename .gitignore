@@ -11,5 +11,4 @@ instance/*.sqlite
 *.sqlite3
 .pytest_cache/
 .coverage
-htmlcov/
-.DS_Store
+.env
