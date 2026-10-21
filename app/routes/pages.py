@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, session, redirect, url_for
+from app import db
 
 pages_bp = Blueprint('pages', __name__)
 
@@ -24,7 +25,7 @@ def dashboard():
     if not user_id:
         return redirect('/login')
     from app.models import User
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     return render_template('dashboard.html', user=user)
 
 @pages_bp.route('/tasks')
@@ -33,5 +34,5 @@ def tasks():
     if not user_id:
         return redirect('/login')
     from app.models import User
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     return render_template('tasks.html', user=user)
