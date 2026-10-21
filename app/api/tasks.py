@@ -29,7 +29,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, Optional
 from flask import Blueprint, jsonify, request, g
 
-from app.api.validators import validate_task_payload
+from app.api.validators import validate_task_payload, validate_task_query_params
 
 tasks_bp = Blueprint("tasks_api", __name__, url_prefix="/api/tasks")
 
@@ -229,6 +229,97 @@ def serialize_task(task: Any) -> Dict[str, Any]:
     }
 
 
+def apply_task_filters_and_sort(query: Any, Task: Any, filters: Dict[str, Any]) -> Any:
+    """
+    Apply search, filtering, and sorting to task query.
+    Uses safe SQLAlchemy query methods when integrated with models,
+    with fallback for decoupled/mock testing.
+    """
+    is_sqlalchemy = hasattr(Task, "__table__") or hasattr(Task, "__tablename__")
+
+    if is_sqlalchemy:
+        # Safe SQLAlchemy query construction (parameterized, no SQL strings)
+        if "status" in filters:
+            query = query.filter(Task.status == filters["status"])
+
+        if "priority" in filters:
+            query = query.filter(Task.priority == filters["priority"])
+
+        if "category_id" in filters:
+            query = query.filter(Task.category_id == filters["category_id"])
+
+        if "due_before" in filters:
+            query = query.filter(Task.due_date != None, Task.due_date <= filters["due_before"])
+
+        if "q" in filters:
+            search_pat = f"%{filters['q']}%"
+            try:
+                from sqlalchemy import or_
+                if hasattr(Task, "description"):
+                    query = query.filter(
+                        or_(Task.title.ilike(search_pat), Task.description.ilike(search_pat))
+                    )
+                else:
+                    query = query.filter(Task.title.ilike(search_pat))
+            except ImportError:
+                query = query.filter(Task.title.ilike(search_pat))
+
+        sort = filters.get("sort")
+        if sort == "due_date":
+            # Consistent nulls last for missing due dates
+            if hasattr(Task.due_date.asc(), "nullslast"):
+                query = query.order_by(Task.due_date.asc().nullslast(), Task.id.desc())
+            else:
+                query = query.order_by(Task.due_date.asc(), Task.id.desc())
+        elif sort == "priority":
+            # High (1) -> Medium (2) -> Low (3)
+            try:
+                from sqlalchemy import case
+                priority_order = case(
+                    {"high": 1, "medium": 2, "low": 3},
+                    value=Task.priority,
+                    else_=4
+                )
+                query = query.order_by(priority_order.asc(), Task.id.desc())
+            except ImportError:
+                query = query.order_by(Task.priority.asc(), Task.id.desc())
+        elif sort == "created_at":
+            query = query.order_by(Task.created_at.desc(), Task.id.desc())
+        else:
+            query = query.order_by(Task.id.desc())
+
+        return query
+
+    # Fallback / Decoupled MockQuery support for testing
+    if "status" in filters:
+        query = query.filter_by(status=filters["status"])
+
+    if "priority" in filters:
+        query = query.filter_by(priority=filters["priority"])
+
+    if "category_id" in filters:
+        query = query.filter_by(category_id=filters["category_id"])
+
+    if "due_before" in filters:
+        due_limit = filters["due_before"]
+        query = query.filter(lambda item: item.due_date is not None and item.due_date <= due_limit)
+
+    if "q" in filters:
+        q_lower = filters["q"].lower()
+        query = query.filter(lambda item: (
+            q_lower in str(getattr(item, "title", "") or "").lower() or
+            q_lower in str(getattr(item, "description", "") or "").lower()
+        ))
+
+    sort = filters.get("sort")
+    if sort in ("due_date", "priority", "created_at"):
+        query = query.order_by(sort)
+    else:
+        query = query.order_by("id")
+
+    return query
+
+
 # ============================================================================
 # API Routes
 # ============================================================================
@@ -240,14 +331,30 @@ def list_tasks() -> Any:
     """
     GET /api/tasks
     Retrieve all tasks owned by the authenticated user.
+    Supports query parameters:
+    - q: case-insensitive search in title and description
+    - status: filter by allowed status ('pending', 'completed')
+    - priority: filter by priority ('low', 'medium', 'high')
+    - category_id: filter by category ID
+    - due_before: filter tasks due on or before YYYY-MM-DD
+    - sort: sort by 'due_date', 'priority', or 'created_at'
     """
     user = resolve_current_user()
+
+    # Validate query parameters
+    is_valid, err_msg, filters = validate_task_query_params(request.args)
+    if not is_valid:
+        return jsonify({"ok": False, "error": err_msg}), 400
+
     Task = get_task_model()
 
     # Scoped to authenticated user; safe SQLAlchemy query construction
+    # Client-supplied user_id in query params is NEVER accepted as authorization identity
     query = Task.query.filter_by(user_id=user.id)
-    if hasattr(Task, "id") and hasattr(Task.id, "desc"):
-        query = query.order_by(Task.id.desc())
+
+    # Apply search, filtering, and sorting
+    query = apply_task_filters_and_sort(query, Task, filters)
+
     tasks = query.all()
     data = [serialize_task(task) for task in tasks]
     return jsonify({"ok": True, "data": data}), 200

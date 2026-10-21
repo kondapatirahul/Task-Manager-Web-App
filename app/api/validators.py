@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional, Tuple
 
 VALID_STATUSES = {"pending", "completed"}
 VALID_PRIORITIES = {"low", "medium", "high"}
+VALID_SORT_FIELDS = {"due_date", "priority", "created_at"}
 MAX_TITLE_LENGTH = 150
 
 
@@ -119,5 +120,93 @@ def validate_task_payload(data: Any, is_partial: bool = False) -> Tuple[bool, Op
             cleaned["category_id"] = None
     elif not is_partial:
         cleaned["category_id"] = None
+
+    return True, None, cleaned
+
+
+def validate_task_query_params(params: Any) -> Tuple[bool, Optional[str], Dict[str, Any]]:
+    """
+    Validate query parameters for GET /api/tasks.
+    Supported parameters:
+    - q: string (optional, search in title and description)
+    - status: 'pending' | 'completed' (optional)
+    - priority: 'low' | 'medium' | 'high' (optional)
+    - category_id: positive integer (optional)
+    - due_before: YYYY-MM-DD date string (optional)
+    - sort: 'due_date' | 'priority' | 'created_at' (optional)
+
+    Returns:
+        (is_valid, error_message, cleaned_params)
+    """
+    if not hasattr(params, "get"):
+        return False, "Query parameters must be a key-value mapping", {}
+
+    cleaned: Dict[str, Any] = {}
+
+    # 1. Search query (q)
+    q_val = params.get("q")
+    if q_val is not None:
+        if not isinstance(q_val, str):
+            return False, "Search query 'q' must be a string", {}
+        q_cleaned = q_val.strip()
+        if q_cleaned:
+            cleaned["q"] = q_cleaned
+
+    # 2. Status filter
+    status_val = params.get("status")
+    if status_val is not None:
+        if not isinstance(status_val, str):
+            return False, f"Invalid status filter. Allowed values: {', '.join(sorted(VALID_STATUSES))}", {}
+        status_clean = status_val.strip().lower()
+        if status_clean not in VALID_STATUSES:
+            return False, f"Invalid status filter. Allowed values: {', '.join(sorted(VALID_STATUSES))}", {}
+        cleaned["status"] = status_clean
+
+    # 3. Priority filter
+    priority_val = params.get("priority")
+    if priority_val is not None:
+        if not isinstance(priority_val, str):
+            return False, f"Invalid priority filter. Allowed values: {', '.join(sorted(VALID_PRIORITIES))}", {}
+        priority_clean = priority_val.strip().lower()
+        if priority_clean not in VALID_PRIORITIES:
+            return False, f"Invalid priority filter. Allowed values: {', '.join(sorted(VALID_PRIORITIES))}", {}
+        cleaned["priority"] = priority_clean
+
+    # 4. Category ID filter
+    cat_val = params.get("category_id")
+    if cat_val is not None and str(cat_val).strip() != "":
+        if isinstance(cat_val, bool):
+            return False, "category_id must be a positive integer", {}
+        try:
+            cat_int = int(cat_val)
+            if cat_int <= 0:
+                return False, "category_id must be a positive integer", {}
+            cleaned["category_id"] = cat_int
+        except (ValueError, TypeError):
+            return False, "category_id must be a positive integer", {}
+
+    # 5. Due before filter (strictly YYYY-MM-DD)
+    due_val = params.get("due_before")
+    if due_val is not None and str(due_val).strip() != "":
+        if not isinstance(due_val, str):
+            return False, "due_before must be a valid date in YYYY-MM-DD format", {}
+        due_str = due_val.strip()
+        if len(due_str) != 10:
+            return False, "due_before must be a valid date in YYYY-MM-DD format", {}
+        try:
+            parsed_date = date.fromisoformat(due_str)
+            cleaned["due_before"] = parsed_date
+        except ValueError:
+            return False, "due_before must be a valid date in YYYY-MM-DD format", {}
+
+    # 6. Sort parameter
+    sort_val = params.get("sort")
+    if sort_val is not None and str(sort_val).strip() != "":
+        if not isinstance(sort_val, str):
+            return False, f"Invalid sort parameter. Allowed values: {', '.join(sorted(VALID_SORT_FIELDS))}", {}
+        sort_clean = sort_val.strip().lower()
+        if sort_clean not in VALID_SORT_FIELDS:
+            return False, f"Invalid sort parameter. Allowed values: {', '.join(sorted(VALID_SORT_FIELDS))}", {}
+        cleaned["sort"] = sort_clean
 
     return True, None, cleaned
