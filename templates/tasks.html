@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}My Tasks - TaskNest{% endblock %}
+
+{% block content %}
+<div class="tasks-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+  <div>
+    <h1 style="font-size: 26px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">My Tasks</h1>
+    <p style="font-size: 14px; color: var(--text-muted);">Manage and organize all your daily goals.</p>
+  </div>
+  <div>
+    <button type="button" class="btn btn-primary" id="openAddTaskModalBtn">
+      <span>+ Add Task</span>
+    </button>
+  </div>
+</div>
+
+<!-- Placeholder Block for M6 (Frontend 2 - Task UI) -->
+{% block task_content %}
+<div class="card">
+  <div class="empty-state">
+    <div class="empty-state-icon">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 11l3 3L22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+    </div>
+    <div class="empty-state-title">Task List Placeholder</div>
+    <div class="empty-state-desc">
+      Task list, task cards, filter bar, and task add/edit modals are implemented by <strong>M6 (Frontend 2)</strong>.
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% endblock %}

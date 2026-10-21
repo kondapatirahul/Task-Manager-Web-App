@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - TaskNest{% endblock %}
+
+{% block content %}
+<div class="dashboard-header" style="margin-bottom: 24px;">
+  <h1 style="font-size: 26px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">
+    Good morning, <span id="dashboardGreetingUser">Alex</span>! ☀️
+  </h1>
+  <p style="font-size: 14px; color: var(--text-muted);">
+    Here's your task overview for today.
+  </p>
+</div>
+
+<!-- Placeholder Block for M7 (Frontend 3 - Dashboard & Filters) -->
+{% block dashboard_content %}
+<div class="stat-card-grid">
+  <div class="stat-card">
+    <div class="stat-card-icon blue">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+      </svg>
+    </div>
+    <div class="stat-card-info">
+      <div class="stat-title">Total Tasks</div>
+      <div class="stat-value">12</div>
+      <div class="stat-trend positive"><span>↑</span> +2 this week</div>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon yellow">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+    </div>
+    <div class="stat-card-info">
+      <div class="stat-title">Pending</div>
+      <div class="stat-value">7</div>
+      <div class="stat-trend positive"><span>↑</span> +1 this week</div>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon green">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </div>
+    <div class="stat-card-info">
+      <div class="stat-title">Completed</div>
+      <div class="stat-value">5</div>
+      <div class="stat-trend positive"><span>↑</span> +3 this week</div>
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon red">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </div>
+    <div class="stat-card-info">
+      <div class="stat-title">Overdue</div>
+      <div class="stat-value">2</div>
+      <div class="stat-trend negative"><span>↓</span> -1 this week</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h3 style="font-size: 18px; font-weight: 700;">Recent Tasks</h3>
+    <a href="/tasks" class="btn btn-outline btn-sm">View all tasks &rarr;</a>
+  </div>
+  <p style="font-size: 14px; color: var(--text-muted);">
+    Dashboard views and filter statistics are managed by <strong>M7 (Frontend 3)</strong>.
+  </p>
+</div>
+{% endblock %}
+
+{% endblock %}

@@ -15,4 +15,13 @@ def create_app():
     login_manager.init_app(app)
     login_manager.login_view = 'pages.login'
 
+    @login_manager.user_loader
+    def load_user(user_id):
+        # Stub loader until M2/M3 models and auth are merged
+        return None
+
+    # Register blueprints
+    from app.routes.pages import pages_bp
+    app.register_blueprint(pages_bp)
+
     return app
