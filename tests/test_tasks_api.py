@@ -11,7 +11,7 @@ Tests:
 """
 
 import unittest
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from flask import Flask
 
@@ -62,6 +62,8 @@ class MockTask:
         due_date: Optional[date] = None,
         category_id: Optional[int] = None,
         id: Optional[int] = None,
+        created_at: Optional[datetime] = None,
+        updated_at: Optional[datetime] = None,
     ):
         if id is None:
             self.id = MockTask._auto_id
@@ -75,8 +77,8 @@ class MockTask:
         self.priority = priority
         self.due_date = due_date
         self.category_id = category_id
-        self.created_at = None
-        self.updated_at = None
+        self.created_at = created_at
+        self.updated_at = updated_at
 
     @classmethod
     def query_filter_by(cls, **kwargs: Any) -> "MockQuery":
@@ -90,6 +92,20 @@ class MockQuery:
             if all(getattr(item, k, None) == v for k, v in filters.items())
         ]
 
+    def filter_by(self, **filters: Any) -> "MockQuery":
+        filtered = [
+            item for item in self.dataset
+            if all(getattr(item, k, None) == v for k, v in filters.items())
+        ]
+        return MockQuery(filtered)
+
+    def filter(self, *criterion: Any) -> "MockQuery":
+        filtered = list(self.dataset)
+        for c in criterion:
+            if callable(c):
+                filtered = [item for item in filtered if c(item)]
+        return MockQuery(filtered)
+
     def first(self) -> Optional[Any]:
         return self.dataset[0] if self.dataset else None
 
@@ -97,9 +113,37 @@ class MockQuery:
         return list(self.dataset)
 
     def order_by(self, *args: Any) -> "MockQuery":
-        # Sort by id descending
-        self.dataset.sort(key=lambda x: getattr(x, "id", 0), reverse=True)
-        return self
+        dataset = list(self.dataset)
+        sort_arg = str(args[0]) if args else "id"
+
+        if "due_date" in sort_arg:
+            dataset.sort(
+                key=lambda x: (
+                    x.due_date is None,
+                    x.due_date if x.due_date is not None else date.max,
+                    -getattr(x, "id", 0),
+                )
+            )
+        elif "priority" in sort_arg:
+            weight = {"high": 1, "medium": 2, "low": 3}
+            dataset.sort(
+                key=lambda x: (
+                    weight.get(str(getattr(x, "priority", "")).lower(), 4),
+                    -getattr(x, "id", 0),
+                )
+            )
+        elif "created_at" in sort_arg:
+            dataset.sort(
+                key=lambda x: (
+                    getattr(x, "created_at", None) or datetime.min,
+                    getattr(x, "id", 0),
+                ),
+                reverse=True,
+            )
+        else:
+            dataset.sort(key=lambda x: getattr(x, "id", 0), reverse=True)
+
+        return MockQuery(dataset)
 
 
 class MockSession:
@@ -411,6 +455,287 @@ class TestTaskAPI(unittest.TestCase):
         self.assertEqual(data["error"], "Task not found")
         # Ensure status didn't change
         self.assertEqual(task_user_2.status, "pending")
+
+    # ------------------------------------------------------------------------
+    # 6. Search, Filtering, Sorting, and Query Security Tests
+    # ------------------------------------------------------------------------
+
+    def test_search_by_title_and_case_insensitive(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Write Unit Tests for API", description="Test endpoints", user_id=1),
+            MockTask(title="Deploy Frontend", description="Deploy to staging", user_id=1),
+        ]
+
+        # Case-insensitive title search
+        resp = self.client.get("/api/tasks?q=unit")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["title"], "Write Unit Tests for API")
+
+        # Uppercase search
+        resp_upper = self.client.get("/api/tasks?q=UNIT")
+        self.assertEqual(resp_upper.status_code, 200)
+        self.assertEqual(len(resp_upper.get_json()["data"]), 1)
+
+    def test_search_by_description(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Task A", description="Important database schema updates", user_id=1),
+            MockTask(title="Task B", description="General styling polish", user_id=1),
+        ]
+
+        resp = self.client.get("/api/tasks?q=SCHEMA")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["title"], "Task A")
+
+    def test_search_no_match_returns_empty_list(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Task A", description="Some description", user_id=1),
+        ]
+
+        resp = self.client.get("/api/tasks?q=nonexistent_token")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["data"], [])
+
+    def test_filter_by_status(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Pending Task", status="pending", user_id=1),
+            MockTask(title="Completed Task", status="completed", user_id=1),
+        ]
+
+        resp_pending = self.client.get("/api/tasks?status=pending")
+        self.assertEqual(resp_pending.status_code, 200)
+        data_pending = resp_pending.get_json()
+        self.assertEqual(len(data_pending["data"]), 1)
+        self.assertEqual(data_pending["data"][0]["status"], "pending")
+
+        resp_completed = self.client.get("/api/tasks?status=completed")
+        self.assertEqual(resp_completed.status_code, 200)
+        data_completed = resp_completed.get_json()
+        self.assertEqual(len(data_completed["data"]), 1)
+        self.assertEqual(data_completed["data"][0]["status"], "completed")
+
+    def test_filter_by_priority(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Low Task", priority="low", user_id=1),
+            MockTask(title="Medium Task", priority="medium", user_id=1),
+            MockTask(title="High Task", priority="high", user_id=1),
+        ]
+
+        resp = self.client.get("/api/tasks?priority=high")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["priority"], "high")
+
+    def test_filter_by_category_id(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Work Task", category_id=1, user_id=1),
+            MockTask(title="Uncategorized Task", category_id=None, user_id=1),
+        ]
+
+        resp = self.client.get("/api/tasks?category_id=1")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["category_id"], 1)
+
+    def test_filter_by_due_before(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Due Early", due_date=date(2026, 10, 20), user_id=1),
+            MockTask(title="Due Exact", due_date=date(2026, 10, 25), user_id=1),
+            MockTask(title="Due Later", due_date=date(2026, 10, 30), user_id=1),
+            MockTask(title="No Due Date", due_date=None, user_id=1),
+        ]
+
+        # Tasks due on or before 2026-10-25
+        resp = self.client.get("/api/tasks?due_before=2026-10-25")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        titles = [t["title"] for t in data["data"]]
+        self.assertIn("Due Early", titles)
+        self.assertIn("Due Exact", titles)
+        self.assertNotIn("Due Later", titles)
+        self.assertNotIn("No Due Date", titles)
+
+    def test_combined_search_and_filters(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(
+                title="Prepare Financial Report",
+                description="Quarterly review",
+                status="pending",
+                priority="high",
+                category_id=1,
+                due_date=date(2026, 10, 25),
+                user_id=1,
+            ),
+            MockTask(
+                title="Prepare Financial Summary",
+                description="Completed review",
+                status="completed",
+                priority="high",
+                category_id=1,
+                due_date=date(2026, 10, 25),
+                user_id=1,
+            ),
+            MockTask(
+                title="Prepare HR Report",
+                description="Quarterly review",
+                status="pending",
+                priority="low",
+                category_id=1,
+                due_date=date(2026, 10, 25),
+                user_id=1,
+            ),
+        ]
+
+        resp = self.client.get(
+            "/api/tasks?q=Report&status=pending&priority=high&category_id=1&due_before=2026-10-31"
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["title"], "Prepare Financial Report")
+
+    # ------------------------------------------------------------------------
+    # Invalid Query Parameter Rejections (Returns 400 Bad Request)
+    # ------------------------------------------------------------------------
+
+    def test_invalid_query_parameter_rejections(self) -> None:
+        self.current_user = MockUser(user_id=1)
+
+        test_cases = [
+            ("/api/tasks?status=in_progress", "Invalid status filter"),
+            ("/api/tasks?priority=critical", "Invalid priority filter"),
+            ("/api/tasks?category_id=invalid", "category_id must be a positive integer"),
+            ("/api/tasks?category_id=-1", "category_id must be a positive integer"),
+            ("/api/tasks?due_before=bad-date", "due_before must be a valid date"),
+            ("/api/tasks?due_before=2026-99-99", "due_before must be a valid date"),
+            ("/api/tasks?sort=title", "Invalid sort parameter"),
+            ("/api/tasks?sort=id", "Invalid sort parameter"),
+        ]
+
+        for url, expected_error in test_cases:
+            with self.subTest(url=url):
+                resp = self.client.get(url)
+                self.assertEqual(resp.status_code, 400)
+                data = resp.get_json()
+                self.assertFalse(data["ok"])
+                self.assertIn(expected_error, data["error"])
+
+    # ------------------------------------------------------------------------
+    # Sorting Tests (due_date, priority, created_at)
+    # ------------------------------------------------------------------------
+
+    def test_sort_by_due_date_nulls_last(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="No Due Date", due_date=None, user_id=1, id=1),
+            MockTask(title="Due Oct 20", due_date=date(2026, 10, 20), user_id=1, id=2),
+            MockTask(title="Due Oct 10", due_date=date(2026, 10, 10), user_id=1, id=3),
+        ]
+
+        resp = self.client.get("/api/tasks?sort=due_date")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        titles = [t["title"] for t in data["data"]]
+        # Earliest due date first, None at the end
+        self.assertEqual(titles, ["Due Oct 10", "Due Oct 20", "No Due Date"])
+
+    def test_sort_by_priority(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Low Task", priority="low", user_id=1, id=1),
+            MockTask(title="High Task", priority="high", user_id=1, id=2),
+            MockTask(title="Medium Task", priority="medium", user_id=1, id=3),
+        ]
+
+        resp = self.client.get("/api/tasks?sort=priority")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        priorities = [t["priority"] for t in data["data"]]
+        self.assertEqual(priorities, ["high", "medium", "low"])
+
+    def test_sort_by_created_at(self) -> None:
+        self.current_user = MockUser(user_id=1)
+        MockTask.objects = [
+            MockTask(title="Old Task", created_at=datetime(2026, 10, 1, 10, 0), user_id=1, id=1),
+            MockTask(title="New Task", created_at=datetime(2026, 10, 20, 10, 0), user_id=1, id=2),
+        ]
+
+        resp = self.client.get("/api/tasks?sort=created_at")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        titles = [t["title"] for t in data["data"]]
+        self.assertEqual(titles, ["New Task", "Old Task"])
+
+    # ------------------------------------------------------------------------
+    # Security: Multi-Tenant Query Scoping & User-ID Injection Resistance
+    # ------------------------------------------------------------------------
+
+    def test_search_and_filters_preserve_cross_user_isolation(self) -> None:
+        # User 1 task and User 2 task share same keyword
+        MockTask.objects = [
+            MockTask(title="User 1 Secret Project", user_id=1),
+            MockTask(title="User 2 Secret Blueprint", user_id=2),
+        ]
+
+        self.current_user = MockUser(user_id=1)
+        resp = self.client.get("/api/tasks?q=Secret")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["title"], "User 1 Secret Project")
+        self.assertEqual(data["data"][0]["user_id"], 1)
+
+    def test_filter_by_foreign_category_returns_empty_and_does_not_expose(self) -> None:
+        # Category 2 belongs to User 2
+        MockTask.objects = [
+            MockTask(title="User 2 Task in Category 2", category_id=2, user_id=2),
+        ]
+
+        self.current_user = MockUser(user_id=1)
+        resp = self.client.get("/api/tasks?category_id=2")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(data["data"], [])
+
+    def test_client_supplied_user_id_query_param_is_ignored(self) -> None:
+        MockTask.objects = [
+            MockTask(title="User 1 Task", user_id=1),
+            MockTask(title="User 2 Task", user_id=2),
+        ]
+
+        # Authenticated as User 1, but client supplies ?user_id=2
+        self.current_user = MockUser(user_id=1)
+        resp = self.client.get("/api/tasks?user_id=2")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["title"], "User 1 Task")
+        self.assertEqual(data["data"][0]["user_id"], 1)
+
+    def test_unauthenticated_requests_with_query_params_return_401(self) -> None:
+        self.current_user = None
+        resp = self.client.get("/api/tasks?q=test&status=pending&sort=priority")
+        self.assertEqual(resp.status_code, 401)
+        data = resp.get_json()
+        self.assertFalse(data["ok"])
+        self.assertEqual(data["error"], "Authentication required")
 
 
 if __name__ == "__main__":

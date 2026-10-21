@@ -41,9 +41,10 @@ MockTask.objects = [
     MockTask(
         id=1,
         title="Setup Postman Collection",
-        description="Verify all M4 CRUD endpoints",
+        description="Verify all M4 CRUD endpoints and responses",
         priority="high",
         status="pending",
+        due_date=date(2026, 10, 25),
         user_id=1,
         category_id=1,
     ),
@@ -53,8 +54,29 @@ MockTask.objects = [
         description="Should return 404 if accessed by User 1",
         priority="low",
         status="pending",
+        due_date=date(2026, 10, 30),
         user_id=2,
         category_id=2,
+    ),
+    MockTask(
+        id=3,
+        title="Write API Documentation",
+        description="Document query parameters and filters",
+        priority="medium",
+        status="completed",
+        due_date=date(2026, 10, 20),
+        user_id=1,
+        category_id=1,
+    ),
+    MockTask(
+        id=4,
+        title="Refactor Frontend Client",
+        description="Integrate with M4 search and filter API",
+        priority="low",
+        status="pending",
+        due_date=None,
+        user_id=1,
+        category_id=None,
     ),
 ]
 
@@ -84,10 +106,10 @@ configure_task_api_dependencies(
 app.register_blueprint(tasks_bp)
 
 if __name__ == "__main__":
-    print("\n" + "=" * 65)
+    print("\n" + "=" * 70)
     print("  M4 Task API Mock Server Running for Postman / Thunder Client")
     print("  Listening on: http://127.0.0.1:5000")
-    print("=" * 65)
+    print("=" * 70)
     print("  Endpoints:")
     print("    - GET    http://127.0.0.1:5000/api/tasks")
     print("    - POST   http://127.0.0.1:5000/api/tasks")
@@ -95,8 +117,16 @@ if __name__ == "__main__":
     print("    - PUT    http://127.0.0.1:5000/api/tasks/<id>")
     print("    - DELETE http://127.0.0.1:5000/api/tasks/<id>")
     print("    - PATCH  http://127.0.0.1:5000/api/tasks/<id>/complete")
+    print("\n  Query Parameter Examples (GET /api/tasks):")
+    print("    - Search:       ?q=documentation")
+    print("    - Status:       ?status=pending")
+    print("    - Priority:     ?priority=high")
+    print("    - Category:     ?category_id=1")
+    print("    - Due Before:   ?due_before=2026-10-25")
+    print("    - Sorting:      ?sort=due_date | ?sort=priority | ?sort=created_at")
+    print("    - Combined:     ?q=postman&priority=high&sort=due_date")
     print("\n  Headers for testing:")
     print("    - X-User-Id: 1 (default) or 2")
     print("    - X-Anonymous: true (tests 401 Unauthorized)")
-    print("=" * 65 + "\n")
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    print("=" * 70 + "\n")
+    app.run(host="127.0.0.1", port=5000, debug=False)
