@@ -16,8 +16,17 @@ def get_categories():
 @login_required
 def create_category():
     uid = g.current_user.id
-    data = request.get_json()
-    cat = Category(name=data['name'], user_id=uid)
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 415
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A JSON object is required'}), 400
+
+    name = data.get('name')
+    if not isinstance(name, str) or not name.strip() or len(name) > 50:
+        return jsonify({'error': 'Name must be between 1 and 50 characters'}), 400
+
+    cat = Category(name=name, user_id=uid)
     db.session.add(cat)
     db.session.commit()
     return jsonify({'id': cat.id, 'name': cat.name}), 201

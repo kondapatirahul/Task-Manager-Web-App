@@ -13,6 +13,13 @@ Base URL: `/api`
 Login uses a Flask session cookie. Task, category, stats, and current-user endpoints
 require an authenticated session and return `401 {error}` otherwise.
 
+API errors use the JSON shape `{ "error": "message" }`. Invalid JSON or field
+values return `400`, an unsupported content type returns `415`, a duplicate
+registration returns `409`, and missing or inaccessible resources return `404`.
+Unsupported methods return `405`. Unexpected server errors return
+`500 { "error": "Internal server error" }`; implementation details are not
+included in responses.
+
 ## Tasks
 | Method | Endpoint | Body | Response |
 |--------|----------|------|----------|
