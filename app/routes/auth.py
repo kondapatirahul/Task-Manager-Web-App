@@ -1,172 +1,88 @@
-from functools import wraps
 import re
-
-from flask import Blueprint, g, request, jsonify, session
-from sqlalchemy.exc import IntegrityError
-from werkzeug.security import generate_password_hash, check_password_hash
-
+from flask import Blueprint, request
+from flask_login import login_user, logout_user, current_user, login_required
 from app import db
-from app.models import User
+from app.models import User, Category
+from app.routes.utils import api_success, api_error
 
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
+EMAIL_REGEX = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
-def get_current_user():
-    user_id = session.get('user_id')
-
-    if not isinstance(user_id, int) or user_id <= 0:
-        return None
-
-    user = db.session.get(User, user_id)
-
-    if user is None:
-        session.pop('user_id', None)
-
-    return user
-
-
-def login_required(view):
-    @wraps(view)
-    def wrapped_view(*args, **kwargs):
-        user = get_current_user()
-
-        if user is None:
-            return jsonify({'error': 'Unauthorized'}), 401
-
-        g.current_user = user
-        return view(*args, **kwargs)
-
-    return wrapped_view
-
-
+@auth_bp.route('/signup', methods=['POST'])
 @auth_bp.route('/register', methods=['POST'])
-def register():
-    if not request.is_json:
-        return jsonify({'error': 'Content-Type must be application/json'}), 415
-    data = request.get_json(silent=True)
+def signup():
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    full_name = (data.get('full_name') or data.get('username') or '').strip()
+    username = (data.get('username') or '').strip()
 
-    if not isinstance(data, dict):
-        return jsonify({'error': 'A JSON object is required'}), 400
+    if not email or not EMAIL_REGEX.match(email):
+        return api_error('A valid email address is required.', 400)
 
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
+    if not password or len(password) < 6:
+        return api_error('Password must be at least 6 characters long.', 400)
 
-    if not all(
-        isinstance(value, str)
-        for value in (username, email, password)
-    ):
-        return jsonify({
-            'error': 'Username, email, and password are required'
-        }), 400
+    if not username:
+        # Fallback username from email prefix
+        base_username = email.split('@')[0]
+        username = re.sub(r'[^a-zA-Z0-9_]', '_', base_username)
 
-    username = username.strip()
-    email = email.strip().lower()
+    if User.query.filter_by(email=email).first():
+        return api_error('Email is already registered.', 409)
 
-    if not username or len(username) > 80:
-        return jsonify({
-            'error': 'Username must be between 1 and 80 characters'
-        }), 400
-
-    if (
-        len(email) > 120
-        or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email)
-    ):
-        return jsonify({
-            'error': 'A valid email address is required'
-        }), 400
-
-    if not password or len(password) > 128:
-        return jsonify({
-            'error': 'Password must be between 1 and 128 characters'
-        }), 400
-
-    if (
-        User.query.filter_by(email=email).first()
-        or User.query.filter_by(username=username).first()
-    ):
-        return jsonify({
-            'error': 'Username or email already registered'
-        }), 409
+    # Ensure unique username
+    existing_user = User.query.filter_by(username=username).first()
+    if existing_user:
+        username = f"{username}_{User.query.count() + 1}"
 
     user = User(
         username=username,
-        email=email,
-        password_hash=generate_password_hash(password)
+        full_name=full_name or username,
+        email=email
     )
+    user.set_password(password)
 
     db.session.add(user)
+    db.session.commit()
 
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({
-            'error': 'Username or email already registered'
-        }), 409
+    # Create helpful starter categories for convenience
+    starter_categories = ['Work', 'Personal', 'Projects']
+    for cat_name in starter_categories:
+        db.session.add(Category(name=cat_name, user_id=user.id))
+    db.session.commit()
 
-    return jsonify({'message': 'User created'}), 201
+    login_user(user, remember=True)
+    return api_success(user.to_dict(), message='User registered successfully', status_code=201)
 
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    if not request.is_json:
-        return jsonify({'error': 'Content-Type must be application/json'}), 415
-    data = request.get_json(silent=True)
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    password = data.get('password') or ''
+    remember = bool(data.get('remember', False))
 
-    if not isinstance(data, dict):
-        return jsonify({'error': 'A JSON object is required'}), 400
+    if not email or not password:
+        return api_error('Email and password are required.', 400)
 
-    email = data.get('email')
-    password = data.get('password')
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.check_password(password):
+        return api_error('Invalid email or password.', 401)
 
-    if (
-        not isinstance(email, str)
-        or not isinstance(password, str)
-        or not email.strip()
-        or not password
-        or len(password) > 128
-    ):
-        return jsonify({
-            'error': 'Email and password are required'
-        }), 400
-
-    user = User.query.filter_by(
-        email=email.strip().lower()
-    ).first()
-
-    if not user or not check_password_hash(
-        user.password_hash, password
-    ):
-        return jsonify({'error': 'Invalid credentials'}), 401
-
-    session.clear()
-    session['user_id'] = user.id
-
-    return jsonify({
-        'message': 'Login successful',
-        'user': {
-            'id': user.id,
-            'username': user.username
-        }
-    }), 200
-
-
-@auth_bp.route('/me', methods=['GET'])
-@login_required
-def current_user():
-    user = g.current_user
-
-    return jsonify({
-        'id': user.id,
-        'username': user.username,
-        'email': user.email
-    }), 200
-
+    login_user(user, remember=remember)
+    return api_success(user.to_dict(), message='Logged in successfully')
 
 @auth_bp.route('/logout', methods=['POST'])
+@login_required
 def logout():
-    session.clear()
+    logout_user()
+    return api_success(message='Logged out successfully')
 
-    return jsonify({'message': 'Logged out'}), 200
+@auth_bp.route('/me', methods=['GET'])
+def get_me():
+    if current_user.is_authenticated:
+        return api_success(current_user.to_dict())
+    return api_error('Not authenticated', 401)

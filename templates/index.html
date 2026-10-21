@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}TaskNest — Organize Today. Build a Better Tomorrow.{% endblock %}
+
+{% block body %}
+<!-- Navigation -->
+<header style="background-color: var(--color-surface); border-bottom: 1px solid var(--color-border);">
+  <nav class="landing-nav">
+    <a href="/" class="brand-logo">
+      <div class="brand-icon">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+      </div>
+      <span>TaskNest</span>
+    </a>
+
+    <ul class="nav-links">
+      <li><a href="/">Home</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How It Works</a></li>
+      <li><a href="#about">About</a></li>
+    </ul>
+
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <a href="{{ url_for('web.login_page') }}" class="btn btn-secondary btn-sm">Log In</a>
+      <a href="{{ url_for('web.signup_page') }}" class="btn btn-primary btn-sm">Get Started</a>
+    </div>
+  </nav>
+</header>
+
+<!-- Hero Section -->
+<section class="landing-hero">
+  <div>
+    <div class="hero-tagline">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+      Smarter Personal Productivity
+    </div>
+    <h1 class="hero-title">Organize Today.<br>Build a Better Tomorrow.</h1>
+    <p class="hero-subtitle">
+      TaskNest helps ambitious individuals and teams capture clarity, streamline daily commitments, and accomplish high-priority goals with a calm, deliberate workflow.
+    </p>
+    <div class="hero-actions">
+      <a href="{{ url_for('web.signup_page') }}" class="btn btn-primary btn-lg">
+        <span>Get Started — It's Free</span>
+        <svg class="icon" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+      </a>
+      <a href="#features" class="btn btn-secondary btn-lg">Learn More</a>
+    </div>
+  </div>
+
+  <!-- Workspace Visual -->
+  <div class="workspace-preview-card">
+    <div class="preview-header">
+      <div style="display: flex; align-items: center; gap: 0.5rem;">
+        <div style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--color-danger);"></div>
+        <div style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--color-warning);"></div>
+        <div style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--color-success);"></div>
+        <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); margin-left: 0.5rem;">TaskNest Workspace</span>
+      </div>
+      <span class="badge badge-completed">Live Demo</span>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="preview-stat-grid">
+      <div class="preview-stat-box">
+        <div class="preview-stat-value">12</div>
+        <div class="preview-stat-label">Active Tasks</div>
+      </div>
+      <div class="preview-stat-box">
+        <div class="preview-stat-value" style="color: var(--color-success);">94%</div>
+        <div class="preview-stat-label">Completion Rate</div>
+      </div>
+    </div>
+
+    <!-- Interactive Workspace Preview Items -->
+    <div class="preview-task-item">
+      <svg class="icon icon-sm text-success" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      <div style="flex: 1;">
+        <div style="font-size: var(--font-size-sm); font-weight: 600; text-decoration: line-through; color: var(--color-muted);">Finalize Q4 strategy presentation</div>
+        <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Strategy • Completed today</div>
+      </div>
+      <span class="badge badge-completed">Done</span>
+    </div>
+
+    <div class="preview-task-item">
+      <div style="width: 16px; height: 16px; border-radius: 4px; border: 2px solid var(--color-primary); flex-shrink: 0;"></div>
+      <div style="flex: 1;">
+        <div style="font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text);">Implement SQLite database models</div>
+        <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Development • Due Tomorrow</div>
+      </div>
+      <span class="badge badge-high">High</span>
+    </div>
+
+    <div class="preview-task-item">
+      <div style="width: 16px; height: 16px; border-radius: 4px; border: 2px solid var(--color-primary); flex-shrink: 0;"></div>
+      <div style="flex: 1;">
+        <div style="font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text);">User feedback collection & review</div>
+        <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Product • In 3 days</div>
+      </div>
+      <span class="badge badge-medium">Medium</span>
+    </div>
+  </div>
+</section>
+
+<!-- Features Section -->
+<section id="features" class="features-section">
+  <div class="section-header">
+    <div class="hero-tagline" style="margin-bottom: 0.75rem;">Core Features</div>
+    <h2>Engineered for Effortless Focus</h2>
+    <p>Everything you need to regain control of your schedule, eliminate clutter, and deliver real results.</p>
+  </div>
+
+  <div class="features-grid">
+    <!-- Plan -->
+    <div class="feature-card">
+      <div class="feature-icon-wrapper">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+      </div>
+      <h3>Plan</h3>
+      <p>Structure your projects with intuitive categories, assign realistic due dates, and prioritize high-impact deliverables without cognitive overload.</p>
+    </div>
+
+    <!-- Track -->
+    <div class="feature-card">
+      <div class="feature-icon-wrapper">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+      </div>
+      <h3>Track</h3>
+      <p>Stay aware of impending deadlines, spot overdue items instantly with smart badges, and filter seamlessly across priorities, status, and categories.</p>
+    </div>
+
+    <!-- Achieve -->
+    <div class="feature-card">
+      <div class="feature-icon-wrapper">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+      </div>
+      <h3>Achieve</h3>
+      <p>Celebrate completion with satisfying interactive controls, review real-time productivity statistics, and maintain steady momentum week after week.</p>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works Section -->
+<section id="how-it-works" style="max-width: 1200px; margin: 4rem auto; padding: 0 1.5rem;">
+  <div class="section-header">
+    <div class="hero-tagline" style="margin-bottom: 0.75rem;">Workflow</div>
+    <h2>How TaskNest Works</h2>
+    <p>A simple 3-step loop that keeps your mind calm and your productivity peak.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+    <div class="card" style="padding: 2rem;">
+      <div style="font-size: 2.25rem; font-weight: 800; color: var(--color-primary); margin-bottom: 0.5rem;">01</div>
+      <h3 style="margin-bottom: 0.5rem;">Capture Instantly</h3>
+      <p class="text-muted" style="font-size: var(--font-size-sm);">Jot down tasks as soon as they arise. Set categories and priority tags to keep work contextualized.</p>
+    </div>
+    <div class="card" style="padding: 2rem;">
+      <div style="font-size: 2.25rem; font-weight: 800; color: var(--color-accent); margin-bottom: 0.5rem;">02</div>
+      <h3 style="margin-bottom: 0.5rem;">Focus Daily</h3>
+      <p class="text-muted" style="font-size: var(--font-size-sm);">Open your clean dashboard to see exactly what is due today and what needs immediate attention.</p>
+    </div>
+    <div class="card" style="padding: 2rem;">
+      <div style="font-size: 2.25rem; font-weight: 800; color: var(--color-success); margin-bottom: 0.5rem;">03</div>
+      <h3 style="margin-bottom: 0.5rem;">Reflect & Celebrate</h3>
+      <p class="text-muted" style="font-size: var(--font-size-sm);">Track completion velocity, identify patterns, and start every fresh morning with peace of mind.</p>
+    </div>
+  </div>
+</section>
+
+<!-- About Section -->
+<section id="about" style="max-width: 900px; margin: 4rem auto; padding: 0 1.5rem; text-align: center;">
+  <div class="card" style="padding: 3rem 2rem; background: var(--color-surface-subtle);">
+    <h2 style="font-size: var(--font-size-2xl); color: var(--color-primary); margin-bottom: 1rem;">Built for Focused Humans</h2>
+    <p style="font-size: var(--font-size-base); color: var(--color-text-light); line-height: 1.7; margin-bottom: 2rem;">
+      TaskNest was created to counteract noisy, over-complicated enterprise tools. By combining a soothing earthy aesthetic with fast, reliable SQLite-backed performance, TaskNest makes task management a pleasure rather than a chore.
+    </p>
+    <a href="{{ url_for('web.signup_page') }}" class="btn btn-primary btn-lg">Create Your Workspace</a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer class="landing-footer">
+  <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: var(--color-primary);">
+      <div class="brand-icon" style="width: 1.5rem; height: 1.5rem;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+      </div>
+      <span>TaskNest</span>
+    </div>
+    <div>&copy; 2026 TaskNest. All rights reserved. Designed for mindful productivity.</div>
+    <div>
+      <a href="{{ url_for('web.login_page') }}" style="margin-right: 1rem; color: var(--color-text-light); font-weight: 600;">Log In</a>
+      <a href="{{ url_for('web.signup_page') }}" style="color: var(--color-primary); font-weight: 700;">Sign Up</a>
+    </div>
+  </div>
+</footer>
+{% endblock %}

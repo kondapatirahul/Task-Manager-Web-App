@@ -1,0 +1,72 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}My Tasks — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">My Tasks</h1>
+    <p class="page-subtitle">Manage, prioritize, filter, and track all your tasks in one unified space.</p>
+  </div>
+  <button class="btn btn-primary open-add-task-btn">
+    <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    <span>Add Task</span>
+  </button>
+</div>
+
+<!-- Filter and Search Bar -->
+<div class="filter-bar">
+  <!-- Search -->
+  <div class="input-with-icon" style="flex: 1; min-width: 200px;">
+    <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input type="search" id="task-search" class="form-control" placeholder="Search tasks by title or description..." style="margin-bottom: 0;">
+  </div>
+
+  <!-- Status Filter -->
+  <div class="filter-group">
+    <select id="filter-status" class="filter-select" aria-label="Filter by Status">
+      <option value="">All Statuses</option>
+      <option value="pending">Pending</option>
+      <option value="completed">Completed</option>
+    </select>
+  </div>
+
+  <!-- Priority Filter -->
+  <div class="filter-group">
+    <select id="filter-priority" class="filter-select" aria-label="Filter by Priority">
+      <option value="">All Priorities</option>
+      <option value="high">High Priority</option>
+      <option value="medium">Medium Priority</option>
+      <option value="low">Low Priority</option>
+    </select>
+  </div>
+
+  <!-- Category Filter -->
+  <div class="filter-group">
+    <select id="filter-category" class="filter-select" aria-label="Filter by Category">
+      <option value="">All Categories</option>
+    </select>
+  </div>
+
+  <!-- Sort Filter -->
+  <div class="filter-group">
+    <select id="filter-sort" class="filter-select" aria-label="Sort Tasks">
+      <option value="created_at_desc">Newest First</option>
+      <option value="created_at_asc">Oldest First</option>
+      <option value="due_date_asc">Due Date (Earliest)</option>
+      <option value="due_date_desc">Due Date (Latest)</option>
+      <option value="priority_desc">Highest Priority First</option>
+      <option value="title_asc">Title (A-Z)</option>
+    </select>
+  </div>
+
+  <!-- Clear Filters -->
+  <button id="clear-filters-btn" class="btn btn-secondary btn-sm" title="Clear Filters">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    <span>Reset</span>
+  </button>
+</div>
+
+<!-- Task List Container -->
+<div id="task-list-container"></div>
+{% endblock %}

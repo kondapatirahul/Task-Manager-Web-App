@@ -1,123 +1,115 @@
-import pytest
-from werkzeug.security import check_password_hash
-
-from app import create_app, db
 from app.models import User
+from app import db
 
-
-@pytest.fixture
-def client():
-    app = create_app({
-        'TESTING': True,
-        'SECRET_KEY': 'test-secret-key',
-        'SQLALCHEMY_DATABASE_URI': 'sqlite://',
+def test_registration_success(client, app):
+    res = client.post('/api/auth/signup', json={
+        'full_name': 'Jane Doe',
+        'email': 'jane@example.com',
+        'password': 'securepassword'
     })
+    assert res.status_code == 201
+    data = res.get_json()
+    assert data['ok'] is True
+    assert data['data']['email'] == 'jane@example.com'
+
+    # Check password is not plaintext
     with app.app_context():
-        db.drop_all()
-        db.create_all()
+        user = User.query.filter_by(email='jane@example.com').first()
+        assert user is not None
+        assert user.password_hash != 'securepassword'
+        assert user.check_password('securepassword') is True
 
-    with app.test_client() as test_client:
-        yield test_client
-
-    with app.app_context():
-        db.session.remove()
-        db.drop_all()
-
-
-def register(client, username='sample-user', email='sample@example.com',
-             password='safe-password'):
-    return client.post('/api/auth/register', json={
-        'username': username,
-        'email': email,
-        'password': password,
+def test_registration_duplicate_email(client, user_a):
+    res = client.post('/api/auth/signup', json={
+        'full_name': 'Another User',
+        'email': 'usera@example.com',
+        'password': 'password999'
     })
+    assert res.status_code == 409
+    data = res.get_json()
+    assert data['ok'] is False
+    assert 'already registered' in data['error']
 
-
-def login(client, email='sample@example.com', password='safe-password'):
-    return client.post('/api/auth/login', json={
-        'email': email,
-        'password': password,
+def test_registration_validation(client):
+    # Invalid email
+    res = client.post('/api/auth/signup', json={
+        'full_name': 'Test',
+        'email': 'not-an-email',
+        'password': 'validpassword'
     })
+    assert res.status_code == 400
+    assert res.get_json()['ok'] is False
 
-
-def test_signup_stores_a_password_hash(client):
-    response = register(client)
-
-    assert response.status_code == 201
-    with client.application.app_context():
-        user = User.query.filter_by(email='sample@example.com').one()
-        assert user.password_hash != 'safe-password'
-        assert check_password_hash(user.password_hash, 'safe-password')
-
-
-def test_signup_validates_required_fields_and_duplicate_accounts(client):
-    assert client.post('/api/auth/register', json={}).status_code == 400
-    assert register(client).status_code == 201
-    assert register(client, username='another-user').status_code == 409
-
-
-def test_login_creates_session_and_current_user_endpoint(client):
-    register(client)
-
-    assert login(client).status_code == 200
-    response = client.get('/api/auth/me')
-
-    assert response.status_code == 200
-    assert response.get_json() == {
-        'id': 1,
-        'username': 'sample-user',
-        'email': 'sample@example.com',
-    }
-    assert 'password_hash' not in response.get_json()
-
-
-def test_login_rejects_invalid_credentials(client):
-    register(client)
-
-    assert login(client, password='wrong-password').status_code == 401
-    assert login(client, email='unknown@example.com').status_code == 401
-
-
-def test_logout_clears_session(client):
-    register(client)
-    login(client)
-
-    assert client.post('/api/auth/logout').status_code == 200
-    assert client.get('/api/auth/me').status_code == 401
-
-
-def test_authenticated_user_can_access_existing_task_category_and_stats_routes(client):
-    register(client)
-    login(client)
-
-    category_response = client.post('/api/categories', json={'name': 'Work'})
-    assert category_response.status_code == 201
-
-    task_response = client.post('/api/tasks', json={
-        'title': 'Complete report',
-        'category_id': category_response.get_json()['id'],
+    # Short password
+    res = client.post('/api/auth/signup', json={
+        'full_name': 'Test',
+        'email': 'test@example.com',
+        'password': '123'
     })
-    assert task_response.status_code == 201
-    assert len(client.get('/api/tasks').get_json()) == 1
-    assert client.get('/api/categories').get_json() == [
-        {'id': category_response.get_json()['id'], 'name': 'Work'}
-    ]
-    assert client.get('/api/stats').get_json()['total'] == 1
+    assert res.status_code == 400
+    assert 'at least 6 characters' in res.get_json()['error']
 
+def test_login_success(client, user_a):
+    res = client.post('/api/auth/login', json={
+        'email': 'usera@example.com',
+        'password': 'password123'
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['ok'] is True
+    assert data['data']['email'] == 'usera@example.com'
 
-@pytest.mark.parametrize('method,path', [
-    ('get', '/api/auth/me'),
-    ('get', '/api/tasks'),
-    ('post', '/api/tasks'),
-    ('put', '/api/tasks/1'),
-    ('delete', '/api/tasks/1'),
-    ('get', '/api/categories'),
-    ('post', '/api/categories'),
-    ('delete', '/api/categories/1'),
-    ('get', '/api/stats'),
-])
-def test_protected_routes_reject_unauthenticated_requests(client, method, path):
-    response = getattr(client, method)(path, json={})
+def test_login_failure(client, user_a):
+    # Wrong password
+    res = client.post('/api/auth/login', json={
+        'email': 'usera@example.com',
+        'password': 'wrongpassword'
+    })
+    assert res.status_code == 401
+    assert res.get_json()['ok'] is False
 
-    assert response.status_code == 401
-    assert response.get_json() == {'error': 'Unauthorized'}
+    # Non-existent email
+    res = client.post('/api/auth/login', json={
+        'email': 'nobody@example.com',
+        'password': 'password123'
+    })
+    assert res.status_code == 401
+    assert res.get_json()['ok'] is False
+
+def test_get_me_authenticated(client, user_a):
+    client.post('/api/auth/login', json={
+        'email': 'usera@example.com',
+        'password': 'password123'
+    })
+    res = client.get('/api/auth/me')
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data['ok'] is True
+    assert data['data']['email'] == 'usera@example.com'
+
+def test_get_me_unauthenticated(client):
+    res = client.get('/api/auth/me')
+    assert res.status_code == 401
+    assert res.get_json()['ok'] is False
+
+def test_logout(client, user_a):
+    client.post('/api/auth/login', json={
+        'email': 'usera@example.com',
+        'password': 'password123'
+    })
+    res = client.post('/api/auth/logout')
+    assert res.status_code == 200
+    assert res.get_json()['ok'] is True
+
+    # Now verify unauthenticated
+    res_me = client.get('/api/auth/me')
+    assert res_me.status_code == 401
+
+def test_protected_web_routes_redirect(client):
+    res = client.get('/dashboard')
+    assert res.status_code == 302
+    assert '/login' in res.headers['Location']
+
+    res = client.get('/tasks')
+    assert res.status_code == 302
+    assert '/login' in res.headers['Location']
