@@ -92,3 +92,17 @@ def profile():
 def settings():
     """Account settings: display-name editing and password change."""
     return render_template('settings.html', active_page='settings')
+
+
+@web_bp.route('/employees')
+@login_required
+def employees():
+    """Employee directory with search, filters, and team/department assignments."""
+    return render_template('employees.html', active_page='employees')
+
+
+@web_bp.route('/teams')
+@login_required
+def teams():
+    """Department and team administration with member rosters and team tasks."""
+    return render_template('teams.html', active_page='teams')

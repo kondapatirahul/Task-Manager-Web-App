@@ -105,12 +105,20 @@ def create_app(test_config=None):
     from app.routes.tasks import tasks_bp
     from app.routes.categories import categories_bp
     from app.routes.stats import stats_bp
+    from app.routes.organizations import organizations_bp
+    from app.routes.departments import departments_bp
+    from app.routes.teams import teams_bp
+    from app.routes.employees import employees_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(categories_bp)
     app.register_blueprint(stats_bp)
+    app.register_blueprint(organizations_bp)
+    app.register_blueprint(departments_bp)
+    app.register_blueprint(teams_bp)
+    app.register_blueprint(employees_bp)
 
     # CLI command to initialize database
     @app.cli.command('init-db')
@@ -128,12 +136,30 @@ def create_app(test_config=None):
         try:
             inspector = sa_inspect(db.engine)
             if 'users' in inspector.get_table_names():
-                existing_cols = {c['name'] for c in inspector.get_columns('users')}
-                if 'role' not in existing_cols:
+                existing_user_cols = {c['name'] for c in inspector.get_columns('users')}
+                if 'role' not in existing_user_cols:
                     db.session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"))
-                if 'account_active' not in existing_cols:
+                if 'account_active' not in existing_user_cols:
                     db.session.execute(text("ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"))
-                db.session.commit()
+                if 'organization_id' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN organization_id INTEGER"))
+                if 'department_id' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN department_id INTEGER"))
+                if 'job_title' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN job_title VARCHAR(100)"))
+                if 'phone' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
+                if 'reports_to_id' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN reports_to_id INTEGER"))
+
+            if 'tasks' in inspector.get_table_names():
+                existing_task_cols = {c['name'] for c in inspector.get_columns('tasks')}
+                if 'team_id' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN team_id INTEGER"))
+                if 'assigned_to_id' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN assigned_to_id INTEGER"))
+
+            db.session.commit()
         except Exception:
             db.session.rollback()
 

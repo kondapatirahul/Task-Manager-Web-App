@@ -91,3 +91,81 @@ All API endpoints return JSON in a standardized envelope format:
 }
 ```
 *Note: Overdue tasks are strictly defined as pending tasks whose `due_date` is earlier than today's local date.*
+
+---
+
+## 5. Employee Directory & Administration Endpoints
+
+### 5.1 `GET /api/employees`
+- **Description**: Query employee directory with multi-factor search and filtering.
+- **Parameters**: `q` (keyword in name, username, email, job title), `department_id`, `team_id`, `role`, `status` (`active`, `inactive`, `all`), `organization_id`.
+- **Response**: Array of employee profile objects.
+
+### 5.2 `POST /api/employees`
+- **Description**: Invite / create employee with secure activation credentials (Admin/HR only).
+- **Body**: `{ "full_name": string, "email": string, "role": string, "department_id": int?, "team_ids": int[]?, "job_title": string?, "reports_to_id": int?, "password": string? }`
+- **Response**: `201 Created` with employee record and `activation_token`.
+
+### 5.3 `GET /api/employees/<id>`
+- **Description**: Retrieve full employee profile with reporting hierarchy and task metrics.
+
+### 5.4 `PUT /api/employees/<id>`
+- **Description**: Update employee department, team memberships, role, and reporting manager (Admin/HR only).
+
+### 5.5 `PATCH /api/employees/<id>/status`
+- **Description**: Activate or safely deactivate employee account without deleting historical tasks or logs.
+- **Body**: `{ "account_active": boolean }`
+
+---
+
+## 6. Organization & Department Endpoints
+
+### 6.1 `GET /api/organizations`
+- **Description**: List organizations accessible to user.
+
+### 6.2 `POST /api/organizations`
+- **Description**: Create new company organization (Admin/HR).
+- **Body**: `{ "name": string, "description": string? }`
+
+### 6.3 `GET /api/departments`
+- **Description**: List departments for organization.
+
+### 6.4 `POST /api/departments`
+- **Description**: Create department within organization (Admin/HR).
+- **Body**: `{ "name": string, "description": string?, "organization_id": int?, "head_id": int? }`
+
+### 6.5 `DELETE /api/departments/<id>`
+- **Description**: Safely delete department (unassigns members and teams without deleting them).
+
+---
+
+## 7. Teams Endpoints
+
+### 7.1 `GET /api/teams`
+- **Description**: List teams. Admin/HR view all in organization; Team Leads view only authorized teams.
+- **Parameters**: `organization_id`, `department_id`, `q`.
+
+### 7.2 `POST /api/teams`
+- **Description**: Create team (Management: Admin, HR, Team Lead).
+- **Body**: `{ "name": string, "description": string?, "department_id": int?, "lead_id": int? }`
+
+### 7.3 `GET /api/teams/<id>`
+- **Description**: Retrieve team details with members and tasks count (scoped to authorized teams for leads).
+
+### 7.4 `POST /api/teams/<id>/members`
+- **Description**: Add employee to team (Admin, HR, Team Lead).
+- **Body**: `{ "user_id": int, "role": "member"|"lead" }`
+
+### 7.5 `DELETE /api/teams/<id>/members/<user_id>`
+- **Description**: Remove member from team.
+
+### 7.6 `GET /api/teams/<id>/tasks`
+- **Description**: List tasks assigned to this team.
+
+### 7.7 `POST /api/teams/<id>/tasks`
+- **Description**: Create task assigned to team and member.
+- **Body**: `{ "title": string, "description": string?, "priority": string, "due_date": string?, "assigned_to_id": int? }`
+
+### 7.8 `DELETE /api/teams/<id>`
+- **Description**: Safely delete team (preserves assigned tasks by nullifying `team_id`).
+

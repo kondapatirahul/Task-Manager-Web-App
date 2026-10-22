@@ -1500,3 +1500,56 @@ textarea.form-control {
   border: 1px solid var(--color-border);
 }
 
+.badge-hr {
+  background-color: #6366f1;
+  color: #fff;
+}
+
+/* ── Employee and Team administration layout ─────────────────────────────────── */
+.employee-grid,
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.employee-card.account-deactivated {
+  opacity: 0.65;
+  background-color: #faf8f5;
+  border-left: 3px solid var(--color-danger);
+}
+
+.teams-checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2);
+  max-height: 140px;
+  overflow-y: auto;
+  padding: var(--space-2);
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.tab-btn:hover {
+  color: var(--color-primary);
+}
+
+.tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
