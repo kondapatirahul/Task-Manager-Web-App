@@ -58,7 +58,10 @@
             <div class="form-group">
               <label class="form-label" for="task-status-select">Status</label>
               <select id="task-status-select" class="form-control">
-                <option value="pending" selected>Pending</option>
+                <option value="pending" selected>Pending / To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="blocked">Blocked</option>
+                <option value="in_review">In Review</option>
                 <option value="completed">Completed</option>
               </select>
             </div>
@@ -75,6 +78,31 @@
               <label class="form-label" for="task-due-date-input">Due Date</label>
               <input type="date" id="task-due-date-input" class="form-control">
             </div>
+          </div>
+
+          {% if current_user.is_management %}
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="task-assignee-select">Assignee</label>
+              <select id="task-assignee-select" class="form-control">
+                <option value="">Unassigned (Assign to Self)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-recurrence-select">Recurrence</label>
+              <select id="task-recurrence-select" class="form-control">
+                <option value="none" selected>None (One-time)</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="form-group">
+            <label class="form-label" for="task-acceptance-input">Acceptance Criteria</label>
+            <textarea id="task-acceptance-input" class="form-control" rows="2" placeholder="Conditions required for this task to be considered complete..."></textarea>
           </div>
         </div>
         <div class="modal-footer">

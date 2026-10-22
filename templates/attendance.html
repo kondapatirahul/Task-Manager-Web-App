@@ -1,0 +1,419 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Attendance & Timesheets — TaskNest Enterprise{% endblock %}
+
+{% block app_content %}
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 class="page-title">Attendance & Timesheets</h1>
+    <p class="page-subtitle">Server-recorded work hours, daily sessions, and correction management.</p>
+  </div>
+  <button id="open-correction-modal-btn" class="btn btn-secondary btn-sm">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+    <span>Request Correction</span>
+  </button>
+</div>
+
+<!-- Shift Control & Metrics Grid -->
+<div class="metrics-grid" style="margin-bottom: 2rem;">
+  <!-- Live Shift Card -->
+  <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+      <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase;">Current Session</span>
+      <span id="att-badge" class="badge badge-employee">Not Active</span>
+    </div>
+    <div style="font-size: var(--font-size-2xl); font-weight: 800; color: var(--color-primary); margin-bottom: 1rem;" id="att-timer">
+      00:00:00
+    </div>
+    <div style="display: flex; gap: 0.75rem;">
+      <button id="att-checkin-btn" class="btn btn-primary" style="flex: 1;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>Check In</span>
+      </button>
+      <button id="att-checkout-btn" class="btn btn-secondary" style="flex: 1; border-color: var(--color-danger); color: var(--color-danger); display: none;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+        <span>Check Out</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Weekly Logged Hours -->
+  <div class="metric-card metric-completed">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="att-weekly-hours">0.0</div>
+      <div class="metric-label">Weekly Recorded Hours</div>
+    </div>
+  </div>
+
+  <!-- Missing Checkouts Indicator -->
+  <div class="metric-card metric-overdue">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="att-missing-count">0</div>
+      <div class="metric-label">Missing Checkouts</div>
+    </div>
+  </div>
+
+  <!-- Today's Total Hours -->
+  <div class="metric-card metric-pending">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="att-today-hours">0.0</div>
+      <div class="metric-label">Today's Hours</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs for Personal Timesheet and Team/Org (if manager) -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-header" style="border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
+    <div style="display: flex; gap: 1rem;">
+      <button class="btn btn-ghost btn-sm att-tab-btn active" data-tab="my-timesheet" style="font-weight: 700; color: var(--color-primary);">My Timesheet</button>
+      <button class="btn btn-ghost btn-sm att-tab-btn" data-tab="corrections" style="font-weight: 600;">Correction Requests</button>
+      {% if current_user.is_management %}
+      <button class="btn btn-ghost btn-sm att-tab-btn" data-tab="team-attendance" style="font-weight: 600;">Team Timesheet</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- 1. My Timesheet Tab -->
+  <div id="tab-my-timesheet" class="att-tab-pane" style="padding: 1.25rem;">
+    <div style="overflow-x: auto;">
+      <table class="table" id="my-timesheet-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Check-In</th>
+            <th>Check-Out</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="my-timesheet-tbody">
+          <tr><td colspan="6" class="text-muted" style="text-align: center; padding: 2rem;">Loading timesheet records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 2. Correction Requests Tab -->
+  <div id="tab-corrections" class="att-tab-pane" style="display: none; padding: 1.25rem;">
+    <div style="overflow-x: auto;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date Requested</th>
+            {% if current_user.is_management %}<th>Employee</th>{% endif %}
+            <th>Requested Check-In</th>
+            <th>Requested Check-Out</th>
+            <th>Reason</th>
+            <th>Status</th>
+            {% if current_user.is_management %}<th>Action</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody id="corrections-tbody">
+          <tr><td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">Loading correction requests...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. Team Timesheet Tab (Managers) -->
+  {% if current_user.is_management %}
+  <div id="tab-team-attendance" class="att-tab-pane" style="display: none; padding: 1.25rem;">
+    <div style="overflow-x: auto;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Role</th>
+            <th>Status Today</th>
+            <th>Check-In</th>
+            <th>Check-Out</th>
+            <th>Hours Today</th>
+          </tr>
+        </thead>
+        <tbody id="team-timesheet-tbody">
+          <tr><td colspan="6" class="text-muted" style="text-align: center; padding: 2rem;">Loading team attendance...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Attendance Correction Modal -->
+<div class="modal-backdrop" id="correction-modal" style="display: none;">
+  <div class="modal" style="max-width: 500px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Request Attendance Correction</h3>
+      <button class="modal-close-btn" id="close-correction-modal" aria-label="Close modal">&times;</button>
+    </div>
+    <form id="correction-form">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="corr-checkin">Requested Check-In <span class="required">*</span></label>
+          <input type="datetime-local" id="corr-checkin" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="corr-checkout">Requested Check-Out <span class="required">*</span></label>
+          <input type="datetime-local" id="corr-checkout" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="corr-reason">Reason for Correction <span class="required">*</span></label>
+          <textarea id="corr-reason" class="form-control" rows="3" placeholder="Forgot to check out / system maintenance / offline work..." required></textarea>
+        </div>
+        <div id="corr-error" class="alert alert-error" style="display: none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancel-correction-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary">Submit Correction</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const checkinBtn = document.getElementById('att-checkin-btn');
+  const checkoutBtn = document.getElementById('att-checkout-btn');
+  const attTimer = document.getElementById('att-timer');
+  const attBadge = document.getElementById('att-badge');
+  const weeklyHours = document.getElementById('att-weekly-hours');
+  const missingCount = document.getElementById('att-missing-count');
+  const todayHours = document.getElementById('att-today-hours');
+  const myTbody = document.getElementById('my-timesheet-tbody');
+
+  let activeCheckinTime = null;
+  let timerInterval = null;
+
+  function updateTimer() {
+    if (!activeCheckinTime) return;
+    const now = new Date();
+    const diffMs = now - activeCheckinTime;
+    if (diffMs < 0) return;
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
+    if (attTimer) {
+      attTimer.textContent = `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+    }
+  }
+
+  async function loadMyAttendance() {
+    try {
+      const res = await fetch('/api/attendance/today');
+      if (res.ok) {
+        const json = await res.json();
+        const d = json.data;
+        if (todayHours) todayHours.textContent = d.today_duration_hours;
+
+        if (d.is_checked_in) {
+          checkinBtn.style.display = 'none';
+          checkoutBtn.style.display = 'inline-flex';
+          attBadge.className = 'badge badge-completed';
+          attBadge.textContent = 'Active Shift';
+          activeCheckinTime = new Date(d.active_session.check_in);
+          if (timerInterval) clearInterval(timerInterval);
+          timerInterval = setInterval(updateTimer, 1000);
+          updateTimer();
+        } else {
+          checkinBtn.style.display = 'inline-flex';
+          checkoutBtn.style.display = 'none';
+          attBadge.className = 'badge badge-employee';
+          attBadge.textContent = 'Not Checked In';
+          if (attTimer) attTimer.textContent = '00:00:00';
+          if (timerInterval) clearInterval(timerInterval);
+          activeCheckinTime = null;
+        }
+      }
+
+      // Timesheet history
+      const histRes = await fetch('/api/attendance/my');
+      if (histRes.ok) {
+        const hJson = await histRes.json();
+        const hd = hJson.data;
+        if (weeklyHours) weeklyHours.textContent = hd.weekly_hours;
+        if (missingCount) missingCount.textContent = hd.missing_checkouts_count;
+
+        if (myTbody) {
+          myTbody.innerHTML = hd.records.length ? hd.records.map(r => `
+            <tr>
+              <td style="font-weight: 600;">${new Date(r.check_in).toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric'})}</td>
+              <td>${new Date(r.check_in).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</td>
+              <td>${r.check_out ? new Date(r.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '<span class="badge badge-high">Active</span>'}</td>
+              <td style="font-weight: 700;">${r.duration_hours} hrs</td>
+              <td><span class="badge ${r.status === 'completed' ? 'badge-completed' : r.status === 'active' ? 'badge-high' : 'badge-team_lead'}">${r.status}</span></td>
+              <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${r.notes || '-'}</td>
+            </tr>
+          `).join('') : '<tr><td colspan="6" class="text-muted" style="text-align:center; padding: 2rem;">No attendance records found.</td></tr>';
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (checkinBtn) {
+    checkinBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/attendance/check-in', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({notes: 'Work shift started'})
+        });
+        if (res.ok) loadMyAttendance();
+      } catch (e) {}
+    });
+  }
+
+  if (checkoutBtn) {
+    checkoutBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/attendance/check-out', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({notes: 'Work shift ended'})
+        });
+        if (res.ok) loadMyAttendance();
+      } catch (e) {}
+    });
+  }
+
+  // Tabs
+  document.querySelectorAll('.att-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.att-tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.style.color = '';
+      });
+      document.querySelectorAll('.att-tab-pane').forEach(p => p.style.display = 'none');
+      btn.classList.add('active');
+      btn.style.color = 'var(--color-primary)';
+      const target = document.getElementById(`tab-${btn.dataset.tab}`);
+      if (target) target.style.display = 'block';
+
+      if (btn.dataset.tab === 'corrections') loadCorrections();
+      if (btn.dataset.tab === 'team-attendance') loadTeamAttendance();
+    });
+  });
+
+  async function loadCorrections() {
+    const tbody = document.getElementById('corrections-tbody');
+    try {
+      const res = await fetch('/api/attendance/corrections');
+      if (res.ok) {
+        const list = (await res.json()).data;
+        if (tbody) {
+          tbody.innerHTML = list.length ? list.map(c => `
+            <tr>
+              <td>${new Date(c.created_at).toLocaleDateString()}</td>
+              {% if current_user.is_management %}<td><b>${c.user_name}</b></td>{% endif %}
+              <td>${new Date(c.requested_check_in).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
+              <td>${new Date(c.requested_check_out).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
+              <td style="font-size: var(--font-size-xs);">${c.reason}</td>
+              <td><span class="badge ${c.status === 'approved' ? 'badge-completed' : c.status === 'pending' ? 'badge-high' : 'badge-employee'}">${c.status}</span></td>
+              {% if current_user.is_management %}
+              <td>
+                ${c.status === 'pending' ? `
+                  <button class="btn btn-primary btn-xs review-corr-btn" data-id="${c.id}" data-action="approve">Approve</button>
+                  <button class="btn btn-secondary btn-xs review-corr-btn" data-id="${c.id}" data-action="reject">Reject</button>
+                ` : `<span style="font-size: var(--font-size-xs); color: var(--color-muted);">${c.reviewer_name || 'Reviewed'}</span>`}
+              </td>
+              {% endif %}
+            </tr>
+          `).join('') : '<tr><td colspan="7" class="text-muted" style="text-align:center; padding: 2rem;">No correction requests.</td></tr>';
+
+          document.querySelectorAll('.review-corr-btn').forEach(b => {
+            b.addEventListener('click', async () => {
+              const cid = b.dataset.id;
+              const dec = b.dataset.action;
+              await fetch(`/api/attendance/corrections/${cid}/review`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+                body: JSON.stringify({decision: dec})
+              });
+              loadCorrections();
+              loadMyAttendance();
+            });
+          });
+        }
+      }
+    } catch (e) {}
+  }
+
+  async function loadTeamAttendance() {
+    const tbody = document.getElementById('team-timesheet-tbody');
+    try {
+      const res = await fetch('/api/attendance/team');
+      if (res.ok) {
+        const team = (await res.json()).data;
+        if (tbody) {
+          tbody.innerHTML = team.length ? team.map(m => `
+            <tr>
+              <td><b>${m.name}</b><div style="font-size: var(--font-size-xs); color: var(--color-muted);">${m.email}</div></td>
+              <td>${m.designation || 'Member'}</td>
+              <td><span class="badge ${m.status === 'active' ? 'badge-completed' : 'badge-employee'}">${m.status === 'active' ? 'Checked In' : 'Away'}</span></td>
+              <td>${m.check_in ? new Date(m.check_in).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
+              <td>${m.check_out ? new Date(m.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
+              <td style="font-weight: 700;">${m.duration_hours} hrs</td>
+            </tr>
+          `).join('') : '<tr><td colspan="6" class="text-muted" style="text-align:center; padding: 2rem;">No team members found.</td></tr>';
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Correction Modal
+  const modal = document.getElementById('correction-modal');
+  const openModalBtn = document.getElementById('open-correction-modal-btn');
+  const closeModalBtn = document.getElementById('close-correction-modal');
+  const cancelBtn = document.getElementById('cancel-correction-btn');
+  const corrForm = document.getElementById('correction-form');
+  const corrError = document.getElementById('corr-error');
+
+  if (openModalBtn) openModalBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
+  if (closeModalBtn) closeModalBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+
+  if (corrForm) {
+    corrForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      corrError.style.display = 'none';
+      try {
+        const res = await fetch('/api/attendance/corrections', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          body: JSON.stringify({
+            requested_check_in: document.getElementById('corr-checkin').value,
+            requested_check_out: document.getElementById('corr-checkout').value,
+            reason: document.getElementById('corr-reason').value
+          })
+        });
+        const json = await res.json();
+        if (res.ok) {
+          modal.style.display = 'none';
+          corrForm.reset();
+          loadCorrections();
+        } else {
+          corrError.textContent = json.error || 'Failed to submit correction.';
+          corrError.style.display = 'block';
+        }
+      } catch (err) {
+        corrError.textContent = 'Network error occurred.';
+        corrError.style.display = 'block';
+      }
+    });
+  }
+
+  loadMyAttendance();
+});
+</script>
+{% endblock %}

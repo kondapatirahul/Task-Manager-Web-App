@@ -1,10 +1,13 @@
 /**
- * TaskNest Task & Category Management Engine
+ * TaskNest Enterprise Task & Category Management Engine
  */
 
 const TaskManager = {
   tasks: [],
   categories: [],
+  employees: [],
+  activeTaskId: null,
+  viewMode: 'list', // 'list' | 'kanban'
   currentFilter: {
     q: '',
     status: '',
@@ -16,6 +19,7 @@ const TaskManager = {
   init() {
     this.bindEvents();
     this.loadCategories().then(() => {
+      this.loadEmployeesList();
       if (document.getElementById('task-list-container')) {
         this.loadTasks();
       }
@@ -100,6 +104,39 @@ const TaskManager = {
       });
     }
 
+    // View Mode Switcher
+    const listBtn = document.getElementById('view-mode-list-btn');
+    const kanbanBtn = document.getElementById('view-mode-kanban-btn');
+    const listContainer = document.getElementById('task-list-container');
+    const kanbanContainer = document.getElementById('kanban-container');
+
+    if (listBtn && kanbanBtn) {
+      listBtn.addEventListener('click', () => {
+        this.viewMode = 'list';
+        listBtn.classList.add('active');
+        listBtn.style.backgroundColor = 'var(--color-surface-subtle)';
+        listBtn.style.color = 'var(--color-primary)';
+        kanbanBtn.classList.remove('active');
+        kanbanBtn.style.backgroundColor = 'transparent';
+        kanbanBtn.style.color = 'var(--color-text)';
+        if (listContainer) listContainer.style.display = 'block';
+        if (kanbanContainer) kanbanContainer.style.display = 'none';
+      });
+
+      kanbanBtn.addEventListener('click', () => {
+        this.viewMode = 'kanban';
+        kanbanBtn.classList.add('active');
+        kanbanBtn.style.backgroundColor = 'var(--color-surface-subtle)';
+        kanbanBtn.style.color = 'var(--color-primary)';
+        listBtn.classList.remove('active');
+        listBtn.style.backgroundColor = 'transparent';
+        listBtn.style.color = 'var(--color-text)';
+        if (listContainer) listContainer.style.display = 'none';
+        if (kanbanContainer) kanbanContainer.style.display = 'block';
+        this.renderKanban(this.tasks);
+      });
+    }
+
     // Add Task Button
     document.querySelectorAll('.open-add-task-btn').forEach(btn => {
       btn.addEventListener('click', () => this.openTaskModal());
@@ -117,7 +154,25 @@ const TaskManager = {
       catForm.addEventListener('submit', (e) => this.handleCategoryFormSubmit(e));
     }
 
-    // Modal Close
+    // Subtask Form Submit
+    const subtaskForm = document.getElementById('add-subtask-form');
+    if (subtaskForm) {
+      subtaskForm.addEventListener('submit', (e) => this.handleAddSubtask(e));
+    }
+
+    // Send Message Form Submit
+    const msgForm = document.getElementById('send-message-form');
+    if (msgForm) {
+      msgForm.addEventListener('submit', (e) => this.handleSendMessage(e));
+    }
+
+    // Submit Deliverable Form Submit
+    const deliverableForm = document.getElementById('submit-deliverable-form');
+    if (deliverableForm) {
+      deliverableForm.addEventListener('submit', (e) => this.handleSubmitDeliverable(e));
+    }
+
+    // Modal Close Triggers
     document.querySelectorAll('.modal-close-trigger').forEach(el => {
       el.addEventListener('click', () => this.closeModals());
     });
@@ -135,6 +190,25 @@ const TaskManager = {
       this.populateCategoryDropdowns();
     } catch (err) {
       console.error('Failed to load categories', err);
+    }
+  },
+
+  async loadEmployeesList() {
+    try {
+      const res = await fetch('/api/employees');
+      if (res.ok) {
+        const json = await res.json();
+        this.employees = json.data.employees || [];
+        const assigneeSelect = document.getElementById('task-assignee-select');
+        if (assigneeSelect) {
+          const currentVal = assigneeSelect.value;
+          assigneeSelect.innerHTML = '<option value="">Unassigned (Assign to Self)</option>' +
+            this.employees.map(e => `<option value="${e.id}">${e.full_name || e.username} (@${e.username})</option>`).join('');
+          if (currentVal) assigneeSelect.value = currentVal;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load employees for assignee dropdown', e);
     }
   },
 
@@ -176,7 +250,6 @@ const TaskManager = {
     `;
 
     try {
-      // Build query string
       const params = new URLSearchParams();
       if (this.currentFilter.q) params.set('q', this.currentFilter.q);
       if (this.currentFilter.status) params.set('status', this.currentFilter.status);
@@ -184,7 +257,6 @@ const TaskManager = {
       if (this.currentFilter.category_id) params.set('category_id', this.currentFilter.category_id);
       if (this.currentFilter.sort) params.set('sort', this.currentFilter.sort);
 
-      // Support URL search param from global search
       const urlParams = new URLSearchParams(window.location.search);
       const urlQ = urlParams.get('q');
       if (urlQ && !this.currentFilter.q) {
@@ -197,8 +269,8 @@ const TaskManager = {
       const res = await api('GET', `/tasks?${params.toString()}`);
       this.tasks = res.data || [];
       this.renderTasks(this.tasks, container);
+      this.renderKanban(this.tasks);
 
-      // Refresh stats if on dashboard
       if (document.getElementById('dashboard-metrics')) {
         this.loadDashboardStats();
       }
@@ -249,13 +321,15 @@ const TaskManager = {
 
       item.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} aria-label="Toggle task status" />
-        <div class="task-body">
+        <div class="task-body" style="cursor: pointer;">
           <div class="task-title">${this.escapeHtml(task.title)}</div>
           ${task.description ? `<div class="task-desc-preview">${this.escapeHtml(task.description)}</div>` : ''}
           <div class="task-meta">
             ${task.category_name ? `<span class="badge badge-category"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>${this.escapeHtml(task.category_name)}</span>` : ''}
             <span class="badge badge-${task.priority}">${task.priority}</span>
-            <span class="badge badge-${task.status}">${task.status}</span>
+            <span class="badge badge-${task.status}">${task.status.replace('_', ' ')}</span>
+            ${task.assignee_name ? `<span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name)}</span>` : ''}
+            ${task.recurrence && task.recurrence !== 'none' ? `<span class="badge badge-category">🔁 ${task.recurrence}</span>` : ''}
             ${task.due_date ? `
               <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -265,6 +339,10 @@ const TaskManager = {
           </div>
         </div>
         <div class="task-actions">
+          <button class="btn btn-ghost btn-sm view-detail-btn" title="View Discussions & Deliverables">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span style="font-size: var(--font-size-xs);">Discuss</span>
+          </button>
           <button class="btn btn-ghost btn-sm btn-icon-only edit-task-btn" title="Edit Task" aria-label="Edit Task">
             <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           </button>
@@ -276,15 +354,93 @@ const TaskManager = {
 
       // Checkbox event
       const checkbox = item.querySelector('.task-checkbox');
-      checkbox.addEventListener('change', () => this.toggleTaskCompletion(task.id, checkbox.checked));
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        this.toggleTaskCompletion(task.id, checkbox.checked);
+      });
+
+      // Clicking task body opens detail modal
+      item.querySelector('.task-body').addEventListener('click', () => {
+        this.openTaskDetailModal(task);
+      });
+      item.querySelector('.view-detail-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openTaskDetailModal(task);
+      });
 
       // Edit event
-      item.querySelector('.edit-task-btn').addEventListener('click', () => this.openTaskModal(task));
+      item.querySelector('.edit-task-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openTaskModal(task);
+      });
 
       // Delete event
-      item.querySelector('.delete-task-btn').addEventListener('click', () => this.confirmDeleteTask(task));
+      item.querySelector('.delete-task-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.confirmDeleteTask(task);
+      });
 
       container.appendChild(item);
+    });
+  },
+
+  renderKanban(tasks) {
+    const kanbanContainer = document.getElementById('kanban-container');
+    if (!kanbanContainer) return;
+
+    const cols = {
+      pending: document.getElementById('kanban-pending'),
+      in_progress: document.getElementById('kanban-in_progress'),
+      blocked: document.getElementById('kanban-blocked'),
+      in_review: document.getElementById('kanban-in_review'),
+      completed: document.getElementById('kanban-completed')
+    };
+
+    const counts = {
+      pending: document.getElementById('kanban-count-pending'),
+      in_progress: document.getElementById('kanban-count-in_progress'),
+      blocked: document.getElementById('kanban-count-blocked'),
+      in_review: document.getElementById('kanban-count-in_review'),
+      completed: document.getElementById('kanban-count-completed')
+    };
+
+    Object.values(cols).forEach(col => { if (col) col.innerHTML = ''; });
+    const colCounters = { pending: 0, in_progress: 0, blocked: 0, in_review: 0, completed: 0 };
+
+    tasks.forEach(task => {
+      let colKey = task.status;
+      if (colKey === 'todo') colKey = 'pending';
+      if (colKey === 'changes_requested') colKey = 'in_review';
+      if (!cols[colKey]) colKey = 'pending';
+
+      colCounters[colKey]++;
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'padding: 0.85rem; cursor: pointer; border-radius: var(--radius-sm); border: 1px solid var(--color-border); box-shadow: var(--shadow-sm); transition: transform 0.15s ease;';
+      card.innerHTML = `
+        <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-text); margin-bottom: 0.35rem;">
+          ${this.escapeHtml(task.title)}
+        </div>
+        ${task.description ? `<p style="font-size: var(--font-size-xs); color: var(--color-muted); margin: 0 0 0.5rem 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${this.escapeHtml(task.description)}</p>` : ''}
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.35rem; font-size: var(--font-size-xs);">
+          <span class="badge badge-${task.priority}">${task.priority}</span>
+          ${task.due_date ? `<span style="color: var(--color-muted); font-size: 0.7rem;">📅 ${task.due_date}</span>` : ''}
+        </div>
+        ${task.assignee_name ? `<div style="font-size: 0.7rem; color: var(--color-muted); margin-top: 0.4rem;">👤 ${this.escapeHtml(task.assignee_name)}</div>` : ''}
+      `;
+
+      card.addEventListener('mouseenter', () => { card.style.transform = 'translateY(-2px)'; });
+      card.addEventListener('mouseleave', () => { card.style.transform = 'translateY(0)'; });
+      card.addEventListener('click', () => this.openTaskDetailModal(task));
+
+      if (cols[colKey]) {
+        cols[colKey].appendChild(card);
+      }
+    });
+
+    Object.keys(counts).forEach(k => {
+      if (counts[k]) counts[k].textContent = colCounters[k];
     });
   },
 
@@ -297,7 +453,7 @@ const TaskManager = {
       this.loadTasks();
     } catch (err) {
       showToast(err.message || 'Failed to update task status', 'error');
-      this.loadTasks(); // Revert check state
+      this.loadTasks();
     }
   },
 
@@ -318,7 +474,6 @@ const TaskManager = {
       if (overdueEl) overdueEl.textContent = stats.overdue ?? 0;
       if (rateEl) rateEl.textContent = `${stats.completion_rate ?? 0}%`;
 
-      // Render upcoming panel if on dashboard
       const upcomingContainer = document.getElementById('dashboard-upcoming-list');
       if (upcomingContainer) {
         if (!stats.upcoming || stats.upcoming.length === 0) {
@@ -354,6 +509,9 @@ const TaskManager = {
     const statusField = document.getElementById('task-status-select');
     const categoryField = document.getElementById('task-category-select');
     const dueDateField = document.getElementById('task-due-date-input');
+    const assigneeField = document.getElementById('task-assignee-select');
+    const recurrenceField = document.getElementById('task-recurrence-select');
+    const criteriaField = document.getElementById('task-acceptance-input');
 
     if (task) {
       modalTitle.textContent = 'Edit Task';
@@ -364,6 +522,9 @@ const TaskManager = {
       statusField.value = task.status || 'pending';
       categoryField.value = task.category_id || '';
       dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
+      if (assigneeField) assigneeField.value = task.assignee_id || '';
+      if (recurrenceField) recurrenceField.value = task.recurrence || 'none';
+      if (criteriaField) criteriaField.value = task.acceptance_criteria || '';
     } else {
       modalTitle.textContent = 'Add New Task';
       taskIdField.value = '';
@@ -373,6 +534,9 @@ const TaskManager = {
       statusField.value = 'pending';
       categoryField.value = '';
       dueDateField.value = '';
+      if (assigneeField) assigneeField.value = '';
+      if (recurrenceField) recurrenceField.value = 'none';
+      if (criteriaField) criteriaField.value = '';
     }
 
     modal.classList.add('is-active');
@@ -388,6 +552,9 @@ const TaskManager = {
     const status = document.getElementById('task-status-select').value;
     const categoryId = document.getElementById('task-category-select').value;
     const dueDate = document.getElementById('task-due-date-input').value;
+    const assigneeField = document.getElementById('task-assignee-select');
+    const recurrenceField = document.getElementById('task-recurrence-select');
+    const criteriaField = document.getElementById('task-acceptance-input');
 
     if (!title) {
       showToast('Task title is required.', 'error');
@@ -402,6 +569,16 @@ const TaskManager = {
       category_id: categoryId ? parseInt(categoryId, 10) : null,
       due_date: dueDate || null
     };
+
+    if (assigneeField && assigneeField.value) {
+      payload.assignee_id = parseInt(assigneeField.value, 10);
+    }
+    if (recurrenceField && recurrenceField.value) {
+      payload.recurrence = recurrenceField.value;
+    }
+    if (criteriaField && criteriaField.value.trim()) {
+      payload.acceptance_criteria = criteriaField.value.trim();
+    }
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
@@ -442,7 +619,293 @@ const TaskManager = {
     }
   },
 
-  // Category page methods
+  // ── Task Details, Subtasks, Discussions & Deliverables ────────────────────────
+
+  async openTaskDetailModal(task) {
+    this.activeTaskId = task.id;
+    const modal = document.getElementById('task-detail-modal');
+    if (!modal) return;
+
+    document.getElementById('task-detail-title').textContent = task.title;
+    const priBadge = document.getElementById('detail-priority-badge');
+    if (priBadge) {
+      priBadge.className = `badge badge-${task.priority}`;
+      priBadge.textContent = task.priority;
+    }
+
+    const stBadge = document.getElementById('detail-status-badge');
+    if (stBadge) {
+      stBadge.className = `badge badge-${task.status}`;
+      stBadge.textContent = task.status.replace('_', ' ');
+    }
+
+    document.getElementById('detail-desc').textContent = task.description || 'No description provided.';
+    
+    const critBox = document.getElementById('detail-criteria-box');
+    const critText = document.getElementById('detail-criteria');
+    if (task.acceptance_criteria) {
+      critBox.style.display = 'block';
+      critText.textContent = task.acceptance_criteria;
+    } else {
+      critBox.style.display = 'none';
+    }
+
+    document.getElementById('detail-assignee').textContent = task.assignee_name || 'Self / Unassigned';
+    document.getElementById('detail-due').textContent = task.due_date || 'No due date';
+
+    modal.classList.add('is-active');
+
+    // Load subtasks, messages, and submissions
+    this.loadSubtasks(task.id);
+    this.loadMessages(task.id);
+    this.loadSubmissions(task.id);
+  },
+
+  async loadSubtasks(taskId) {
+    const container = document.getElementById('subtasks-list');
+    if (!container) return;
+    try {
+      const res = await api('GET', `/tasks/${taskId}`);
+      const task = res.data;
+      const subtasks = task.subtasks || [];
+
+      if (subtasks.length === 0) {
+        container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No subtasks yet. Add one below.</span>';
+        return;
+      }
+
+      container.innerHTML = subtasks.map(s => `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0.5rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--font-size-xs);">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex: 1; margin: 0;">
+            <input type="checkbox" class="subtask-checkbox" data-id="${s.id}" ${s.is_completed ? 'checked' : ''}>
+            <span style="${s.is_completed ? 'text-decoration: line-through; color: var(--color-muted);' : 'color: var(--color-text);'}">${this.escapeHtml(s.title)}</span>
+          </label>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('.subtask-checkbox').forEach(cb => {
+        cb.addEventListener('change', async () => {
+          const subId = cb.dataset.id;
+          try {
+            await api('PATCH', `/tasks/${taskId}/subtasks/${subId}`, {
+              is_completed: cb.checked
+            });
+            this.loadSubtasks(taskId);
+          } catch (e) {
+            showToast('Failed to update subtask', 'error');
+          }
+        });
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  async handleAddSubtask(e) {
+    e.preventDefault();
+    if (!this.activeTaskId) return;
+    const input = document.getElementById('new-subtask-title');
+    const title = input.value.trim();
+    if (!title) return;
+
+    try {
+      await api('POST', `/tasks/${this.activeTaskId}/subtasks`, { title });
+      input.value = '';
+      this.loadSubtasks(this.activeTaskId);
+    } catch (err) {
+      showToast(err.message || 'Failed to add subtask', 'error');
+    }
+  },
+
+  async loadMessages(taskId) {
+    const container = document.getElementById('messages-container');
+    if (!container) return;
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/messages`);
+      const json = await res.json();
+      const messages = json.data || [];
+
+      if (messages.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--color-muted); font-size: var(--font-size-xs); padding: 2rem;">No messages in this task thread yet.</div>';
+        return;
+      }
+
+      container.innerHTML = messages.map(m => `
+        <div style="background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; font-size: var(--font-size-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <strong style="color: var(--color-primary);">${m.author_name}</strong>
+            <span style="font-size: 0.65rem; color: var(--color-muted);">${new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div style="color: var(--color-text); margin-bottom: 0.35rem; white-space: pre-wrap;">${this.escapeHtml(m.content)}</div>
+          ${m.attachments && m.attachments.length > 0 ? `
+            <div style="border-top: 1px dashed var(--color-border); padding-top: 0.35rem; margin-top: 0.35rem; display: flex; flex-direction: column; gap: 0.2rem;">
+              ${m.attachments.map(a => `
+                <a href="/api/files/${a.id}/download" target="_blank" style="color: var(--color-accent); font-weight: 600; font-size: 0.7rem; text-decoration: underline;">
+                  📎 ${this.escapeHtml(a.filename)}
+                </a>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      container.scrollTop = container.scrollHeight;
+    } catch (e) {
+      container.innerHTML = `<div style="color: var(--color-danger); font-size: var(--font-size-xs); padding: 1rem;">Failed to load messages: ${e.message}</div>`;
+    }
+  },
+
+  async handleSendMessage(e) {
+    e.preventDefault();
+    if (!this.activeTaskId) return;
+
+    const textarea = document.getElementById('message-text');
+    const fileInput = document.getElementById('message-file');
+    const content = textarea.value.trim();
+    if (!content) return;
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const formData = new FormData();
+    formData.append('content', content);
+    if (fileInput.files.length > 0) {
+      formData.append('file', fileInput.files[0]);
+    }
+
+    try {
+      const res = await fetch(`/api/tasks/${this.activeTaskId}/messages`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfToken
+        },
+        body: formData
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Failed to send message');
+      textarea.value = '';
+      fileInput.value = '';
+      this.loadMessages(this.activeTaskId);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  async loadSubmissions(taskId) {
+    const container = document.getElementById('submissions-history');
+    if (!container) return;
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/submissions`);
+      const json = await res.json();
+      const subs = json.data || [];
+
+      if (subs.length === 0) {
+        container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No deliverables submitted yet.</span>';
+        return;
+      }
+
+      container.innerHTML = subs.map(s => `
+        <div style="background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.75rem; font-size: var(--font-size-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <span>By <strong>${s.submitted_by_name}</strong> on ${new Date(s.created_at).toLocaleDateString()}</span>
+            <span class="badge ${s.status === 'approved' ? 'badge-completed' : s.status === 'rejected' ? 'badge-overdue' : 'badge-pending'}">${s.status.toUpperCase()}</span>
+          </div>
+          <div style="color: var(--color-text); margin-bottom: 0.35rem;">${this.escapeHtml(s.message)}</div>
+          ${s.attachments && s.attachments.length > 0 ? `
+            <div style="margin-bottom: 0.35rem;">
+              ${s.attachments.map(a => `<a href="/api/files/${a.id}/download" style="color: var(--color-primary); font-weight: 600;">📥 ${this.escapeHtml(a.filename)}</a>`).join(' ')}
+            </div>
+          ` : ''}
+          ${s.review_feedback ? `
+            <div style="background: #FFF9F5; border-left: 2px solid var(--color-accent); padding: 0.4rem; font-size: 0.7rem; color: var(--color-accent);">
+              <strong>Review Feedback:</strong> ${this.escapeHtml(s.review_feedback)}
+            </div>
+          ` : ''}
+          ${s.status === 'pending' ? `
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; justify-content: flex-end;">
+              <button class="btn btn-secondary btn-sm review-action-btn" data-sub-id="${s.id}" data-action="rejected">Request Changes</button>
+              <button class="btn btn-primary btn-sm review-action-btn" data-sub-id="${s.id}" data-action="approved">Approve</button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      container.querySelectorAll('.review-action-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const subId = btn.dataset.subId;
+          const action = btn.dataset.action;
+          const feedback = prompt(action === 'approved' ? 'Optional approval notes:' : 'Please enter feedback describing changes needed:');
+          if (action === 'rejected' && !feedback) {
+            showToast('Feedback is required when requesting revisions.', 'error');
+            return;
+          }
+
+          const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+          try {
+            const revRes = await fetch(`/api/submissions/${subId}/review`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify({
+                status: action,
+                feedback: feedback || ''
+              })
+            });
+            const revData = await revRes.json();
+            if (!revRes.ok) throw new Error(revData.message || 'Review action failed');
+            showToast(`Submission ${action}!`, 'success');
+            this.loadSubmissions(this.activeTaskId);
+            this.loadTasks();
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+      });
+    } catch (e) {
+      container.innerHTML = `<span style="color: var(--color-danger); font-size: var(--font-size-xs);">Failed to load submissions: ${e.message}</span>`;
+    }
+  },
+
+  async handleSubmitDeliverable(e) {
+    e.preventDefault();
+    if (!this.activeTaskId) return;
+
+    const msgInput = document.getElementById('deliverable-message');
+    const fileInput = document.getElementById('deliverable-file');
+    const message = msgInput.value.trim();
+    if (!message) return;
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const formData = new FormData();
+    formData.append('message', message);
+    if (fileInput.files.length > 0) {
+      formData.append('file', fileInput.files[0]);
+    }
+
+    try {
+      const res = await fetch(`/api/tasks/${this.activeTaskId}/submissions`, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': csrfToken
+        },
+        body: formData
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message || 'Failed to submit work deliverable');
+      showToast('Deliverable submitted for review!', 'success');
+      msgInput.value = '';
+      fileInput.value = '';
+      this.loadSubmissions(this.activeTaskId);
+      this.loadTasks();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  // ── Categories ─────────────────────────────────────────────────────────────
+
   renderCategoriesPage() {
     const container = document.getElementById('categories-list-container');
     if (!container) return;
@@ -524,6 +987,7 @@ const TaskManager = {
   closeModals() {
     document.querySelectorAll('.modal-overlay').forEach(modal => {
       modal.classList.remove('is-active');
+      modal.classList.remove('is-open');
     });
   },
 
