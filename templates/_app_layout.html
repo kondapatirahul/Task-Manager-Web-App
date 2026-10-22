@@ -69,18 +69,6 @@
         </a>
       </li>
       <li>
-        <a href="{{ url_for('web.employees') }}" class="sidebar-link {% if active_page == 'employees' %}active{% endif %}">
-          <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-          <span>Employees</span>
-        </a>
-      </li>
-      <li>
-        <a href="{{ url_for('web.teams') }}" class="sidebar-link {% if active_page == 'teams' %}active{% endif %}">
-          <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
-          <span>Teams</span>
-        </a>
-      </li>
-      <li>
         <a href="{{ url_for('web.profile') }}" class="sidebar-link {% if active_page == 'profile' %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
           <span>Profile</span>

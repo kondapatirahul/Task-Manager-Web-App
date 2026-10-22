@@ -5,25 +5,21 @@
 const TaskManager = {
   tasks: [],
   categories: [],
-  teams: [],
   employees: [],
+  activeTaskId: null,
+  viewMode: 'list', // 'list' | 'kanban'
   currentFilter: {
     q: '',
-    scope: '',
     status: '',
     priority: '',
     category_id: '',
-    team_id: '',
     sort: 'created_at_desc'
   },
 
   init() {
     this.bindEvents();
-    Promise.all([
-      this.loadCategories(),
-      this.loadTeams(),
-      this.loadEmployees()
-    ]).then(() => {
+    this.loadCategories().then(() => {
+      this.loadEmployeesList();
       if (document.getElementById('task-list-container')) {
         this.loadTasks();
       }
@@ -62,16 +58,7 @@ const TaskManager = {
       });
     }
 
-    // Scope Filter
-    const filterScope = document.getElementById('filter-scope');
-    if (filterScope) {
-      filterScope.addEventListener('change', (e) => {
-        this.currentFilter.scope = e.target.value;
-        this.loadTasks();
-      });
-    }
-
-    // Status Filter
+    // Filters
     const filterStatus = document.getElementById('filter-status');
     if (filterStatus) {
       filterStatus.addEventListener('change', (e) => {
@@ -80,7 +67,6 @@ const TaskManager = {
       });
     }
 
-    // Priority Filter
     const filterPriority = document.getElementById('filter-priority');
     if (filterPriority) {
       filterPriority.addEventListener('change', (e) => {
@@ -89,7 +75,6 @@ const TaskManager = {
       });
     }
 
-    // Category Filter
     const filterCategory = document.getElementById('filter-category');
     if (filterCategory) {
       filterCategory.addEventListener('change', (e) => {
@@ -98,16 +83,6 @@ const TaskManager = {
       });
     }
 
-    // Team Filter
-    const filterTeam = document.getElementById('filter-team');
-    if (filterTeam) {
-      filterTeam.addEventListener('change', (e) => {
-        this.currentFilter.team_id = e.target.value;
-        this.loadTasks();
-      });
-    }
-
-    // Sort Filter
     const filterSort = document.getElementById('filter-sort');
     if (filterSort) {
       filterSort.addEventListener('change', (e) => {
@@ -116,17 +91,14 @@ const TaskManager = {
       });
     }
 
-    // Reset Filters
     const clearFiltersBtn = document.getElementById('clear-filters-btn');
     if (clearFiltersBtn) {
       clearFiltersBtn.addEventListener('click', () => {
-        this.currentFilter = { q: '', scope: '', status: '', priority: '', category_id: '', team_id: '', sort: 'created_at_desc' };
+        this.currentFilter = { q: '', status: '', priority: '', category_id: '', sort: 'created_at_desc' };
         if (searchInput) searchInput.value = '';
-        if (filterScope) filterScope.value = '';
         if (filterStatus) filterStatus.value = '';
         if (filterPriority) filterPriority.value = '';
         if (filterCategory) filterCategory.value = '';
-        if (filterTeam) filterTeam.value = '';
         if (filterSort) filterSort.value = 'created_at_desc';
         this.loadTasks();
       });
@@ -221,24 +193,22 @@ const TaskManager = {
     }
   },
 
-  async loadTeams() {
+  async loadEmployeesList() {
     try {
-      const res = await api('GET', '/teams');
-      this.teams = res.data || [];
-      this.populateTeamDropdowns();
-    } catch (err) {
-      // Teams endpoint may return empty if none created yet
-      this.teams = [];
-    }
-  },
-
-  async loadEmployees() {
-    try {
-      const res = await api('GET', '/employees');
-      this.employees = res.data || [];
-      this.populateAssigneeDropdown();
-    } catch (err) {
-      this.employees = [];
+      const res = await fetch('/api/employees');
+      if (res.ok) {
+        const json = await res.json();
+        this.employees = Array.isArray(json.data) ? json.data : (json.data?.employees || []);
+        const assigneeSelect = document.getElementById('task-assignee-select');
+        if (assigneeSelect) {
+          const currentVal = assigneeSelect.value;
+          assigneeSelect.innerHTML = '<option value="">Unassigned (Assign to Self)</option>' +
+            this.employees.map(e => `<option value="${e.id}">${e.full_name || e.username} (@${e.username})</option>`).join('');
+          if (currentVal) assigneeSelect.value = currentVal;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load employees for assignee dropdown', e);
     }
   },
 
@@ -268,47 +238,35 @@ const TaskManager = {
     });
   },
 
-  populateTeamDropdowns() {
-    const filterTeam = document.getElementById('filter-team');
-    if (filterTeam) {
-      const cur = filterTeam.value;
-      filterTeam.innerHTML = '<option value="">All Teams</option>';
-      this.teams.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = t.name;
-        filterTeam.appendChild(opt);
-      });
-      if (cur) filterTeam.value = cur;
+  renderSmartPriority(tasks) {
+    const summary = document.getElementById('smart-priority-summary');
+    const list = document.getElementById('smart-priority-list');
+    if (!summary || !list) return;
+    const now = new Date();
+    const openTasks = (Array.isArray(tasks) ? tasks : []).filter(task => !['completed', 'cancelled'].includes(String(task.status || '').toLowerCase()));
+    const priorityWeight = { urgent: 100, high: 75, medium: 45, low: 20 };
+    const score = task => {
+      let result = priorityWeight[String(task.priority || 'medium').toLowerCase()] || 45;
+      if (task.due_date) {
+        const due = new Date(`${String(task.due_date).slice(0, 10)}T23:59:59`);
+        const days = Math.ceil((due.getTime() - now.getTime()) / 86400000);
+        if (days < 0) result += 60;
+        else if (days === 0) result += 45;
+        else if (days <= 2) result += 25;
+        else if (days <= 7) result += 10;
+      }
+      if (String(task.status || '').toLowerCase() === 'blocked') result += 15;
+      return result;
+    };
+    openTasks.sort((a, b) => score(b) - score(a));
+    if (!openTasks.length) {
+      summary.textContent = 'You are all caught up. No open tasks need prioritizing.';
+      list.innerHTML = '';
+      return;
     }
-
-    const modalTeam = document.getElementById('task-team-select');
-    if (modalTeam) {
-      const cur = modalTeam.value;
-      modalTeam.innerHTML = '<option value="">No Team (Personal Task)</option>';
-      this.teams.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.id;
-        opt.textContent = t.name;
-        modalTeam.appendChild(opt);
-      });
-      if (cur) modalTeam.value = cur;
-    }
-  },
-
-  populateAssigneeDropdown() {
-    const select = document.getElementById('task-assignee-select');
-    if (!select) return;
-
-    const cur = select.value;
-    select.innerHTML = '<option value="">Unassigned (Self / Open)</option>';
-    this.employees.forEach(emp => {
-      const opt = document.createElement('option');
-      opt.value = emp.id;
-      opt.textContent = `${emp.full_name || emp.username} (${emp.role.replace('_', ' ')})`;
-      select.appendChild(opt);
-    });
-    if (cur) select.value = cur;
+    const next = openTasks[0];
+    summary.textContent = `Recommended next: ${next.title || 'Untitled task'} · ${next.priority || 'medium'} priority${next.due_date ? ` · Due ${String(next.due_date).slice(0, 10)}` : ''}`;
+    list.innerHTML = openTasks.slice(0, 3).map((task, index) => `<a class="card" style="padding:.75rem;text-decoration:none;color:inherit;" href="/tasks/${encodeURIComponent(task.id)}"><strong>${index + 1}. ${this.escapeHtml(task.title || 'Untitled task')}</strong><div class="text-muted" style="font-size:.8rem;margin-top:.35rem;">${this.escapeHtml(task.priority || 'medium')} priority · ${this.escapeHtml(String(task.status || 'todo').replaceAll('_', ' '))}${task.due_date ? ` · Due ${this.escapeHtml(String(task.due_date).slice(0, 10))}` : ''}</div></a>`).join('');
   },
 
   async loadTasks() {
@@ -325,11 +283,9 @@ const TaskManager = {
     try {
       const params = new URLSearchParams();
       if (this.currentFilter.q) params.set('q', this.currentFilter.q);
-      if (this.currentFilter.scope) params.set('scope', this.currentFilter.scope);
       if (this.currentFilter.status) params.set('status', this.currentFilter.status);
       if (this.currentFilter.priority) params.set('priority', this.currentFilter.priority);
       if (this.currentFilter.category_id) params.set('category_id', this.currentFilter.category_id);
-      if (this.currentFilter.team_id) params.set('team_id', this.currentFilter.team_id);
       if (this.currentFilter.sort) params.set('sort', this.currentFilter.sort);
 
       const urlParams = new URLSearchParams(window.location.search);
@@ -357,24 +313,6 @@ const TaskManager = {
           <span>Error loading tasks: ${err.message}</span>
         </div>
       `;
-    }
-  },
-
-  getStatusBadgeClass(status) {
-    switch (status) {
-      case 'completed':
-        return 'badge-success';
-      case 'in_progress':
-        return 'badge-primary';
-      case 'in_review':
-        return 'badge-warning';
-      case 'changes_requested':
-      case 'blocked':
-        return 'badge-danger';
-      case 'todo':
-      case 'pending':
-      default:
-        return 'badge-neutral';
     }
   },
 
@@ -413,24 +351,18 @@ const TaskManager = {
         formattedDate = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       }
 
-      const statusLabel = task.status_label || task.status.replace('_', ' ').toUpperCase();
-      const statusClass = this.getStatusBadgeClass(task.status);
-
       item.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} aria-label="Toggle task status" />
-        <div class="task-body">
-          <div class="task-title">
-            <a href="/tasks/${task.id}" class="task-title-link" style="color: inherit; text-decoration: none;">
-              ${this.escapeHtml(task.title)}
-            </a>
-          </div>
+        <div class="task-body" style="cursor: pointer;">
+          <div class="task-title">${this.escapeHtml(task.title)}</div>
           ${task.description ? `<div class="task-desc-preview">${this.escapeHtml(task.description)}</div>` : ''}
           <div class="task-meta">
-            ${task.team_name ? `<span class="badge badge-neutral" title="Team"><svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>${this.escapeHtml(task.team_name)}</span>` : ''}
-            ${task.assigned_to_name ? `<span class="badge badge-neutral" title="Assignee"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${this.escapeHtml(task.assigned_to_name)}</span>` : ''}
             ${task.category_name ? `<span class="badge badge-category"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>${this.escapeHtml(task.category_name)}</span>` : ''}
-            <span class="badge badge-${task.priority}">${task.priority.toUpperCase()}</span>
-            <span class="badge ${statusClass}">${statusLabel}</span>
+            <span class="badge badge-${task.priority}">${task.priority}</span>
+            <span class="badge badge-${task.status}">${task.status.replace('_', ' ')}</span>
+            ${task.assignee_name ? `<span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name)}</span>` : ''}
+            ${task.creator_name ? `<span class="badge badge-category">Assigned by ${this.escapeHtml(task.creator_name)}</span>` : ''}
+            ${task.recurrence && task.recurrence !== 'none' ? `<span class="badge badge-category">🔁 ${task.recurrence}</span>` : ''}
             ${task.due_date ? `
               <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -440,9 +372,10 @@ const TaskManager = {
           </div>
         </div>
         <div class="task-actions">
-          <a href="/tasks/${task.id}" class="btn btn-ghost btn-sm btn-icon-only" title="View Details" aria-label="View Details">
-            <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          </a>
+          <button class="btn btn-ghost btn-sm view-detail-btn" title="View Discussions & Deliverables">
+            <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span style="font-size: var(--font-size-xs);">Discuss</span>
+          </button>
           <button class="btn btn-ghost btn-sm btn-icon-only edit-task-btn" title="Edit Task" aria-label="Edit Task">
             <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           </button>
@@ -582,14 +515,10 @@ const TaskManager = {
           upcomingContainer.innerHTML = stats.upcoming.map(t => `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid var(--color-border-subtle);">
               <div>
-                <a href="/tasks/${t.id}" style="font-weight: 600; font-size: var(--font-size-sm); color: var(--color-text); text-decoration: none;">
-                  ${this.escapeHtml(t.title)}
-                </a>
-                <div style="font-size: var(--font-size-xs); color: var(--color-muted);">
-                  ${t.team_name ? `[${this.escapeHtml(t.team_name)}] ` : ''}${t.category_name || 'General'}
-                </div>
+                <div style="font-weight: 600; font-size: var(--font-size-sm); color: var(--color-text);">${this.escapeHtml(t.title)}</div>
+                <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${t.category_name || 'General'}</div>
               </div>
-              <span class="badge ${t.is_overdue ? 'badge-danger' : 'badge-neutral'}">
+              <span class="badge ${t.is_overdue ? 'badge-overdue' : 'badge-low'}">
                 ${t.due_date ? t.due_date : 'No date'}
               </span>
             </div>
@@ -601,17 +530,6 @@ const TaskManager = {
     }
   },
 
-  async openEditModal(taskId) {
-    try {
-      const res = await api('GET', `/tasks/${taskId}`);
-      if (res && res.ok) {
-        this.openTaskModal(res.data);
-      }
-    } catch (err) {
-      showToast('Could not load task for editing.', 'error');
-    }
-  },
-
   openTaskModal(task = null) {
     const modal = document.getElementById('task-modal');
     if (!modal) return;
@@ -620,59 +538,42 @@ const TaskManager = {
     const taskIdField = document.getElementById('task-id');
     const titleField = document.getElementById('task-title-input');
     const descField = document.getElementById('task-desc-input');
-    const criteriaField = document.getElementById('task-criteria-input');
     const priorityField = document.getElementById('task-priority-select');
     const statusField = document.getElementById('task-status-select');
-    const teamField = document.getElementById('task-team-select');
-    const assigneeField = document.getElementById('task-assignee-select');
-    const startDateField = document.getElementById('task-start-date-input');
-    const dueDateField = document.getElementById('task-due-date-input');
     const categoryField = document.getElementById('task-category-select');
-    const recurringField = document.getElementById('task-recurring-select');
-
-    const refFilesField = document.getElementById('task-modal-ref-files');
-    if (refFilesField) refFilesField.value = '';
+    const dueDateField = document.getElementById('task-due-date-input');
+    const assigneeField = document.getElementById('task-assignee-select');
+    const recurrenceField = document.getElementById('task-recurrence-select');
+    const criteriaField = document.getElementById('task-acceptance-input');
 
     if (task) {
       modalTitle.textContent = 'Edit Task';
       taskIdField.value = task.id;
       titleField.value = task.title;
       descField.value = task.description || '';
-      if (criteriaField) criteriaField.value = task.acceptance_criteria || '';
       priorityField.value = task.priority || 'medium';
-      statusField.value = task.status || 'todo';
-      if (teamField) teamField.value = task.team_id || '';
-      if (assigneeField) assigneeField.value = task.assigned_to_id || '';
-      if (startDateField) startDateField.value = task.start_date ? task.start_date.split('T')[0] : '';
-      if (dueDateField) dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
-      if (categoryField) categoryField.value = task.category_id || '';
-      if (recurringField) recurringField.value = task.recurrence_interval || '';
+      statusField.value = task.status || 'pending';
+      categoryField.value = task.category_id || '';
+      dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
+      if (assigneeField) assigneeField.value = task.assignee_id || '';
+      if (recurrenceField) recurrenceField.value = task.recurrence || 'none';
+      if (criteriaField) criteriaField.value = task.acceptance_criteria || '';
     } else {
       modalTitle.textContent = 'Add New Task';
       taskIdField.value = '';
       titleField.value = '';
       descField.value = '';
-      if (criteriaField) criteriaField.value = '';
       priorityField.value = 'medium';
-      statusField.value = 'todo';
-      if (teamField) teamField.value = '';
+      statusField.value = 'pending';
+      categoryField.value = '';
+      dueDateField.value = '';
       if (assigneeField) assigneeField.value = '';
-      if (startDateField) startDateField.value = '';
-      if (dueDateField) dueDateField.value = '';
-      if (categoryField) categoryField.value = '';
-      if (recurringField) recurringField.value = '';
+      if (recurrenceField) recurrenceField.value = 'none';
+      if (criteriaField) criteriaField.value = '';
     }
 
     modal.classList.add('is-active');
-    modal.classList.add('active');
     setTimeout(() => titleField.focus(), 50);
-  },
-
-  closeModals() {
-    document.querySelectorAll('.modal-overlay').forEach(modal => {
-      modal.classList.remove('is-active');
-      modal.classList.remove('active');
-    });
   },
 
   async handleTaskFormSubmit(e) {
@@ -682,14 +583,11 @@ const TaskManager = {
     const description = document.getElementById('task-desc-input').value.trim();
     const priority = document.getElementById('task-priority-select').value;
     const status = document.getElementById('task-status-select').value;
-    const categoryId = document.getElementById('task-category-select')?.value;
-    const dueDate = document.getElementById('task-due-date-input')?.value;
-
-    const criteria = document.getElementById('task-criteria-input')?.value.trim() || '';
-    const teamId = document.getElementById('task-team-select')?.value;
-    const assigneeId = document.getElementById('task-assignee-select')?.value;
-    const startDate = document.getElementById('task-start-date-input')?.value;
-    const recurring = document.getElementById('task-recurring-select')?.value;
+    const categoryId = document.getElementById('task-category-select').value;
+    const dueDate = document.getElementById('task-due-date-input').value;
+    const assigneeField = document.getElementById('task-assignee-select');
+    const recurrenceField = document.getElementById('task-recurrence-select');
+    const criteriaField = document.getElementById('task-acceptance-input');
 
     if (!title) {
       showToast('Task title is required.', 'error');
@@ -702,13 +600,7 @@ const TaskManager = {
       priority,
       status,
       category_id: categoryId ? parseInt(categoryId, 10) : null,
-      team_id: teamId ? parseInt(teamId, 10) : null,
-      assigned_to_id: assigneeId ? parseInt(assigneeId, 10) : null,
-      start_date: startDate || null,
-      due_date: dueDate || null,
-      acceptance_criteria: criteria,
-      is_recurring: Boolean(recurring),
-      recurrence_interval: recurring || null
+      due_date: dueDate || null
     };
 
     if (assigneeField && assigneeField.value) {
@@ -725,42 +617,16 @@ const TaskManager = {
     submitBtn.disabled = true;
 
     try {
-      const refFilesInput = document.getElementById('task-modal-ref-files');
       if (taskId) {
         await api('PUT', `/tasks/${taskId}`, payload);
-        if (refFilesInput && refFilesInput.files && refFilesInput.files.length > 0) {
-          for (let i = 0; i < refFilesInput.files.length; i++) {
-            const fd = new FormData();
-            fd.append('file', refFilesInput.files[i]);
-            await api('POST', `/tasks/${taskId}/attachments`, fd);
-          }
-        }
         showToast('Task updated successfully!', 'success');
       } else {
-        if (refFilesInput && refFilesInput.files && refFilesInput.files.length > 0) {
-          const formData = new FormData();
-          Object.keys(payload).forEach(key => {
-            if (payload[key] !== null && payload[key] !== undefined) {
-              formData.append(key, payload[key]);
-            }
-          });
-          for (let i = 0; i < refFilesInput.files.length; i++) {
-            formData.append('files', refFilesInput.files[i]);
-          }
-          await api('POST', '/tasks', formData);
-        } else {
-          await api('POST', '/tasks', payload);
-        }
+        await api('POST', '/tasks', payload);
         showToast('Task created successfully!', 'success');
       }
       this.closeModals();
       this.loadTasks();
       this.loadDashboardStats();
-
-      // If on detail page, refresh
-      if (window.TaskDetail && typeof window.TaskDetail.init === 'function') {
-        window.TaskDetail.init();
-      }
     } catch (err) {
       showToast(err.message || 'Failed to save task', 'error');
     } finally {
@@ -786,14 +652,295 @@ const TaskManager = {
     }
   },
 
-  escapeHtml(str) {
-    if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+  // ── Task Details, Subtasks, Discussions & Deliverables ────────────────────────
+
+  async openTaskDetailModal(task) {
+    this.activeTaskId = task.id;
+    const modal = document.getElementById('task-detail-modal');
+    if (!modal) return;
+
+    document.getElementById('task-detail-title').textContent = task.title;
+    const priBadge = document.getElementById('detail-priority-badge');
+    if (priBadge) {
+      priBadge.className = `badge badge-${task.priority}`;
+      priBadge.textContent = task.priority;
+    }
+
+    const stBadge = document.getElementById('detail-status-badge');
+    if (stBadge) {
+      stBadge.className = `badge badge-${task.status}`;
+      stBadge.textContent = task.status.replace('_', ' ');
+    }
+
+    document.getElementById('detail-desc').textContent = task.description || 'No description provided.';
+    
+    const critBox = document.getElementById('detail-criteria-box');
+    const critText = document.getElementById('detail-criteria');
+    if (task.acceptance_criteria) {
+      critBox.style.display = 'block';
+      critText.textContent = task.acceptance_criteria;
+    } else {
+      critBox.style.display = 'none';
+    }
+
+    document.getElementById('detail-assignee').textContent = task.assignee_name || 'Self / Unassigned';
+    document.getElementById('detail-due').textContent = task.due_date || 'No due date';
+    const creator = document.getElementById('detail-creator');
+    if (creator) creator.textContent = task.creator_name || 'Workspace administrator';
+
+    modal.classList.add('is-active');
+
+    // Load subtasks, messages, and submissions
+    this.loadSubtasks(task.id);
+    this.loadMessages(task.id);
+    this.loadSubmissions(task.id);
   },
 
-  // Category page methods
+  async loadSubtasks(taskId) {
+    const container = document.getElementById('subtasks-list');
+    if (!container) return;
+    try {
+      const res = await api('GET', `/tasks/${taskId}`);
+      const task = res.data;
+      const subtasks = task.subtasks || [];
+
+      if (subtasks.length === 0) {
+        container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No subtasks yet. Add one below.</span>';
+        return;
+      }
+
+      container.innerHTML = subtasks.map(s => `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.35rem 0.5rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--font-size-xs);">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex: 1; margin: 0;">
+            <input type="checkbox" class="subtask-checkbox" data-id="${s.id}" ${s.is_completed ? 'checked' : ''}>
+            <span style="${s.is_completed ? 'text-decoration: line-through; color: var(--color-muted);' : 'color: var(--color-text);'}">${this.escapeHtml(s.title)}</span>
+          </label>
+        </div>
+      `).join('');
+
+      container.querySelectorAll('.subtask-checkbox').forEach(cb => {
+        cb.addEventListener('change', async () => {
+          const subId = cb.dataset.id;
+          try {
+            await api('PATCH', `/tasks/${taskId}/subtasks/${subId}`, {
+              is_completed: cb.checked
+            });
+            this.loadSubtasks(taskId);
+          } catch (e) {
+            showToast('Failed to update subtask', 'error');
+          }
+        });
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  async handleAddSubtask(e) {
+    e.preventDefault();
+    if (!this.activeTaskId) return;
+    const input = document.getElementById('new-subtask-title');
+    const title = input.value.trim();
+    if (!title) return;
+
+    try {
+      await api('POST', `/tasks/${this.activeTaskId}/subtasks`, { title });
+      input.value = '';
+      this.loadSubtasks(this.activeTaskId);
+    } catch (err) {
+      showToast(err.message || 'Failed to add subtask', 'error');
+    }
+  },
+
+  async loadMessages(taskId) {
+    const container = document.getElementById('messages-container');
+    if (!container) return;
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/messages`);
+      const json = await res.json();
+      const messages = json.data || [];
+
+      if (messages.length === 0) {
+        container.innerHTML = '<div style="text-align: center; color: var(--color-muted); font-size: var(--font-size-xs); padding: 2rem;">No messages in this task thread yet.</div>';
+        return;
+      }
+
+      container.innerHTML = messages.map(m => `
+        <div style="background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; font-size: var(--font-size-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <strong style="color: var(--color-primary);">${m.author_name}</strong>
+            <span style="font-size: 0.65rem; color: var(--color-muted);">${new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div style="color: var(--color-text); margin-bottom: 0.35rem; white-space: pre-wrap;">${this.escapeHtml(m.content)}</div>
+          ${m.attachments && m.attachments.length > 0 ? `
+            <div style="border-top: 1px dashed var(--color-border); padding-top: 0.35rem; margin-top: 0.35rem; display: flex; flex-direction: column; gap: 0.2rem;">
+              ${m.attachments.map(a => `
+                <a href="/api/files/${a.id}/download" target="_blank" style="color: var(--color-accent); font-weight: 600; font-size: 0.7rem; text-decoration: underline;">
+                  📎 ${this.escapeHtml(a.filename)}
+                </a>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      container.scrollTop = container.scrollHeight;
+    } catch (e) {
+      container.innerHTML = `<div style="color: var(--color-danger); font-size: var(--font-size-xs); padding: 1rem;">Failed to load messages: ${e.message}</div>`;
+    }
+  },
+
+  async handleSendMessage(e) {
+    e.preventDefault();
+    if (!this.activeTaskId) return;
+
+    const textarea = document.getElementById('message-text');
+    const fileInput = document.getElementById('message-file');
+    const content = textarea.value.trim();
+    if (!content) return;
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const formData = new FormData();
+    formData.append('content', content);
+    if (fileInput.files.length > 0) {
+      formData.append('file', fileInput.files[0]);
+    }
+
+    try {
+      const res = await fetch(`/api/tasks/${this.activeTaskId}/messages`, {
+        method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData
+      });
+      const json = await res.json();
+      if (!res.ok || json.ok === false) throw new Error(json.error || json.message || 'Failed to send message');
+      textarea.value = ''; fileInput.value = '';
+      showToast('Message sent.', 'success');
+      await this.loadMessages(this.activeTaskId);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  async loadSubmissions(taskId) {
+    const container = document.getElementById('submissions-history');
+    if (!container) return;
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/submissions`);
+      const json = await res.json();
+      const subs = json.data || [];
+
+      if (subs.length === 0) {
+        container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No deliverables submitted yet.</span>';
+        return;
+      }
+
+      container.innerHTML = subs.map(s => `
+        <div style="background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.75rem; font-size: var(--font-size-xs);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+            <span>By <strong>${s.submitter_name || s.submitted_by_name || "Employee"}</strong> on ${new Date(s.created_at).toLocaleDateString()}</span>
+            <span class="badge ${s.status === 'approved' ? 'badge-completed' : s.status === 'changes_requested' || s.status === 'rejected' ? 'badge-overdue' : 'badge-pending'}">${s.status.toUpperCase()}</span>
+          </div>
+          <div style="color: var(--color-text); margin-bottom: 0.35rem;">${this.escapeHtml(s.notes || s.message || "") }</div>
+          ${s.attachments && s.attachments.length > 0 ? `
+            <div style="margin-bottom: 0.35rem;">
+              ${s.attachments.map(a => `<a href="/api/files/${a.id}/download" style="color: var(--color-primary); font-weight: 600;">📥 ${this.escapeHtml(a.filename)}</a>`).join(' ')}
+            </div>
+          ` : ''}
+          ${(s.review_notes || s.review_feedback) ? `
+            <div style="background: #FFF9F5; border-left: 2px solid var(--color-accent); padding: 0.4rem; font-size: 0.7rem; color: var(--color-accent);">
+              <strong>Review Feedback:</strong> ${this.escapeHtml(s.review_notes || s.review_feedback)}
+            </div>
+          ` : ''}
+          ${['pending','submitted'].includes(s.status) ? `
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; justify-content: flex-end;">
+              <button class="btn btn-secondary btn-sm review-action-btn" data-sub-id="${s.id}" data-action="request_changes">Request Changes</button>
+              <button class="btn btn-primary btn-sm review-action-btn" data-sub-id="${s.id}" data-action="approved">Approve</button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      container.querySelectorAll('.review-action-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const subId = btn.dataset.subId;
+          const action = btn.dataset.action;
+          const feedback = prompt(action === 'approved' ? 'Optional approval notes:' : 'Please enter feedback describing changes needed:');
+          if (action === 'request_changes' && !feedback) {
+            showToast('Feedback is required when requesting revisions.', 'error');
+            return;
+          }
+
+          const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+          try {
+            const revRes = await fetch(`/api/tasks/${this.activeTaskId}/submissions/${subId}/review`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify({
+                decision: action === 'approved' ? 'approve' : 'request_changes',
+                review_notes: feedback || ''
+              })
+            });
+            const revData = await revRes.json();
+            if (!revRes.ok || revData.ok === false) throw new Error(revData.error || revData.message || 'Review action failed');
+            showToast(action === 'approved' ? 'Submission approved!' : 'Changes requested.', 'success');
+            this.loadSubmissions(this.activeTaskId);
+            this.loadTasks();
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+      });
+    } catch (e) {
+      container.innerHTML = `<span style="color: var(--color-danger); font-size: var(--font-size-xs);">Failed to load submissions: ${e.message}</span>`;
+    }
+  },
+
+  async handleSubmitDeliverable(e) {
+    e.preventDefault();
+    if (!this.activeTaskId) return;
+
+    const msgInput = document.getElementById('deliverable-message');
+    const fileInput = document.getElementById('deliverable-file');
+    const message = msgInput.value.trim();
+    if (!message) return;
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const formData = new FormData();
+    formData.append('notes', message);
+    if (fileInput.files.length > 0) {
+      formData.append('file', fileInput.files[0]);
+    }
+
+    try {
+      // Upload the file first; the submissions endpoint links saved attachment IDs.
+      let attachmentIds = [];
+      if (fileInput.files.length > 0) {
+        const uploadData = new FormData(); uploadData.append('file', fileInput.files[0]);
+        const uploadRes = await fetch(`/api/tasks/${this.activeTaskId}/attachments`, { method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: uploadData });
+        const uploadJson = await uploadRes.json();
+        if (!uploadRes.ok || uploadJson.ok === false) throw new Error(uploadJson.error || uploadJson.message || 'File upload failed');
+        if (uploadJson.data && uploadJson.data.id) attachmentIds.push(uploadJson.data.id);
+      }
+      const res = await fetch(`/api/tasks/${this.activeTaskId}/submissions`, {
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({notes: message, attachment_ids: attachmentIds})
+      });
+      const json = await res.json();
+      if (!res.ok || json.ok === false) throw new Error(json.error || json.message || 'Failed to submit work deliverable');
+      showToast('Deliverable submitted for review!', 'success');
+      msgInput.value = ''; fileInput.value = '';
+      await this.loadSubmissions(this.activeTaskId); await this.loadTasks();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  },
+
+  // ── Categories ─────────────────────────────────────────────────────────────
+
   renderCategoriesPage() {
     const container = document.getElementById('categories-list-container');
     if (!container) return;
@@ -804,8 +951,8 @@ const TaskManager = {
           <div class="empty-icon-wrap">
             <svg class="icon icon-xl" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           </div>
-          <h3>No categories yet</h3>
-          <p>Create categories to group, organize, and sort your tasks easily.</p>
+          <h3>No categories created</h3>
+          <p>Organize your tasks by creating categories like Work, Personal, or Projects.</p>
         </div>
       `;
       return;
@@ -814,10 +961,12 @@ const TaskManager = {
     container.innerHTML = `
       <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
         ${this.categories.map(cat => `
-          <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
+          <div class="card" style="display: flex; align-items: center; justify-content: space-between; padding: 1.25rem;">
             <div>
-              <div style="font-weight: 700; color: var(--color-text);">${this.escapeHtml(cat.name)}</div>
-              <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${cat.task_count ?? 0} associated tasks</div>
+              <div style="font-weight: 700; font-size: var(--font-size-base); color: var(--color-primary);">${this.escapeHtml(cat.name)}</div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.25rem;">
+                ${cat.task_count ?? 0} associated tasks
+              </div>
             </div>
             <button class="btn btn-ghost btn-sm btn-icon-only text-danger delete-cat-btn" data-id="${cat.id}" data-name="${this.escapeHtml(cat.name)}" title="Delete Category">
               <svg class="icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -831,7 +980,8 @@ const TaskManager = {
       btn.addEventListener('click', () => {
         const catId = btn.getAttribute('data-id');
         const catName = btn.getAttribute('data-name');
-        if (confirm(`Delete category "${catName}"? Tasks in this category will become unassigned.`)) {
+        const ok = window.confirm(`Delete category "${catName}"? Tasks in this category will remain safe and be unassigned.`);
+        if (ok) {
           this.deleteCategory(catId);
         }
       });
@@ -840,14 +990,17 @@ const TaskManager = {
 
   async handleCategoryFormSubmit(e) {
     e.preventDefault();
-    const input = document.getElementById('category-name-input');
-    const name = input?.value.trim();
-    if (!name) return;
+    const nameInput = document.getElementById('new-category-name');
+    const name = nameInput.value.trim();
+    if (!name) {
+      showToast('Please enter a category name.', 'error');
+      return;
+    }
 
     try {
       await api('POST', '/categories', { name });
-      showToast('Category created!', 'success');
-      if (input) input.value = '';
+      showToast(`Category "${name}" created!`, 'success');
+      nameInput.value = '';
       await this.loadCategories();
       this.renderCategoriesPage();
     } catch (err) {
@@ -858,16 +1011,31 @@ const TaskManager = {
   async deleteCategory(catId) {
     try {
       await api('DELETE', `/categories/${catId}`);
-      showToast('Category deleted.', 'success');
+      showToast('Category deleted and tasks unassigned safely.', 'success');
       await this.loadCategories();
       this.renderCategoriesPage();
     } catch (err) {
       showToast(err.message || 'Failed to delete category', 'error');
     }
+  },
+
+  closeModals() {
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+      modal.classList.remove('is-active');
+      modal.classList.remove('is-open');
+    });
+  },
+
+  escapeHtml(str) {
+    if (!str) return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 };
-
-window.TaskManager = TaskManager;
 
 document.addEventListener('DOMContentLoaded', () => {
   TaskManager.init();

@@ -17,13 +17,9 @@ function getCsrfToken() {
 
 async function api(method, path, body = null) {
   const headers = {
+    'Content-Type': 'application/json',
     'Accept': 'application/json'
   };
-
-  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-  if (!isFormData) {
-    headers['Content-Type'] = 'application/json';
-  }
 
   const upperMethod = method.toUpperCase();
   if (!['GET', 'HEAD', 'OPTIONS'].includes(upperMethod)) {
@@ -41,7 +37,7 @@ async function api(method, path, body = null) {
   };
 
   if (body !== null && upperMethod !== 'GET') {
-    opts.body = isFormData ? body : JSON.stringify(body);
+    opts.body = JSON.stringify(body);
   }
 
   try {

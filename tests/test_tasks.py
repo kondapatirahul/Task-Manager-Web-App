@@ -35,7 +35,7 @@ def test_task_create_validation(auth_client_a):
     # Invalid status
     res = auth_client_a.post('/api/tasks', json={
         'title': 'Test Task',
-        'status': 'invalid_status'  # not allowed
+        'status': 'blocked'  # not allowed
     })
     assert res.status_code == 400
 

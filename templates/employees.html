@@ -1,277 +1,415 @@
 {% extends "_app_layout.html" %}
 
-{% block title %}Employee Directory — TaskNest{% endblock %}
+{% block title %}Employee Directory — TaskNest Enterprise{% endblock %}
 
 {% block app_content %}
-<div class="page-intro">
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
   <div>
     <h1 class="page-title">Employee Directory</h1>
-    <p class="page-subtitle">View and administer company staff, department assignments, team memberships, and reporting lines.</p>
+    <p class="page-subtitle">View, search, provision, and manage company personnel, roles, and status.</p>
   </div>
-  {% if current_user.is_admin or current_user.role == 'hr' %}
-  <button class="btn btn-primary" id="open-invite-employee-btn">
-    <svg class="icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
-    <span>Invite Employee</span>
+  {% if current_user.role in ['super_admin', 'admin_hr'] %}
+  <button id="open-provision-btn" class="btn btn-primary">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+    <span>Provision Employee</span>
   </button>
   {% endif %}
 </div>
 
-<!-- Quick Statistics Bar -->
-<div class="stats-grid" style="margin-bottom: var(--space-6);">
-  <div class="stat-card">
-    <div class="stat-card-title">Total Employees</div>
-    <div class="stat-card-value" id="stat-total-employees">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-title">Active Accounts</div>
-    <div class="stat-card-value text-success" id="stat-active-employees">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-title">Departments</div>
-    <div class="stat-card-value" id="stat-departments-count">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-title">Teams</div>
-    <div class="stat-card-value" id="stat-teams-count">0</div>
-  </div>
-</div>
-
-<!-- Filter and Search Bar -->
-<div class="filter-bar" style="margin-bottom: var(--space-6);">
-  <!-- Search -->
-  <div class="input-with-icon" style="flex: 1.5; min-width: 220px;">
-    <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-    <input type="search" id="employee-search" class="form-control" placeholder="Search by name, title, or email..." style="margin-bottom: 0;">
-  </div>
-
-  <!-- Department Filter -->
-  <div class="filter-group">
-    <select id="filter-department" class="filter-select" aria-label="Filter by Department">
-      <option value="">All Departments</option>
-    </select>
-  </div>
-
-  <!-- Team Filter -->
-  <div class="filter-group">
-    <select id="filter-team" class="filter-select" aria-label="Filter by Team">
-      <option value="">All Teams</option>
-    </select>
-  </div>
-
-  <!-- Role Filter -->
-  <div class="filter-group">
-    <select id="filter-role" class="filter-select" aria-label="Filter by Role">
-      <option value="">All Roles</option>
-      <option value="super_admin">Super Admin</option>
-      <option value="admin">Admin</option>
-      <option value="hr">HR</option>
-      <option value="team_lead">Team Lead</option>
-      <option value="employee">Employee</option>
-    </select>
-  </div>
-
-  <!-- Account Status Filter -->
-  <div class="filter-group">
-    <select id="filter-status" class="filter-select" aria-label="Filter by Status">
-      <option value="all">All Statuses</option>
-      <option value="active" selected>Active Only</option>
-      <option value="inactive">Deactivated Only</option>
-    </select>
+<!-- Filters Bar -->
+<div class="card" style="padding: 1rem; margin-bottom: 1.5rem;">
+  <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+    <div style="flex: 2; min-width: 220px; position: relative;">
+      <input type="search" id="emp-search" class="form-control" placeholder="Search by name, email, designation..." style="margin-bottom: 0;">
+    </div>
+    <div style="flex: 1; min-width: 140px;">
+      <select id="emp-filter-role" class="form-control" style="margin-bottom: 0;">
+        <option value="">All Roles</option>
+        <option value="super_admin">Super Admin</option>
+        <option value="admin_hr">Admin / HR</option>
+        <option value="team_lead">Team Lead</option>
+        <option value="employee">Employee</option>
+      </select>
+    </div>
+    <div style="flex: 1; min-width: 140px;">
+      <select id="emp-filter-status" class="form-control" style="margin-bottom: 0;">
+        <option value="">All Statuses</option>
+        <option value="active">Active Only</option>
+        <option value="inactive">Deactivated Only</option>
+      </select>
+    </div>
+    <div style="flex: 1; min-width: 150px;">
+      <select id="emp-filter-dept" class="form-control" style="margin-bottom: 0;">
+        <option value="">All Departments</option>
+      </select>
+    </div>
+    <button id="emp-filter-reset" class="btn btn-secondary btn-sm" title="Reset Filters">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      <span>Reset</span>
+    </button>
   </div>
 </div>
 
-<!-- Employee Cards Grid -->
-<div class="employee-grid" id="employee-list-container">
-  <!-- Populated dynamically via static/js/employees.js -->
+<!-- Employee List Card / Table -->
+<div class="card" style="padding: 1.25rem;">
+  <div style="overflow-x: auto;">
+    <table class="table" id="emp-table">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Contact</th>
+          <th>Department & Team</th>
+          <th>Role</th>
+          <th>Account Status</th>
+          {% if current_user.role in ['super_admin', 'admin_hr'] %}
+          <th style="text-align: right;">Actions</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody id="emp-tbody">
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 2.5rem; color: var(--color-muted);">
+            Loading directory...
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 </div>
 
-<!-- ── Invite Employee Modal ──────────────────────────────────────────────── -->
-<div class="modal-backdrop" id="invite-employee-modal" style="display: none;">
-  <div class="modal" style="max-width: 560px;">
+<!-- Provision Employee Modal -->
+{% if current_user.role in ['super_admin', 'admin_hr'] %}
+<div class="modal-overlay" id="provision-modal" role="dialog" aria-modal="true" aria-labelledby="provision-title">
+  <div class="modal-card" style="max-width: 600px;">
     <div class="modal-header">
-      <h2 class="modal-title">Invite New Employee</h2>
-      <button class="modal-close-btn" id="close-invite-modal-btn" aria-label="Close modal">&times;</button>
+      <h3 id="provision-title">Provision New Employee Account</h3>
+      <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
     </div>
-    <form id="invite-employee-form" novalidate>
-      <div class="form-row" style="display: flex; gap: var(--space-4);">
-        <div class="form-group" style="flex: 1;">
-          <label class="form-label" for="invite-full-name">Full Name <span class="required">*</span></label>
-          <input type="text" id="invite-full-name" class="form-control" placeholder="e.g. Jane Doe" required>
-        </div>
-        <div class="form-group" style="flex: 1;">
-          <label class="form-label" for="invite-email">Email Address <span class="required">*</span></label>
-          <input type="email" id="invite-email" class="form-control" placeholder="jane@company.com" required>
-        </div>
-      </div>
-
-      <div class="form-row" style="display: flex; gap: var(--space-4);">
-        <div class="form-group" style="flex: 1;">
-          <label class="form-label" for="invite-role">System Role</label>
-          <select id="invite-role" class="form-control">
-            <option value="employee" selected>Employee</option>
-            <option value="team_lead">Team Lead</option>
-            {% if current_user.is_admin %}
-            <option value="hr">HR Manager</option>
-            <option value="admin">Administrator</option>
-            {% endif %}
-          </select>
-        </div>
-        <div class="form-group" style="flex: 1;">
-          <label class="form-label" for="invite-job-title">Job Title</label>
-          <input type="text" id="invite-job-title" class="form-control" placeholder="e.g. Senior Software Engineer">
-        </div>
-      </div>
-
-      <div class="form-row" style="display: flex; gap: var(--space-4);">
-        <div class="form-group" style="flex: 1;">
-          <label class="form-label" for="invite-department">Department</label>
-          <select id="invite-department" class="form-control">
-            <option value="">No Department</option>
-          </select>
-        </div>
-        <div class="form-group" style="flex: 1;">
-          <label class="form-label" for="invite-reports-to">Reports To (Manager)</label>
-          <select id="invite-reports-to" class="form-control">
-            <option value="">No Manager Assigned</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Assign Teams</label>
-        <div id="invite-teams-checkboxes" class="teams-checkbox-grid">
-          <!-- Populated dynamically -->
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="invite-password">Initial Password (Optional)</label>
-        <input type="text" id="invite-password" class="form-control" placeholder="Leave blank to generate a secure activation token">
-        <span class="form-hint">If left empty, a secure activation temporary password will be automatically generated.</span>
-      </div>
-
-      <div class="modal-footer" style="padding-top: var(--space-4); border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: var(--space-3);">
-        <button type="button" class="btn btn-secondary" id="cancel-invite-btn">Cancel</button>
-        <button type="submit" class="btn btn-primary" id="submit-invite-btn">Create & Activate Account</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<!-- ── Activation Success Modal ───────────────────────────────────────────── -->
-<div class="modal-backdrop" id="activation-success-modal" style="display: none;">
-  <div class="modal" style="max-width: 460px;">
-    <div class="modal-header">
-      <h2 class="modal-title text-success">Employee Account Created</h2>
-      <button class="modal-close-btn" id="close-success-modal-btn" aria-label="Close modal">&times;</button>
-    </div>
-    <div style="padding: var(--space-2) 0;">
-      <p>The employee profile has been created and activated. Please share these initial sign-in credentials securely:</p>
-      <div class="card" style="background: var(--color-surface-raised); padding: var(--space-4); margin: var(--space-4) 0; font-family: monospace;">
-        <div><strong>Email:</strong> <span id="success-email"></span></div>
-        <div style="margin-top: var(--space-2);"><strong>Temporary Password:</strong> <span id="success-password" style="color: var(--color-primary); font-weight: bold;"></span></div>
-      </div>
-      <p class="text-muted" style="font-size: var(--font-size-sm);">The employee can immediately log in and change their password in Account Settings.</p>
-    </div>
-    <div class="modal-footer" style="text-align: right;">
-      <button type="button" class="btn btn-primary" id="ack-success-btn">Done</button>
-    </div>
-  </div>
-</div>
-
-<!-- ── Employee Detail / Edit Modal ───────────────────────────────────────── -->
-<div class="modal-backdrop" id="employee-detail-modal" style="display: none;">
-  <div class="modal" style="max-width: 600px;">
-    <div class="modal-header">
-      <h2 class="modal-title" id="detail-employee-name">Employee Profile</h2>
-      <button class="modal-close-btn" id="close-detail-modal-btn" aria-label="Close modal">&times;</button>
-    </div>
-    <div class="detail-modal-content">
-      <div class="employee-header-card" style="display: flex; gap: var(--space-4); align-items: center; margin-bottom: var(--space-4);">
-        <div class="user-avatar-badge" id="detail-avatar" style="width: 56px; height: 56px; font-size: 24px;"></div>
-        <div>
-          <h3 id="detail-full-name" style="margin: 0; font-size: var(--font-size-lg);"></h3>
-          <div id="detail-email" class="text-muted" style="font-size: var(--font-size-sm);"></div>
-          <div style="margin-top: var(--space-1); display: flex; gap: var(--space-2);">
-            <span id="detail-role-badge" class="badge"></span>
-            <span id="detail-status-badge" class="badge"></span>
+    <form id="provision-form">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="prov-name">Full Name <span class="required">*</span></label>
+            <input type="text" id="prov-name" class="form-control" required placeholder="e.g. Jane Doe">
           </div>
-        </div>
-      </div>
-
-      <!-- Edit Form (Available for Admin/HR) -->
-      <form id="edit-employee-form" novalidate>
-        <input type="hidden" id="edit-employee-id">
-        <div class="form-row" style="display: flex; gap: var(--space-4);">
-          <div class="form-group" style="flex: 1;">
-            <label class="form-label" for="edit-job-title">Job Title</label>
-            <input type="text" id="edit-job-title" class="form-control">
-          </div>
-          <div class="form-group" style="flex: 1;">
-            <label class="form-label" for="edit-department">Department</label>
-            <select id="edit-department" class="form-control">
-              <option value="">No Department</option>
-            </select>
+          <div class="form-group">
+            <label class="form-label" for="prov-username">Username <span class="required">*</span></label>
+            <input type="text" id="prov-username" class="form-control" required placeholder="e.g. jdoe">
           </div>
         </div>
 
-        <div class="form-row" style="display: flex; gap: var(--space-4);">
-          <div class="form-group" style="flex: 1;">
-            <label class="form-label" for="edit-reports-to">Reports To</label>
-            <select id="edit-reports-to" class="form-control">
-              <option value="">No Manager Assigned</option>
-            </select>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="prov-email">Work Email <span class="required">*</span></label>
+            <input type="email" id="prov-email" class="form-control" required placeholder="jdoe@tasknest.local">
           </div>
-          <div class="form-group" style="flex: 1;">
-            <label class="form-label" for="edit-role">Role</label>
-            <select id="edit-role" class="form-control">
-              <option value="employee">Employee</option>
+          <div class="form-group">
+            <label class="form-label" for="prov-password">Temporary Password <span class="required">*</span></label>
+            <input type="password" id="prov-password" class="form-control" required placeholder="Min 8 characters">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="prov-role">Role <span class="required">*</span></label>
+            <select id="prov-role" class="form-control" required>
+              <option value="employee" selected>Employee</option>
               <option value="team_lead">Team Lead</option>
-              {% if current_user.is_admin %}
-              <option value="hr">HR Manager</option>
-              <option value="admin">Administrator</option>
+              <option value="admin_hr">Admin / HR</option>
+              {% if current_user.role == 'super_admin' %}
+              <option value="super_admin">Super Admin</option>
               {% endif %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prov-designation">Designation</label>
+            <input type="text" id="prov-designation" class="form-control" placeholder="e.g. Senior Software Engineer">
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="prov-dept">Department</label>
+            <select id="prov-dept" class="form-control">
+              <option value="">None / Unassigned</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="prov-team">Team</label>
+            <select id="prov-team" class="form-control">
+              <option value="">None / Unassigned</option>
             </select>
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Team Memberships</label>
-          <div id="edit-teams-checkboxes" class="teams-checkbox-grid">
-            <!-- Dynamic checkboxes -->
-          </div>
+          <label class="form-label" for="prov-phone">Phone Number</label>
+          <input type="text" id="prov-phone" class="form-control" placeholder="+1 (555) 000-0000">
         </div>
-
-        <!-- Task metrics preview -->
-        <div class="card" style="background: var(--color-surface-raised); padding: var(--space-3); margin-bottom: var(--space-4);">
-          <div style="font-weight: 600; margin-bottom: var(--space-2);">Task Workload</div>
-          <div style="display: flex; gap: var(--space-4); font-size: var(--font-size-sm);">
-            <div>Total Tasks: <strong id="detail-tasks-total">0</strong></div>
-            <div>Completed: <strong id="detail-tasks-completed" class="text-success">0</strong></div>
-            <div>Pending: <strong id="detail-tasks-pending" class="text-warning">0</strong></div>
-          </div>
-        </div>
-
-        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border); padding-top: var(--space-4);">
-          {% if current_user.is_admin or current_user.role == 'hr' %}
-          <button type="button" class="btn btn-secondary btn-sm" id="toggle-account-status-btn">
-            Deactivate Account
-          </button>
-          <div>
-            <button type="button" class="btn btn-secondary" id="cancel-detail-btn">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-          </div>
-          {% else %}
-          <div></div>
-          <button type="button" class="btn btn-secondary" id="cancel-detail-btn">Close</button>
-          {% endif %}
-        </div>
-      </form>
-    </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Account</button>
+      </div>
+    </form>
   </div>
 </div>
+{% endif %}
 
-{% block extra_scripts %}
-<script src="{{ url_for('static', filename='js/employees.js') }}"></script>
-{% endblock %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const empTable = document.getElementById('emp-tbody');
+  const searchInput = document.getElementById('emp-search');
+  const roleSelect = document.getElementById('emp-filter-role');
+  const statusSelect = document.getElementById('emp-filter-status');
+  const deptSelect = document.getElementById('emp-filter-dept');
+  const resetBtn = document.getElementById('emp-filter-reset');
+
+  const provModal = document.getElementById('provision-modal');
+  const openProvBtn = document.getElementById('open-provision-btn');
+  const provForm = document.getElementById('provision-form');
+  const provDeptSelect = document.getElementById('prov-dept');
+  const provTeamSelect = document.getElementById('prov-team');
+
+  let departments = [];
+  let teams = [];
+
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // Modal helpers
+  function openModal(modal) {
+    if (modal) modal.classList.add('is-open');
+  }
+  function closeModal(modal) {
+    if (modal) modal.classList.remove('is-open');
+  }
+
+  document.querySelectorAll('.modal-close-trigger').forEach(b => {
+    b.addEventListener('click', () => {
+      closeModal(provModal);
+    });
+  });
+
+  if (openProvBtn) {
+    openProvBtn.addEventListener('click', () => openModal(provModal));
+  }
+
+  // Load departments and teams for filter & provisioning
+  async function loadOrgMetadata() {
+    try {
+      const [deptRes, teamRes] = await Promise.all([
+        fetch('/api/departments'),
+        fetch('/api/teams')
+      ]);
+      if (deptRes.ok) {
+        const json = await deptRes.json();
+        departments = json.data || [];
+        departments.forEach(d => {
+          const opt1 = document.createElement('option');
+          opt1.value = d.id;
+          opt1.textContent = d.name;
+          if (deptSelect) deptSelect.appendChild(opt1);
+
+          if (provDeptSelect) {
+            const opt2 = document.createElement('option');
+            opt2.value = d.id;
+            opt2.textContent = d.name;
+            provDeptSelect.appendChild(opt2);
+          }
+        });
+      }
+      if (teamRes.ok) {
+        const json = await teamRes.json();
+        teams = json.data || [];
+        if (provTeamSelect) {
+          teams.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.textContent = `${t.name} (${t.department_name || 'No Dept'})`;
+            provTeamSelect.appendChild(opt);
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load org metadata', e);
+    }
+  }
+
+  // Load Employees
+  async function loadEmployees() {
+    try {
+      const params = new URLSearchParams();
+      if (searchInput && searchInput.value.trim()) params.set('q', searchInput.value.trim());
+      if (roleSelect && roleSelect.value) params.set('role', roleSelect.value);
+      if (statusSelect && statusSelect.value) params.set('status', statusSelect.value);
+      if (deptSelect && deptSelect.value) params.set('department_id', deptSelect.value);
+
+      const res = await fetch(`/api/employees?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to load employee directory');
+      const json = await res.json();
+      const employees = Array.isArray(json.data) ? json.data : (json.data?.employees || []);
+
+      if (employees.length === 0) {
+        empTable.innerHTML = `
+          <tr>
+            <td colspan="6" style="text-align: center; padding: 2.5rem; color: var(--color-muted);">
+              No employees matched the current filters.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      empTable.innerHTML = employees.map(emp => {
+        const initials = (emp.full_name || emp.username).substring(0, 2).toUpperCase();
+        const roleLabels = {
+          'super_admin': 'Super Admin',
+          'admin_hr': 'Admin / HR',
+          'team_lead': 'Team Lead',
+          'employee': 'Employee'
+        };
+        const roleLabel = roleLabels[emp.role] || emp.role;
+        const statusBadge = emp.account_active
+          ? '<span class="badge badge-completed">Active</span>'
+          : '<span class="badge badge-overdue">Deactivated</span>';
+
+        return `
+          <tr>
+            <td>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <div style="width: 38px; height: 38px; border-radius: 50%; background-color: var(--color-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: var(--font-size-sm);">
+                  ${initials}
+                </div>
+                <div>
+                  <div style="font-weight: 600; color: var(--color-text);">${emp.full_name || emp.username}</div>
+                  <div style="font-size: var(--font-size-xs); color: var(--color-muted);">@${emp.username}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div style="font-size: var(--font-size-sm);">${emp.email}</div>
+              ${emp.phone ? `<div style="font-size: var(--font-size-xs); color: var(--color-muted);">${emp.phone}</div>` : ''}
+            </td>
+            <td>
+              <div style="font-weight: 500; font-size: var(--font-size-sm);">${emp.designation || 'Staff'}</div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${emp.department_name || 'General Org'} · ${emp.team_name || 'Unassigned'}</div>
+            </td>
+            <td>
+              <span class="badge badge-${emp.role}">${roleLabel}</span>
+            </td>
+            <td>${statusBadge}</td>
+            {% if current_user.role in ['super_admin', 'admin_hr'] %}
+            <td style="text-align: right;">
+              <button class="btn btn-ghost btn-sm toggle-status-btn" data-id="${emp.id}" data-active="${emp.account_active}">
+                ${emp.account_active ? 'Deactivate' : 'Activate'}
+              </button>
+            </td>
+            {% endif %}
+          </tr>
+        `;
+      }).join('');
+
+      // Bind status toggle buttons
+      document.querySelectorAll('.toggle-status-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const empId = btn.getAttribute('data-id');
+          const isCurrentlyActive = btn.getAttribute('data-active') === 'true';
+          const newStatus = !isCurrentlyActive;
+          const actionText = newStatus ? 'activate' : 'deactivate';
+
+          if (!confirm(`Are you sure you want to ${actionText} this user's account?`)) return;
+
+          try {
+            const patchRes = await fetch(`/api/employees/${empId}/status`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify({ account_active: newStatus })
+            });
+            const data = await patchRes.json();
+            if (!patchRes.ok) throw new Error(data.message || `Failed to ${actionText} user`);
+            showToast(`Employee account successfully ${newStatus ? 'activated' : 'deactivated'}`, 'success');
+            loadEmployees();
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+      });
+
+    } catch (err) {
+      empTable.innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; padding: 2.5rem; color: var(--color-danger);">
+            ${err.message}
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  // Filter events
+  let debounceTimeout;
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(loadEmployees, 300);
+    });
+  }
+  if (roleSelect) roleSelect.addEventListener('change', loadEmployees);
+  if (statusSelect) statusSelect.addEventListener('change', loadEmployees);
+  if (deptSelect) deptSelect.addEventListener('change', loadEmployees);
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+      if (searchInput) searchInput.value = '';
+      if (roleSelect) roleSelect.value = '';
+      if (statusSelect) statusSelect.value = '';
+      if (deptSelect) deptSelect.value = '';
+      loadEmployees();
+    });
+  }
+
+  // Form submit for provision employee
+  if (provForm) {
+    provForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        full_name: document.getElementById('prov-name').value.trim(),
+        username: document.getElementById('prov-username').value.trim(),
+        email: document.getElementById('prov-email').value.trim(),
+        password: document.getElementById('prov-password').value,
+        role: document.getElementById('prov-role').value,
+        designation: document.getElementById('prov-designation').value.trim(),
+        department_id: document.getElementById('prov-dept').value || null,
+        team_id: document.getElementById('prov-team').value || null,
+        phone: document.getElementById('prov-phone').value.trim()
+      };
+
+      try {
+        const res = await fetch('/api/employees', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+          },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.message || 'Failed to create employee');
+        showToast('Employee account provisioned successfully!', 'success');
+        provForm.reset();
+        closeModal(provModal);
+        loadEmployees();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
+  loadOrgMetadata().then(loadEmployees);
+});
+</script>
 {% endblock %}

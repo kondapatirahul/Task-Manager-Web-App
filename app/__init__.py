@@ -28,49 +28,17 @@ def create_app(test_config=None):
         pass
 
     default_db_path = os.path.join(app.instance_path, 'tasks.db')
-    default_upload_path = os.getenv('TASKNEST_UPLOAD_FOLDER', os.path.join(app.instance_path, 'uploads'))
-    try:
-        os.makedirs(default_upload_path, exist_ok=True)
-    except OSError:
-        pass
-
     app.config.from_mapping(
         SECRET_KEY=os.getenv('SECRET_KEY', 'tasknest-dev-secret-key-change-in-prod'),
         SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', f'sqlite:///{default_db_path}'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         CSRF_ENABLED=True,
-        UPLOAD_FOLDER=default_upload_path,
-        MAX_CONTENT_LENGTH=25 * 1024 * 1024,
-        MAX_ATTACHMENT_SIZE=10 * 1024 * 1024,
-        MAX_ATTACHMENTS_PER_MESSAGE=5,
+        UPLOAD_FOLDER=upload_dir,
+        MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16 MB max upload
     )
 
     if test_config:
         app.config.update(test_config)
-
-    from werkzeug.exceptions import HTTPException
-
-    @app.errorhandler(HTTPException)
-    def handle_http_exception(e):
-        if request.path.startswith('/api/'):
-            msg = e.name if e.code in (404, 405) else (e.description or e.name)
-            response = app.response_class(
-                response=app.json.dumps({'ok': False, 'error': msg}),
-                status=e.code,
-                mimetype='application/json'
-            )
-            for key, val in e.get_headers():
-                if key.lower() not in ('content-type', 'content-length'):
-                    response.headers[key] = val
-            return response
-        return e
-
-    @app.errorhandler(Exception)
-    def handle_unhandled_exception(e):
-        if request.path.startswith('/api/'):
-            app.logger.error(f"Unhandled API error: {e}", exc_info=True)
-            return {'ok': False, 'error': 'Internal server error'}, 500
-        raise e
 
     # Initialize extensions
     db.init_app(app)
@@ -166,20 +134,26 @@ def create_app(test_config=None):
     from app.routes.tasks import tasks_bp
     from app.routes.categories import categories_bp
     from app.routes.stats import stats_bp
-    from app.routes.organizations import organizations_bp
-    from app.routes.departments import departments_bp
-    from app.routes.teams import teams_bp
+    from app.routes.organization import org_bp
     from app.routes.employees import employees_bp
+    from app.routes.attendance import attendance_bp
+    from app.routes.meetings import meetings_bp
+    from app.routes.notifications import notifications_bp
+    from app.routes.discussions import discussions_bp
+    from app.routes.reports import reports_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(categories_bp)
     app.register_blueprint(stats_bp)
-    app.register_blueprint(organizations_bp)
-    app.register_blueprint(departments_bp)
-    app.register_blueprint(teams_bp)
+    app.register_blueprint(org_bp)
     app.register_blueprint(employees_bp)
+    app.register_blueprint(attendance_bp)
+    app.register_blueprint(meetings_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(discussions_bp)
+    app.register_blueprint(reports_bp)
 
     # CLI commands
     @app.cli.command('init-db')
@@ -231,45 +205,63 @@ def create_app(test_config=None):
         from sqlalchemy import inspect as sa_inspect, text
         try:
             inspector = sa_inspect(db.engine)
-            if 'users' in inspector.get_table_names():
-                existing_user_cols = {c['name'] for c in inspector.get_columns('users')}
-                if 'role' not in existing_user_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"))
-                if 'account_active' not in existing_user_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"))
-                if 'organization_id' not in existing_user_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN organization_id INTEGER"))
-                if 'department_id' not in existing_user_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN department_id INTEGER"))
-                if 'job_title' not in existing_user_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN job_title VARCHAR(100)"))
-                if 'phone' not in existing_user_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
-                if 'reports_to_id' not in existing_user_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN reports_to_id INTEGER"))
+            table_names = set(inspector.get_table_names())
 
-            if 'tasks' in inspector.get_table_names():
-                existing_task_cols = {c['name'] for c in inspector.get_columns('tasks')}
-                if 'team_id' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN team_id INTEGER"))
-                if 'assigned_to_id' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN assigned_to_id INTEGER"))
-                if 'start_date' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN start_date DATE"))
-                if 'acceptance_criteria' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN acceptance_criteria TEXT"))
-                if 'submission_notes' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN submission_notes TEXT"))
-                if 'review_notes' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN review_notes TEXT"))
-                if 'is_recurring' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN is_recurring BOOLEAN DEFAULT 0 NOT NULL"))
-                if 'recurrence_interval' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN recurrence_interval VARCHAR(20)"))
-                if 'updated_at' not in existing_task_cols:
-                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN updated_at DATETIME"))
+            # 1. Migrate `users` table
+            if 'users' in table_names:
+                user_cols = {c['name'] for c in inspector.get_columns('users')}
+                user_migrations = [
+                    ('role', "ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"),
+                    ('account_active', "ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"),
+                    ('organization_id', "ALTER TABLE users ADD COLUMN organization_id INTEGER"),
+                    ('department_id', "ALTER TABLE users ADD COLUMN department_id INTEGER"),
+                    ('team_id', "ALTER TABLE users ADD COLUMN team_id INTEGER"),
+                    ('manager_id', "ALTER TABLE users ADD COLUMN manager_id INTEGER"),
+                    ('designation', "ALTER TABLE users ADD COLUMN designation VARCHAR(100) DEFAULT 'Employee' NOT NULL"),
+                    ('employee_id_code', "ALTER TABLE users ADD COLUMN employee_id_code VARCHAR(30)"),
+                    ('phone', "ALTER TABLE users ADD COLUMN phone VARCHAR(30)"),
+                ]
+                for col_name, sql in user_migrations:
+                    if col_name not in user_cols:
+                        db.session.execute(text(sql))
+                db.session.commit()
 
+            # 2. Migrate `tasks` table
+            if 'tasks' in table_names:
+                task_cols = {c['name'] for c in inspector.get_columns('tasks')}
+                task_migrations = [
+                    ('creator_id', "ALTER TABLE tasks ADD COLUMN creator_id INTEGER"),
+                    ('assignee_id', "ALTER TABLE tasks ADD COLUMN assignee_id INTEGER"),
+                    ('team_id', "ALTER TABLE tasks ADD COLUMN team_id INTEGER"),
+                    ('organization_id', "ALTER TABLE tasks ADD COLUMN organization_id INTEGER"),
+                    ('start_date', "ALTER TABLE tasks ADD COLUMN start_date DATE"),
+                    ('acceptance_criteria', "ALTER TABLE tasks ADD COLUMN acceptance_criteria TEXT"),
+                    ('progress', "ALTER TABLE tasks ADD COLUMN progress INTEGER DEFAULT 0 NOT NULL"),
+                    ('is_recurring', "ALTER TABLE tasks ADD COLUMN is_recurring BOOLEAN DEFAULT 0 NOT NULL"),
+                    ('recurrence_interval', "ALTER TABLE tasks ADD COLUMN recurrence_interval VARCHAR(20)"),
+                    ('next_recurrence_date', "ALTER TABLE tasks ADD COLUMN next_recurrence_date DATE"),
+                    ('updated_at', "ALTER TABLE tasks ADD COLUMN updated_at DATETIME"),
+                ]
+                for col_name, sql in task_migrations:
+                    if col_name not in task_cols:
+                        db.session.execute(text(sql))
+                db.session.commit()
+
+            # 3. Ensure Default Organization exists and backfill
+            from app.models import Organization
+            default_org = Organization.query.first()
+            if not default_org:
+                default_org = Organization(name='TaskNest Enterprise', slug='tasknest-enterprise')
+                db.session.add(default_org)
+                db.session.commit()
+
+            # Backfill any null organization_id or assignee_id
+            db.session.execute(text(f"UPDATE users SET organization_id = {default_org.id} WHERE organization_id IS NULL"))
+            db.session.execute(text(f"UPDATE tasks SET organization_id = {default_org.id} WHERE organization_id IS NULL"))
+            db.session.execute(text("UPDATE tasks SET assignee_id = user_id WHERE assignee_id IS NULL"))
+            db.session.execute(text("UPDATE tasks SET creator_id = user_id WHERE creator_id IS NULL"))
             db.session.commit()
+
         except Exception:
             db.session.rollback()
 
