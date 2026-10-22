@@ -1,0 +1,277 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Employee Directory — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">Employee Directory</h1>
+    <p class="page-subtitle">View and administer company staff, department assignments, team memberships, and reporting lines.</p>
+  </div>
+  {% if current_user.is_admin or current_user.role == 'hr' %}
+  <button class="btn btn-primary" id="open-invite-employee-btn">
+    <svg class="icon" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+    <span>Invite Employee</span>
+  </button>
+  {% endif %}
+</div>
+
+<!-- Quick Statistics Bar -->
+<div class="stats-grid" style="margin-bottom: var(--space-6);">
+  <div class="stat-card">
+    <div class="stat-card-title">Total Employees</div>
+    <div class="stat-card-value" id="stat-total-employees">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-title">Active Accounts</div>
+    <div class="stat-card-value text-success" id="stat-active-employees">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-title">Departments</div>
+    <div class="stat-card-value" id="stat-departments-count">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-title">Teams</div>
+    <div class="stat-card-value" id="stat-teams-count">0</div>
+  </div>
+</div>
+
+<!-- Filter and Search Bar -->
+<div class="filter-bar" style="margin-bottom: var(--space-6);">
+  <!-- Search -->
+  <div class="input-with-icon" style="flex: 1.5; min-width: 220px;">
+    <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    <input type="search" id="employee-search" class="form-control" placeholder="Search by name, title, or email..." style="margin-bottom: 0;">
+  </div>
+
+  <!-- Department Filter -->
+  <div class="filter-group">
+    <select id="filter-department" class="filter-select" aria-label="Filter by Department">
+      <option value="">All Departments</option>
+    </select>
+  </div>
+
+  <!-- Team Filter -->
+  <div class="filter-group">
+    <select id="filter-team" class="filter-select" aria-label="Filter by Team">
+      <option value="">All Teams</option>
+    </select>
+  </div>
+
+  <!-- Role Filter -->
+  <div class="filter-group">
+    <select id="filter-role" class="filter-select" aria-label="Filter by Role">
+      <option value="">All Roles</option>
+      <option value="super_admin">Super Admin</option>
+      <option value="admin">Admin</option>
+      <option value="hr">HR</option>
+      <option value="team_lead">Team Lead</option>
+      <option value="employee">Employee</option>
+    </select>
+  </div>
+
+  <!-- Account Status Filter -->
+  <div class="filter-group">
+    <select id="filter-status" class="filter-select" aria-label="Filter by Status">
+      <option value="all">All Statuses</option>
+      <option value="active" selected>Active Only</option>
+      <option value="inactive">Deactivated Only</option>
+    </select>
+  </div>
+</div>
+
+<!-- Employee Cards Grid -->
+<div class="employee-grid" id="employee-list-container">
+  <!-- Populated dynamically via static/js/employees.js -->
+</div>
+
+<!-- ── Invite Employee Modal ──────────────────────────────────────────────── -->
+<div class="modal-backdrop" id="invite-employee-modal" style="display: none;">
+  <div class="modal" style="max-width: 560px;">
+    <div class="modal-header">
+      <h2 class="modal-title">Invite New Employee</h2>
+      <button class="modal-close-btn" id="close-invite-modal-btn" aria-label="Close modal">&times;</button>
+    </div>
+    <form id="invite-employee-form" novalidate>
+      <div class="form-row" style="display: flex; gap: var(--space-4);">
+        <div class="form-group" style="flex: 1;">
+          <label class="form-label" for="invite-full-name">Full Name <span class="required">*</span></label>
+          <input type="text" id="invite-full-name" class="form-control" placeholder="e.g. Jane Doe" required>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label class="form-label" for="invite-email">Email Address <span class="required">*</span></label>
+          <input type="email" id="invite-email" class="form-control" placeholder="jane@company.com" required>
+        </div>
+      </div>
+
+      <div class="form-row" style="display: flex; gap: var(--space-4);">
+        <div class="form-group" style="flex: 1;">
+          <label class="form-label" for="invite-role">System Role</label>
+          <select id="invite-role" class="form-control">
+            <option value="employee" selected>Employee</option>
+            <option value="team_lead">Team Lead</option>
+            {% if current_user.is_admin %}
+            <option value="hr">HR Manager</option>
+            <option value="admin">Administrator</option>
+            {% endif %}
+          </select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label class="form-label" for="invite-job-title">Job Title</label>
+          <input type="text" id="invite-job-title" class="form-control" placeholder="e.g. Senior Software Engineer">
+        </div>
+      </div>
+
+      <div class="form-row" style="display: flex; gap: var(--space-4);">
+        <div class="form-group" style="flex: 1;">
+          <label class="form-label" for="invite-department">Department</label>
+          <select id="invite-department" class="form-control">
+            <option value="">No Department</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label class="form-label" for="invite-reports-to">Reports To (Manager)</label>
+          <select id="invite-reports-to" class="form-control">
+            <option value="">No Manager Assigned</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Assign Teams</label>
+        <div id="invite-teams-checkboxes" class="teams-checkbox-grid">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="invite-password">Initial Password (Optional)</label>
+        <input type="text" id="invite-password" class="form-control" placeholder="Leave blank to generate a secure activation token">
+        <span class="form-hint">If left empty, a secure activation temporary password will be automatically generated.</span>
+      </div>
+
+      <div class="modal-footer" style="padding-top: var(--space-4); border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: var(--space-3);">
+        <button type="button" class="btn btn-secondary" id="cancel-invite-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-invite-btn">Create & Activate Account</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Activation Success Modal ───────────────────────────────────────────── -->
+<div class="modal-backdrop" id="activation-success-modal" style="display: none;">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-header">
+      <h2 class="modal-title text-success">Employee Account Created</h2>
+      <button class="modal-close-btn" id="close-success-modal-btn" aria-label="Close modal">&times;</button>
+    </div>
+    <div style="padding: var(--space-2) 0;">
+      <p>The employee profile has been created and activated. Please share these initial sign-in credentials securely:</p>
+      <div class="card" style="background: var(--color-surface-raised); padding: var(--space-4); margin: var(--space-4) 0; font-family: monospace;">
+        <div><strong>Email:</strong> <span id="success-email"></span></div>
+        <div style="margin-top: var(--space-2);"><strong>Temporary Password:</strong> <span id="success-password" style="color: var(--color-primary); font-weight: bold;"></span></div>
+      </div>
+      <p class="text-muted" style="font-size: var(--font-size-sm);">The employee can immediately log in and change their password in Account Settings.</p>
+    </div>
+    <div class="modal-footer" style="text-align: right;">
+      <button type="button" class="btn btn-primary" id="ack-success-btn">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Employee Detail / Edit Modal ───────────────────────────────────────── -->
+<div class="modal-backdrop" id="employee-detail-modal" style="display: none;">
+  <div class="modal" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2 class="modal-title" id="detail-employee-name">Employee Profile</h2>
+      <button class="modal-close-btn" id="close-detail-modal-btn" aria-label="Close modal">&times;</button>
+    </div>
+    <div class="detail-modal-content">
+      <div class="employee-header-card" style="display: flex; gap: var(--space-4); align-items: center; margin-bottom: var(--space-4);">
+        <div class="user-avatar-badge" id="detail-avatar" style="width: 56px; height: 56px; font-size: 24px;"></div>
+        <div>
+          <h3 id="detail-full-name" style="margin: 0; font-size: var(--font-size-lg);"></h3>
+          <div id="detail-email" class="text-muted" style="font-size: var(--font-size-sm);"></div>
+          <div style="margin-top: var(--space-1); display: flex; gap: var(--space-2);">
+            <span id="detail-role-badge" class="badge"></span>
+            <span id="detail-status-badge" class="badge"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Form (Available for Admin/HR) -->
+      <form id="edit-employee-form" novalidate>
+        <input type="hidden" id="edit-employee-id">
+        <div class="form-row" style="display: flex; gap: var(--space-4);">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="edit-job-title">Job Title</label>
+            <input type="text" id="edit-job-title" class="form-control">
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="edit-department">Department</label>
+            <select id="edit-department" class="form-control">
+              <option value="">No Department</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row" style="display: flex; gap: var(--space-4);">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="edit-reports-to">Reports To</label>
+            <select id="edit-reports-to" class="form-control">
+              <option value="">No Manager Assigned</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="edit-role">Role</label>
+            <select id="edit-role" class="form-control">
+              <option value="employee">Employee</option>
+              <option value="team_lead">Team Lead</option>
+              {% if current_user.is_admin %}
+              <option value="hr">HR Manager</option>
+              <option value="admin">Administrator</option>
+              {% endif %}
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Team Memberships</label>
+          <div id="edit-teams-checkboxes" class="teams-checkbox-grid">
+            <!-- Dynamic checkboxes -->
+          </div>
+        </div>
+
+        <!-- Task metrics preview -->
+        <div class="card" style="background: var(--color-surface-raised); padding: var(--space-3); margin-bottom: var(--space-4);">
+          <div style="font-weight: 600; margin-bottom: var(--space-2);">Task Workload</div>
+          <div style="display: flex; gap: var(--space-4); font-size: var(--font-size-sm);">
+            <div>Total Tasks: <strong id="detail-tasks-total">0</strong></div>
+            <div>Completed: <strong id="detail-tasks-completed" class="text-success">0</strong></div>
+            <div>Pending: <strong id="detail-tasks-pending" class="text-warning">0</strong></div>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border); padding-top: var(--space-4);">
+          {% if current_user.is_admin or current_user.role == 'hr' %}
+          <button type="button" class="btn btn-secondary btn-sm" id="toggle-account-status-btn">
+            Deactivate Account
+          </button>
+          <div>
+            <button type="button" class="btn btn-secondary" id="cancel-detail-btn">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+          {% else %}
+          <div></div>
+          <button type="button" class="btn btn-secondary" id="cancel-detail-btn">Close</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/employees.js') }}"></script>
+{% endblock %}
+{% endblock %}
