@@ -1326,3 +1326,177 @@ textarea.form-control {
     display: none;
   }
 }
+
+/* ==========================================================================
+   Settings Page — Employee Access Module
+   ========================================================================== */
+
+/* Two-column grid for profile + security cards */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Avatar row inside profile card */
+.settings-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.settings-avatar {
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-primary);
+  color: #fff;
+  font-size: 1.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+/* Security info callout */
+.settings-security-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background-color: var(--color-info-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.settings-security-info .icon {
+  flex-shrink: 0;
+  color: var(--color-primary);
+  margin-top: 2px;
+}
+
+/* Danger zone strip */
+.settings-danger-zone {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+/* Inline password show/hide wrapper */
+.input-password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-password-wrapper .form-control {
+  padding-right: 2.75rem;
+  margin-bottom: 0;
+}
+
+.input-password-wrapper .password-toggle {
+  position: absolute;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-muted);
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.input-password-wrapper .password-toggle:hover {
+  color: var(--color-primary);
+}
+
+/* Password strength bar */
+.password-strength-bar {
+  height: 4px;
+  background-color: var(--color-border);
+  border-radius: var(--radius-pill);
+  margin-top: 0.5rem;
+  overflow: hidden;
+}
+
+.password-strength-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: var(--radius-pill);
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.password-strength-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  margin-top: 0.25rem;
+  min-height: 1rem;
+}
+
+/* Form hint text */
+.form-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-muted);
+  margin-top: 0.375rem;
+}
+
+/* Alert variants */
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.alert-error {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+
+.alert-success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+/* Role badge variants (extends existing .badge system) */
+.badge-super_admin {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.badge-admin {
+  background-color: var(--color-accent);
+  color: #fff;
+}
+
+.badge-team_lead {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+.badge-employee {
+  background-color: var(--color-border-subtle);
+  color: var(--color-text-light);
+  border: 1px solid var(--color-border);
+}
+

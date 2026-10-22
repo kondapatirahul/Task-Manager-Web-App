@@ -36,10 +36,20 @@
         <span class="text-muted">Account Status</span>
         <span class="badge badge-completed">Active</span>
       </div>
+      <div style="display: flex; justify-content: space-between; padding: 0.6rem 0; border-bottom: 1px solid var(--color-border-subtle);">
+        <span class="text-muted">Role</span>
+        <span class="badge badge-{{ current_user.role }}">{{ current_user.role | replace('_', ' ') | title }}</span>
+      </div>
       <div style="display: flex; justify-content: space-between; padding: 0.6rem 0;">
         <span class="text-muted">Member Since</span>
         <span style="font-weight: 600;">{{ current_user.created_at.strftime('%B %d, %Y') if current_user.created_at else 'Recent' }}</span>
       </div>
+    </div>
+    <div style="margin-top: 1.5rem;">
+      <a href="{{ url_for('web.settings') }}" class="btn btn-secondary" style="width: 100%;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        <span>Edit Profile & Password</span>
+      </a>
     </div>
   </div>
 
