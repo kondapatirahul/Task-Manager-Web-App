@@ -502,6 +502,9 @@ const TaskManager = {
     const categoryField = document.getElementById('task-category-select');
     const recurringField = document.getElementById('task-recurring-select');
 
+    const refFilesField = document.getElementById('task-modal-ref-files');
+    if (refFilesField) refFilesField.value = '';
+
     if (task) {
       modalTitle.textContent = 'Edit Task';
       taskIdField.value = task.id;
@@ -584,11 +587,32 @@ const TaskManager = {
     submitBtn.disabled = true;
 
     try {
+      const refFilesInput = document.getElementById('task-modal-ref-files');
       if (taskId) {
         await api('PUT', `/tasks/${taskId}`, payload);
+        if (refFilesInput && refFilesInput.files && refFilesInput.files.length > 0) {
+          for (let i = 0; i < refFilesInput.files.length; i++) {
+            const fd = new FormData();
+            fd.append('file', refFilesInput.files[i]);
+            await api('POST', `/tasks/${taskId}/attachments`, fd);
+          }
+        }
         showToast('Task updated successfully!', 'success');
       } else {
-        await api('POST', '/tasks', payload);
+        if (refFilesInput && refFilesInput.files && refFilesInput.files.length > 0) {
+          const formData = new FormData();
+          Object.keys(payload).forEach(key => {
+            if (payload[key] !== null && payload[key] !== undefined) {
+              formData.append(key, payload[key]);
+            }
+          });
+          for (let i = 0; i < refFilesInput.files.length; i++) {
+            formData.append('files', refFilesInput.files[i]);
+          }
+          await api('POST', '/tasks', formData);
+        } else {
+          await api('POST', '/tasks', payload);
+        }
         showToast('Task created successfully!', 'success');
       }
       this.closeModals();

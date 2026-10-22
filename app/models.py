@@ -306,6 +306,121 @@ class TaskStatusHistory(db.Model):
         }
 
 
+class TaskComment(db.Model):
+    __tablename__ = 'task_comments'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    task_id    = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
+    user_id    = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    content    = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, nullable=True)
+
+    user        = db.relationship('User', foreign_keys=[user_id])
+    attachments = db.relationship('TaskAttachment', backref='comment', lazy='dynamic', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        from app.file_utils import extract_mentions
+        raw_mentions = extract_mentions(self.content)
+        mention_users = []
+        if raw_mentions:
+            matched = User.query.filter(User.username.in_(raw_mentions)).all()
+            mention_users = [{'id': u.id, 'username': u.username, 'full_name': u.full_name or u.username} for u in matched]
+
+        return {
+            'id':          self.id,
+            'task_id':     self.task_id,
+            'user_id':     self.user_id,
+            'author_name': (self.user.full_name or self.user.username) if self.user else 'Former Member',
+            'author_role': self.user.role if self.user else None,
+            'content':     self.content,
+            'mentions':    mention_users,
+            'attachments': [a.to_dict() for a in self.attachments.all()] if hasattr(self, 'attachments') else [],
+            'created_at':  self.created_at.isoformat() if self.created_at else None,
+            'updated_at':  self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class TaskSubmission(db.Model):
+    __tablename__ = 'task_submissions'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    task_id         = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
+    submitted_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    summary         = db.Column(db.Text, nullable=False)
+    status          = db.Column(db.String(30), default='pending_review', nullable=False)  # 'pending_review', 'approved', 'changes_requested'
+    reviewed_by_id  = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    reviewed_at     = db.Column(db.DateTime, nullable=True)
+    review_feedback = db.Column(db.Text, nullable=True)
+    created_at      = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    submitted_by = db.relationship('User', foreign_keys=[submitted_by_id])
+    reviewed_by  = db.relationship('User', foreign_keys=[reviewed_by_id])
+    attachments  = db.relationship('TaskAttachment', backref='submission', lazy='dynamic', cascade='all, delete-orphan')
+
+    def to_dict(self):
+        return {
+            'id':                self.id,
+            'task_id':           self.task_id,
+            'submitted_by_id':   self.submitted_by_id,
+            'submitted_by_name': (self.submitted_by.full_name or self.submitted_by.username) if self.submitted_by else 'Unknown',
+            'submitted_by_role': self.submitted_by.role if self.submitted_by else None,
+            'summary':           self.summary,
+            'status':            self.status,
+            'reviewed_by_id':    self.reviewed_by_id,
+            'reviewed_by_name':  (self.reviewed_by.full_name or self.reviewed_by.username) if self.reviewed_by else None,
+            'reviewed_by_role':  self.reviewed_by.role if self.reviewed_by else None,
+            'reviewed_at':       self.reviewed_at.isoformat() if self.reviewed_at else None,
+            'review_feedback':   self.review_feedback or '',
+            'attachments':       [a.to_dict() for a in self.attachments.all()] if hasattr(self, 'attachments') else [],
+            'created_at':        self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class TaskAttachment(db.Model):
+    __tablename__ = 'task_attachments'
+
+    id                = db.Column(db.Integer, primary_key=True)
+    task_id           = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
+    uploader_id       = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    comment_id        = db.Column(db.Integer, db.ForeignKey('task_comments.id', ondelete='CASCADE'), nullable=True)
+    submission_id     = db.Column(db.Integer, db.ForeignKey('task_submissions.id', ondelete='CASCADE'), nullable=True)
+
+    attachment_type   = db.Column(db.String(20), default='comment', nullable=False)  # 'reference', 'comment', 'submission'
+    original_filename = db.Column(db.String(255), nullable=False)
+    storage_name      = db.Column(db.String(255), unique=True, nullable=False)
+    file_size         = db.Column(db.Integer, nullable=False)
+    file_type         = db.Column(db.String(100), nullable=False)
+    file_extension    = db.Column(db.String(20), nullable=False)
+    created_at        = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    uploader = db.relationship('User', foreign_keys=[uploader_id])
+
+    def to_dict(self):
+        from app.file_utils import format_file_size
+        ext = (self.file_extension or '').lower()
+        return {
+            'id':                self.id,
+            'task_id':           self.task_id,
+            'uploader_id':       self.uploader_id,
+            'uploader_name':     (self.uploader.full_name or self.uploader.username) if self.uploader else 'Unknown',
+            'uploader_role':     self.uploader.role if self.uploader else None,
+            'comment_id':        self.comment_id,
+            'submission_id':     self.submission_id,
+            'attachment_type':   self.attachment_type,
+            'original_filename': self.original_filename,
+            'file_size':         self.file_size,
+            'file_size_human':   format_file_size(self.file_size),
+            'file_type':         self.file_type,
+            'file_extension':    ext,
+            'is_image':          ext in ('png', 'jpg', 'jpeg'),
+            'is_previewable':    ext in ('png', 'jpg', 'jpeg', 'pdf', 'txt'),
+            'download_url':      f"/api/tasks/{self.task_id}/attachments/{self.id}/download",
+            'preview_url':       f"/api/tasks/{self.task_id}/attachments/{self.id}/preview",
+            'created_at':        self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Task(db.Model):
     __tablename__ = 'tasks'
 
@@ -342,6 +457,10 @@ class Task(db.Model):
     assigned_to = db.relationship('User', foreign_keys=[assigned_to_id],
                                   backref=db.backref('assigned_tasks', lazy='dynamic'))
 
+    comments    = db.relationship('TaskComment', backref='task', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskComment.created_at.asc()')
+    attachments = db.relationship('TaskAttachment', backref='task', lazy='dynamic', cascade='all, delete-orphan')
+    submissions = db.relationship('TaskSubmission', backref='task', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskSubmission.created_at.desc()')
+
     @property
     def is_overdue(self):
         if self.status != 'completed' and self.due_date:
@@ -352,7 +471,7 @@ class Task(db.Model):
     def status_label(self):
         return STATUS_LABELS.get(self.status, self.status.replace('_', ' ').title())
 
-    def to_dict(self, include_history=False):
+    def to_dict(self, include_history=False, include_collaboration=False):
         data = {
             'id':                  self.id,
             'title':               self.title,
@@ -384,6 +503,25 @@ class Task(db.Model):
             'assigned_to_email':   self.assigned_to.email if self.assigned_to else None,
             'assigned_to_role':    self.assigned_to.role if self.assigned_to else None,
         }
+
+        # Collaboration counts & reference attachments
+        if hasattr(self, 'attachments'):
+            ref_attachments = self.attachments.filter_by(attachment_type='reference').all()
+            data['reference_attachments'] = [a.to_dict() for a in ref_attachments]
+            data['attachments_count'] = self.attachments.count()
+        else:
+            data['reference_attachments'] = []
+            data['attachments_count'] = 0
+
+        data['comments_count'] = self.comments.count() if hasattr(self, 'comments') else 0
+        data['submissions_count'] = self.submissions.count() if hasattr(self, 'submissions') else 0
+
         if include_history and hasattr(self, 'status_history'):
             data['status_history'] = [h.to_dict() for h in self.status_history.all()]
+
+        if include_collaboration:
+            data['comments'] = [c.to_dict() for c in self.comments.all()] if hasattr(self, 'comments') else []
+            data['submissions'] = [s.to_dict() for s in self.submissions.all()] if hasattr(self, 'submissions') else []
+            data['attachments'] = [a.to_dict() for a in self.attachments.all()] if hasattr(self, 'attachments') else []
+
         return data

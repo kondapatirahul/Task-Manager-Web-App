@@ -64,16 +64,76 @@
           </div>
         </div>
 
-        <!-- Review & Submission Notes Panel (if active) -->
-        <div class="card" id="detail-review-card" style="display: none;">
-          <h3 class="card-section-title">Review & Submission Notes</h3>
-          <div id="detail-submission-notes-box" style="margin-bottom: 1rem; display: none;">
-            <div class="notes-label">Employee Submission Notes:</div>
-            <div id="detail-submission-notes" class="notes-content"></div>
+        <!-- Task Reference Attachments -->
+        <div class="card" id="detail-references-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">
+              <span>Reference Attachments</span>
+              <span id="detail-references-count" class="badge badge-neutral" style="margin-left: 0.5rem; font-size: 0.75rem;">0</span>
+            </h3>
+            <button id="btn-open-upload-ref-modal" class="btn btn-secondary btn-sm" style="display: none;">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <span>Add Reference Files</span>
+            </button>
           </div>
-          <div id="detail-review-notes-box" style="display: none;">
-            <div class="notes-label">Lead Review Notes:</div>
-            <div id="detail-review-notes" class="notes-content"></div>
+          <div id="detail-references-list" class="attachments-grid" style="margin-top: 1rem;">
+            <p class="text-muted" style="margin: 0.5rem 0;">No reference attachments provided yet.</p>
+          </div>
+        </div>
+
+        <!-- Task Discussion & Communication Thread -->
+        <div class="card" id="detail-discussion-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">
+              <span>Discussion & Questions</span>
+              <span id="detail-comments-count" class="badge badge-neutral" style="margin-left: 0.5rem; font-size: 0.75rem;">0</span>
+            </h3>
+          </div>
+
+          <!-- Discussion Stream -->
+          <div class="discussion-thread" id="detail-discussion-thread">
+            <div class="loading-state-sm">
+              <div class="loading-spinner"></div>
+              <span>Loading messages...</span>
+            </div>
+          </div>
+
+          <!-- Comment Composer -->
+          <form id="comment-composer-form" class="composer-container">
+            <div class="composer-body">
+              <textarea id="comment-content-input" class="form-control composer-textarea" rows="3" placeholder="Ask a question, share an update, or @mention a team member..."></textarea>
+              
+              <!-- Selected Files Tray -->
+              <div id="composer-files-tray" class="selected-files-tray" style="display: none;"></div>
+
+              <div class="composer-footer">
+                <div class="composer-tools">
+                  <input type="file" id="comment-files-input" multiple style="display: none;" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.txt">
+                  <button type="button" id="btn-trigger-comment-files" class="btn btn-ghost btn-sm" title="Attach approved files (PDF, PNG, JPEG, DOCX, XLSX, TXT)">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                    <span>Attach Files</span>
+                  </button>
+                  <span class="file-hint text-muted">PDF, PNG, JPG, DOCX, XLSX, TXT (up to 10MB)</span>
+                </div>
+                <button type="submit" id="btn-send-comment" class="btn btn-primary btn-sm">
+                  <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  <span>Send Message</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Work Submissions & Reviews History -->
+        <div class="card" id="detail-submissions-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">
+              <span>Submissions & Review History</span>
+              <span id="detail-submissions-count" class="badge badge-neutral" style="margin-left: 0.5rem; font-size: 0.75rem;">0</span>
+            </h3>
+          </div>
+          <div id="detail-submissions-list" class="submissions-history-container" style="margin-top: 1rem;">
+            <p class="text-muted" style="margin: 0.5rem 0;">No work submissions recorded yet.</p>
           </div>
         </div>
 
@@ -142,9 +202,9 @@
   </div>
 </div>
 
-<!-- Submit for Review Modal -->
+<!-- Submit for Review Modal (with Deliverables) -->
 <div class="modal-overlay" id="submit-review-modal" role="dialog" aria-modal="true" aria-labelledby="submit-modal-title">
-  <div class="modal-card">
+  <div class="modal-card modal-card-lg">
     <div class="modal-header">
       <h3 id="submit-modal-title">Submit Work for Review</h3>
       <button type="button" class="modal-close-btn close-submit-modal" aria-label="Close modal">
@@ -154,13 +214,57 @@
     <form id="submit-review-form">
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" for="submit-notes-input">Submission Notes / Summary of Work</label>
-          <textarea id="submit-notes-input" class="form-control" rows="4" placeholder="Detail the work completed, branch or PR link, test coverage, and notes for your Team Lead..."></textarea>
+          <label class="form-label" for="submit-notes-input">Written Summary / Notes for Reviewer <span class="required">*</span></label>
+          <textarea id="submit-notes-input" class="form-control" rows="4" placeholder="Detail the work completed, pull request link, testing verification, and notes for your Team Lead..." required></textarea>
+        </div>
+
+        <div class="form-group" style="margin-top: 1.25rem;">
+          <label class="form-label">Deliverable Files (Optional)</label>
+          <div class="file-drop-area" id="submit-drop-area">
+            <svg class="icon icon-lg" viewBox="0 0 24 24" style="stroke: var(--forest-primary); margin-bottom: 0.5rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <p style="margin: 0; font-weight: 500;">Click to attach deliverable files</p>
+            <span class="text-muted" style="font-size: 0.8125rem;">Supports PDF, PNG, JPEG, DOCX, XLSX, TXT (up to 10MB each)</span>
+            <input type="file" id="submit-files-input" multiple style="display: none;" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.txt">
+          </div>
+          <div id="submit-selected-files" class="selected-files-tray" style="display: none; margin-top: 0.75rem;"></div>
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary close-submit-modal">Cancel</button>
-        <button type="submit" class="btn btn-primary">Submit for Review</button>
+        <button type="submit" id="btn-submit-work-confirm" class="btn btn-primary">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          <span>Submit for Review</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Upload Reference Files Modal -->
+<div class="modal-overlay" id="upload-reference-modal" role="dialog" aria-modal="true" aria-labelledby="upload-ref-modal-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="upload-ref-modal-title">Upload Reference Files</h3>
+      <button type="button" class="modal-close-btn close-upload-ref-modal" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="upload-reference-form">
+      <div class="modal-body">
+        <p class="text-muted" style="font-size: 0.875rem; margin-top: 0; margin-bottom: 1rem;">
+          Attach project specifications, design guidelines, or reference documents for task assignees.
+        </p>
+        <div class="file-drop-area" id="ref-drop-area">
+          <svg class="icon icon-lg" viewBox="0 0 24 24" style="stroke: var(--forest-primary); margin-bottom: 0.5rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <p style="margin: 0; font-weight: 500;">Select reference files to upload</p>
+          <span class="text-muted" style="font-size: 0.8125rem;">PDF, PNG, JPEG, DOCX, XLSX, TXT (up to 10MB each)</span>
+          <input type="file" id="ref-files-input" multiple style="display: none;" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.txt">
+        </div>
+        <div id="ref-selected-files" class="selected-files-tray" style="display: none; margin-top: 0.75rem;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary close-upload-ref-modal">Cancel</button>
+        <button type="submit" id="btn-upload-ref-confirm" class="btn btn-primary">Upload Files</button>
       </div>
     </form>
   </div>
@@ -188,6 +292,33 @@
         <button type="submit" class="btn" id="review-submit-btn">Confirm Review</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Safe File Preview Modal -->
+<div class="modal-overlay" id="file-preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-file-name">
+  <div class="modal-card modal-card-xl preview-modal-card">
+    <div class="modal-header">
+      <div class="preview-title-wrap">
+        <div class="file-type-icon-badge" id="preview-file-icon">DOC</div>
+        <div>
+          <h3 id="preview-file-name" style="margin: 0; font-size: 1.125rem;">Document Preview</h3>
+          <div id="preview-file-meta" class="text-muted" style="font-size: 0.8125rem;">—</div>
+        </div>
+      </div>
+      <div class="preview-header-actions">
+        <a id="preview-download-btn" href="#" class="btn btn-secondary btn-sm" download>
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Download</span>
+        </a>
+        <button type="button" class="modal-close-btn close-preview-modal" aria-label="Close preview">
+          <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body preview-modal-body" id="file-preview-content">
+      <!-- Viewer rendered dynamically based on file type -->
+    </div>
   </div>
 </div>
 {% endblock %}
