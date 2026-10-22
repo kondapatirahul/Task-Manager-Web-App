@@ -1,0 +1,198 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Task Detail — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="task-detail-page" data-task-id="{{ task_id }}">
+  <!-- Breadcrumb & Top Bar -->
+  <div class="detail-nav-bar">
+    <a href="{{ url_for('web.tasks') }}" class="btn btn-ghost btn-sm">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+      <span>Back to Tasks</span>
+    </a>
+    <div class="detail-actions" id="task-detail-actions">
+      <!-- Actions rendered dynamically based on role and permissions -->
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div id="detail-loading" class="empty-state">
+    <div class="loading-spinner"></div>
+    <p>Loading task details...</p>
+  </div>
+
+  <!-- Error State -->
+  <div id="detail-error" class="card" style="display: none; text-align: center; padding: 2.5rem;">
+    <svg class="icon icon-lg text-danger" viewBox="0 0 24 24" style="margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    <h3 id="detail-error-msg">Task not found or access denied.</h3>
+    <a href="{{ url_for('web.tasks') }}" class="btn btn-primary" style="margin-top: 1rem;">Return to Task List</a>
+  </div>
+
+  <!-- Main Detail Content -->
+  <div id="detail-content" style="display: none;">
+    <!-- Header Card -->
+    <div class="card detail-header-card">
+      <div class="detail-badges">
+        <span id="detail-status-badge" class="badge"></span>
+        <span id="detail-priority-badge" class="badge"></span>
+        <span id="detail-category-badge" class="badge badge-neutral" style="display: none;"></span>
+        <span id="detail-overdue-badge" class="badge badge-danger" style="display: none;">Overdue</span>
+      </div>
+      <h1 class="detail-title" id="detail-title"></h1>
+      <div class="detail-meta-line" id="detail-meta-line">
+        <!-- Creator and timestamp info -->
+      </div>
+    </div>
+
+    <!-- Two Column Grid -->
+    <div class="detail-grid">
+      <!-- Main Column -->
+      <div class="detail-main-col">
+        <!-- Description -->
+        <div class="card">
+          <h3 class="card-section-title">Description</h3>
+          <div id="detail-description" class="detail-body-text">
+            <span class="text-muted">No description provided.</span>
+          </div>
+        </div>
+
+        <!-- Acceptance Criteria -->
+        <div class="card">
+          <h3 class="card-section-title">Acceptance Criteria</h3>
+          <div id="detail-criteria" class="detail-body-text">
+            <span class="text-muted">No acceptance criteria specified.</span>
+          </div>
+        </div>
+
+        <!-- Review & Submission Notes Panel (if active) -->
+        <div class="card" id="detail-review-card" style="display: none;">
+          <h3 class="card-section-title">Review & Submission Notes</h3>
+          <div id="detail-submission-notes-box" style="margin-bottom: 1rem; display: none;">
+            <div class="notes-label">Employee Submission Notes:</div>
+            <div id="detail-submission-notes" class="notes-content"></div>
+          </div>
+          <div id="detail-review-notes-box" style="display: none;">
+            <div class="notes-label">Lead Review Notes:</div>
+            <div id="detail-review-notes" class="notes-content"></div>
+          </div>
+        </div>
+
+        <!-- Status History & Audit Trail -->
+        <div class="card">
+          <h3 class="card-section-title">Status History & Audit Trail</h3>
+          <div class="timeline" id="detail-timeline">
+            <!-- Timeline items rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar Column -->
+      <div class="detail-side-col">
+        <!-- Assignment & People -->
+        <div class="card">
+          <h3 class="card-section-title">People</h3>
+          <div class="person-block">
+            <div class="person-label">Assignee</div>
+            <div class="person-info" id="detail-assignee-info">
+              <div class="user-avatar-sm" id="detail-assignee-avatar">?</div>
+              <div>
+                <div class="person-name" id="detail-assignee-name">Unassigned</div>
+                <div class="person-sub text-muted" id="detail-assignee-role">Open task</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="person-block" style="margin-top: 1rem;">
+            <div class="person-label">Created By</div>
+            <div class="person-info" id="detail-creator-info">
+              <div class="user-avatar-sm" id="detail-creator-avatar">?</div>
+              <div>
+                <div class="person-name" id="detail-creator-name">—</div>
+                <div class="person-sub text-muted" id="detail-creator-role">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Team & Dates -->
+        <div class="card">
+          <h3 class="card-section-title">Task Details</h3>
+          <dl class="detail-dl">
+            <dt>Team / Project</dt>
+            <dd id="detail-team-name">Personal Task</dd>
+
+            <dt>Start Date</dt>
+            <dd id="detail-start-date">—</dd>
+
+            <dt>Due Date</dt>
+            <dd id="detail-due-date">—</dd>
+
+            <dt>Completed At</dt>
+            <dd id="detail-completed-at">—</dd>
+
+            <dt>Recurrence</dt>
+            <dd id="detail-recurrence">None</dd>
+
+            <dt>Created</dt>
+            <dd id="detail-created-at">—</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Submit for Review Modal -->
+<div class="modal-overlay" id="submit-review-modal" role="dialog" aria-modal="true" aria-labelledby="submit-modal-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="submit-modal-title">Submit Work for Review</h3>
+      <button type="button" class="modal-close-btn close-submit-modal" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="submit-review-form">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="submit-notes-input">Submission Notes / Summary of Work</label>
+          <textarea id="submit-notes-input" class="form-control" rows="4" placeholder="Detail the work completed, branch or PR link, test coverage, and notes for your Team Lead..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary close-submit-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Submit for Review</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Review Action Modal (Approve or Request Changes) -->
+<div class="modal-overlay" id="review-action-modal" role="dialog" aria-modal="true" aria-labelledby="review-action-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="review-action-title">Review Submitted Work</h3>
+      <button type="button" class="modal-close-btn close-review-modal" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="review-action-form">
+      <input type="hidden" id="review-action-type" value="approve">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" id="review-notes-label" for="review-notes-input">Review Comments</label>
+          <textarea id="review-notes-input" class="form-control" rows="4" placeholder="Provide feedback or sign-off notes..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary close-review-modal">Cancel</button>
+        <button type="submit" class="btn" id="review-submit-btn">Confirm Review</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/task_detail.js') }}"></script>
+{% endblock %}
+

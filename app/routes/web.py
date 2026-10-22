@@ -75,6 +75,12 @@ def tasks():
     return render_template('tasks.html', active_page='tasks')
 
 
+@web_bp.route('/tasks/<int:task_id>')
+@login_required
+def task_detail(task_id):
+    return render_template('task_detail.html', active_page='tasks', task_id=task_id)
+
+
 @web_bp.route('/categories')
 @login_required
 def categories():

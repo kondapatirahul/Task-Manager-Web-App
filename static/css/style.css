@@ -1553,3 +1553,206 @@ textarea.form-control {
   border-bottom-color: var(--color-primary);
 }
 
+
+
+/* ── Task Assignment & Detail Page Styles ── */
+.modal-card-lg {
+  max-width: 680px;
+}
+
+.detail-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.detail-header-card {
+  margin-bottom: 1.5rem;
+}
+
+.detail-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.detail-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text, #173F35);
+  margin-bottom: 0.5rem;
+}
+
+.detail-meta-line {
+  font-size: 0.875rem;
+  color: var(--color-text-muted, #5A6D66);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+}
+
+@media (max-width: 900px) {
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--color-text, #173F35);
+}
+
+.detail-body-text {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--color-text, #2A3833);
+  white-space: pre-wrap;
+}
+
+.notes-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #5A6D66);
+  margin-bottom: 0.25rem;
+}
+
+.notes-content {
+  padding: 0.75rem;
+  background-color: var(--color-bg-subtle, #F5F7F6);
+  border-radius: var(--radius-sm, 6px);
+  border-left: 3px solid var(--color-primary, #173F35);
+  font-size: 0.875rem;
+}
+
+.detail-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  row-gap: 0.625rem;
+  column-gap: 1rem;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.detail-dl dt {
+  color: var(--color-text-muted, #5A6D66);
+  font-weight: 500;
+}
+
+.detail-dl dd {
+  margin: 0;
+  color: var(--color-text, #173F35);
+  font-weight: 600;
+  text-align: right;
+}
+
+.person-block {
+  padding: 0.5rem 0;
+}
+
+.person-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #5A6D66);
+  margin-bottom: 0.375rem;
+}
+
+.person-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.person-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text, #173F35);
+}
+
+.person-sub {
+  font-size: 0.8125rem;
+}
+
+/* Status Audit Timeline */
+.timeline {
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 6px;
+  width: 2px;
+  background-color: var(--color-border, #D5DDD8);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: -1.5rem;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--color-primary, #173F35);
+  border: 3px solid #FFF;
+  box-shadow: 0 0 0 1px var(--color-border, #D5DDD8);
+}
+
+.timeline-content {
+  background-color: var(--color-bg-subtle, #F5F7F6);
+  border-radius: var(--radius-sm, 6px);
+  padding: 0.75rem 1rem;
+}
+
+.timeline-header {
+  font-size: 0.8125rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.timeline-author {
+  font-weight: 600;
+  color: var(--color-text, #173F35);
+}
+
+.timeline-time {
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+
+.timeline-comment {
+  margin-top: 0.375rem;
+  font-size: 0.875rem;
+  color: var(--color-text, #2A3833);
+}

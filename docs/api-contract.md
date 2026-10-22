@@ -36,25 +36,42 @@ All API endpoints return JSON in a standardized envelope format:
 
 ---
 
-## 2. Tasks (`/api/tasks`)
+## 2. Tasks & Company Assignments (`/api/tasks`)
 
 | Method | Endpoint | Description | Query Parameters / Body | Success Response | Error Codes |
 |--------|----------|-------------|-------------------------|------------------|-------------|
-| `GET` | `/api/tasks` | List user tasks with optional filters | `q`, `status`, `priority`, `category_id`, `due_before`, `due_after`, `sort` | `200 { "ok": true, "data": [Task, ...] }` | `401` |
-| `POST` | `/api/tasks` | Create a new task | `{"title": "...", "description": "...", "priority": "...", "status": "...", "due_date": "YYYY-MM-DD", "category_id": 1}` | `201 { "ok": true, "data": Task, "message": "Task created successfully" }` | `400`, `401`, `404` |
-| `GET` | `/api/tasks/<id>` | Retrieve a single task by ID | — | `200 { "ok": true, "data": Task }` | `401`, `404` |
-| `PUT` | `/api/tasks/<id>` | Update an existing task | `{"title": "...", "description": "...", "priority": "...", "status": "...", "due_date": "YYYY-MM-DD", "category_id": 1}` | `200 { "ok": true, "data": Task, "message": "Task updated successfully" }` | `400`, `401`, `404` |
-| `DELETE` | `/api/tasks/<id>` | Delete a task | — | `200 { "ok": true, "message": "Task deleted successfully" }` | `401`, `404` |
-| `PATCH` | `/api/tasks/<id>/complete` | Toggle or set task completion | `{"status": "completed"}` *(optional body)* | `200 { "ok": true, "data": Task, "message": "Task status updated" }` | `400`, `401`, `404` |
+| `GET` | `/api/tasks` | List accessible tasks with multi-factor filters | `q`, `scope`, `status`, `priority`, `category_id`, `team_id`, `assigned_to_id`, `due_before`, `due_after`, `sort` | `200 { "ok": true, "data": [Task, ...] }` | `401` |
+| `POST` | `/api/tasks` | Create / assign a task | `{"title": "...", "description": "...", "priority": "...", "status": "...", "team_id": 1, "assigned_to_id": 2, "start_date": "YYYY-MM-DD", "due_date": "YYYY-MM-DD", "category_id": 1, "acceptance_criteria": "..."}` | `201 { "ok": true, "data": Task, "message": "Task created successfully" }` | `400`, `401`, `403`, `404` |
+| `GET` | `/api/tasks/<id>` | Retrieve task by ID with full status history | — | `200 { "ok": true, "data": Task }` | `401`, `404` |
+| `PUT` | `/api/tasks/<id>` | Update an existing task (enforces field authorization) | `{"title": "...", "priority": "...", "status": "...", ...}` | `200 { "ok": true, "data": Task, "message": "Task updated successfully" }` | `400`, `401`, `403`, `404` |
+| `DELETE` | `/api/tasks/<id>` | Delete a task (manager/creator only) | — | `200 { "ok": true, "message": "Task deleted successfully" }` | `401`, `403`, `404` |
+| `PATCH` | `/api/tasks/<id>/complete` | Toggle or set task completion | `{"status": "completed"}` *(optional body)* | `200 { "ok": true, "data": Task, "message": "Task status updated" }` | `400`, `401`, `403`, `404` |
+| `POST` | `/api/tasks/<id>/submit` | Submit work for review (assignee employee) | `{"notes": "Summary of work completed..."}` | `200 { "ok": true, "data": Task, "message": "Task submitted for review successfully" }` | `401`, `403`, `404` |
+| `POST` | `/api/tasks/<id>/review` | Lead review: approve or request changes | `{"action": "approve" | "request_changes", "notes": "Feedback / sign-off notes..."}` | `200 { "ok": true, "data": Task, "message": "Task approved and completed" }` | `400`, `401`, `403`, `404` |
+
+### Task Statuses:
+- `todo` / `pending`: Initial open status.
+- `in_progress`: Task actively being worked on.
+- `blocked`: Task blocked by external dependencies.
+- `in_review`: Employee has submitted work for Team Lead review.
+- `changes_requested`: Team Lead requested modifications after review.
+- `completed`: Approved and finished.
 
 ### Task Query Parameters:
-- `q`: Full-text substring search across `title` and `description`.
-- `status`: Allowed values: `pending`, `completed`.
-- `priority`: Allowed values: `low`, `medium`, `high`.
-- `category_id`: Integer ID of a category belonging to current user.
-- `due_before`: ISO Date string `YYYY-MM-DD`.
-- `due_after`: ISO Date string `YYYY-MM-DD`.
-- `sort`: Supported allowlist: `due_date_asc`, `due_date_desc`, `created_at_desc` (default), `created_at_asc`, `priority_desc`, `priority_asc`, `title_asc`.
+- `q`: Full-text substring search across `title`, `description`, and `acceptance_criteria`.
+- `scope`: `assigned_to_me`, `created_by_me`, `team`, or `all`.
+- `status`: Filter by status (`todo`, `in_progress`, `blocked`, `in_review`, `changes_requested`, `completed`, `pending`).
+- `priority`: `low`, `medium`, `high`.
+- `category_id`: Category identifier.
+- `team_id`: Team identifier.
+- `assigned_to_id`: Assignee user identifier (or `me`).
+- `due_before`, `due_after`: ISO Date strings `YYYY-MM-DD`.
+- `sort`: `due_date_asc`, `due_date_desc`, `created_at_desc` (default), `created_at_asc`, `priority_desc`, `priority_asc`, `title_asc`.
+
+### Authorization Rules:
+1. **Employees**: Cannot assign tasks to other employees or teams. Can update status of assigned tasks (`in_progress`, `blocked`) and submit for review. Cannot modify protected fields (`title`, `priority`, `due_date`, `assigned_to_id`) or mark company tasks completed without lead approval.
+2. **Team Leads**: Can assign tasks within their led teams and to team members. Cannot assign outside their authorized scope (returns 403). Can review submissions (approve or request changes).
+3. **Admins**: Unrestricted organization-wide task management and review authority.
 
 ---
 

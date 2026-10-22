@@ -183,6 +183,28 @@ Stores actionable task records, priority flags, statuses, deadlines, and ownersh
 
 ---
 
+
+
+---
+
+## 8. 	ask_status_history Table
+Stores immutable audit log records for every status transition and review event on a task.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique history record identifier |
+| 	ask_id | INTEGER | NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE) | Associated task identifier |
+| changed_by_id | INTEGER | NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL) | User who triggered the status change |
+| old_status | VARCHAR(30) | NULLABLE | Previous task status |
+| 
+ew_status | VARCHAR(30) | NOT NULL | New task status |
+| comment | TEXT | NULLABLE | Transition reason, review notes, or submission summary |
+| created_at | DATETIME | NOT NULL, DEFAULT utcnow | Timestamp of status event |
+
+- **Foreign Keys**:
+  - 	ask_id references 	asks.id (ondelete='CASCADE').
+  - changed_by_id references users.id (ondelete='SET NULL').
+
 ## Database Initialization & Automatic Migrations
 The database schema can be initialized at any time from the command line:
 

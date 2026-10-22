@@ -158,6 +158,20 @@ def create_app(test_config=None):
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN team_id INTEGER"))
                 if 'assigned_to_id' not in existing_task_cols:
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN assigned_to_id INTEGER"))
+                if 'start_date' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN start_date DATE"))
+                if 'acceptance_criteria' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN acceptance_criteria TEXT"))
+                if 'submission_notes' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN submission_notes TEXT"))
+                if 'review_notes' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN review_notes TEXT"))
+                if 'is_recurring' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN is_recurring BOOLEAN DEFAULT 0 NOT NULL"))
+                if 'recurrence_interval' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN recurrence_interval VARCHAR(20)"))
+                if 'updated_at' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN updated_at DATETIME"))
 
             db.session.commit()
         except Exception:
