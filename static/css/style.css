@@ -1157,7 +1157,8 @@ textarea.form-control {
   transition: opacity 0.2s ease;
 }
 
-.modal-overlay.is-active {
+.modal-overlay.is-active,
+.modal-overlay.is-open {
   opacity: 1;
   pointer-events: auto;
 }
@@ -1174,7 +1175,8 @@ textarea.form-control {
   transition: transform 0.2s ease;
 }
 
-.modal-overlay.is-active .modal-card {
+.modal-overlay.is-active .modal-card,
+.modal-overlay.is-open .modal-card {
   transform: scale(1);
 }
 
@@ -1483,7 +1485,8 @@ textarea.form-control {
   color: #fff;
 }
 
-.badge-admin {
+.badge-admin,
+.badge-admin_hr {
   background-color: var(--color-accent);
   color: #fff;
 }

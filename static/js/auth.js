@@ -6,7 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Setup password toggles
   document.querySelectorAll('.password-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
-      const input = btn.previousElementSibling;
+      const wrapper = btn.closest('.password-wrapper');
+      const input = wrapper ? wrapper.querySelector('input') : btn.previousElementSibling;
       if (!input) return;
       if (input.type === 'password') {
         input.type = 'text';
@@ -46,9 +47,17 @@ document.addEventListener('DOMContentLoaded', () => {
       submitBtn.innerHTML = 'Signing in...';
 
       try {
-        await api('POST', '/auth/login', { email, password, remember });
+        const requiredRole = loginForm.dataset.requiredRole || '';
+        const result = await api('POST', '/auth/login', { email, password, remember, required_role: requiredRole });
+        const user = result.data || {};
         showToast('Welcome back to TaskNest!', 'success');
-        window.location.href = '/dashboard';
+        if (user.role === 'super_admin' || user.role === 'admin' || user.role === 'admin_hr') {
+          window.location.href = '/admin/dashboard';
+        } else if (user.role === 'team_lead') {
+          window.location.href = '/lead/dashboard';
+        } else {
+          window.location.href = '/employee/dashboard';
+        }
       } catch (err) {
         if (errorBanner) {
           errorBanner.textContent = err.message || 'Invalid email or password.';
@@ -111,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
           password
         });
         showToast('Account created successfully!', 'success');
-        window.location.href = '/dashboard';
+        window.location.href = '/employee/dashboard';
       } catch (err) {
         if (errorBanner) {
           errorBanner.textContent = err.message || 'Registration failed.';

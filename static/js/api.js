@@ -56,9 +56,8 @@ async function api(method, path, body = null) {
 
     if (!res.ok || data.ok === false) {
       const errorMsg = data.error || (data.data && data.data.error) || `Request failed (${res.status})`;
-      if (res.status === 401 && !window.location.pathname.includes('/login') && !window.location.pathname.includes('/signup')) {
-        window.location.href = '/login';
-      }
+      // Do not globally redirect on 401: public pages and optional widgets may
+      // legitimately call protected endpoints. The calling page decides what to do.
       const err = new Error(errorMsg);
       err.status = res.status;
       err.data = data;

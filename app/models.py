@@ -46,6 +46,105 @@ STATUS_LABELS = {
 }
 
 
+# ── Organization & Structure ──────────────────────────────────────────────────
+
+class Organization(db.Model):
+    __tablename__ = 'organizations'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(100), nullable=False)
+    slug       = db.Column(db.String(100), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    departments = db.relationship('Department', backref='organization', lazy='dynamic', cascade='all, delete-orphan')
+    teams       = db.relationship('Team', backref='organization', lazy='dynamic', cascade='all, delete-orphan')
+    users       = db.relationship('User', backref='organization', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'slug': self.slug,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'user_count': self.users.count() if hasattr(self.users, 'count') else 0,
+            'team_count': self.teams.count() if hasattr(self.teams, 'count') else 0,
+        }
+
+
+class Department(db.Model):
+    __tablename__ = 'departments'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(100), nullable=False)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True)
+    created_at      = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    teams = db.relationship('Team', backref='department', lazy='dynamic')
+    users = db.relationship('User', backref='department', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'organization_id': self.organization_id,
+            'team_count': self.teams.count() if hasattr(self.teams, 'count') else 0,
+            'user_count': self.users.count() if hasattr(self.users, 'count') else 0,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Team(db.Model):
+    __tablename__ = 'teams'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(100), nullable=False)
+    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True)
+    lead_id         = db.Column(db.Integer, db.ForeignKey('users.id', use_alter=True, name='fk_teams_lead_id'), nullable=True)
+    created_at      = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    lead    = db.relationship('User', foreign_keys=[lead_id], backref='lead_teams')
+    members = db.relationship('TeamMember', backref='team', lazy='dynamic', cascade='all, delete-orphan')
+    tasks   = db.relationship('Task', backref='team', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'department_id': self.department_id,
+            'department_name': self.department.name if self.department else None,
+            'organization_id': self.organization_id,
+            'lead_id': self.lead_id,
+            'lead_name': self.lead.full_name or self.lead.username if self.lead else None,
+            'member_count': self.members.count() if hasattr(self.members, 'count') else 0,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class TeamMember(db.Model):
+    __tablename__ = 'team_members'
+
+    id        = db.Column(db.Integer, primary_key=True)
+    team_id   = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    user_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    joined_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    user = db.relationship('User', backref='team_memberships')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'team_id': self.team_id,
+            'user_id': self.user_id,
+            'user_name': self.user.full_name or self.user.username if self.user else None,
+            'user_email': self.user.email if self.user else None,
+            'user_role': self.user.role if self.user else None,
+            'designation': self.user.designation if self.user else None,
+            'joined_at': self.joined_at.isoformat() if self.joined_at else None,
+        }
+
+
+# ── User Model ─────────────────────────────────────────────────────────────────
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -84,10 +183,10 @@ class User(UserMixin, db.Model):
                                  cascade='all, delete-orphan')
     categories = db.relationship('Category', backref='user', lazy='dynamic',
                                  cascade='all, delete-orphan')
+    attendances = db.relationship('Attendance', backref='user', lazy='dynamic', cascade='all, delete-orphan')
+    notifications = db.relationship('Notification', backref='user', lazy='dynamic', cascade='all, delete-orphan')
 
     # ── Flask-Login requirement ────────────────────────────────────────────────
-    # Override UserMixin.is_active to honour our account_active column.
-    # Flask-Login checks is_active and rejects deactivated users at the login gate.
     @property
     def is_active(self):
         return bool(self.account_active)
@@ -112,7 +211,11 @@ class User(UserMixin, db.Model):
 
     def has_role(self, *roles):
         """Return True if this user's role is among the given roles."""
-        return self.role in roles
+        expanded = set(roles)
+        if 'admin' in expanded or 'admin_hr' in expanded:
+            expanded.add('admin')
+            expanded.add('admin_hr')
+        return self.role in expanded
 
     # ── Credentials ───────────────────────────────────────────────────────────
     def set_password(self, password):
@@ -257,6 +360,8 @@ class Team(db.Model):
             'created_at':        self.created_at.isoformat() if self.created_at else None,
         }
 
+
+# ── Category Model ─────────────────────────────────────────────────────────────
 
 class Category(db.Model):
     __tablename__ = 'categories'
@@ -431,6 +536,7 @@ class Task(db.Model):
     priority     = db.Column(db.String(10), default='medium', nullable=False)   # 'low', 'medium', 'high'
     start_date   = db.Column(db.Date, nullable=True)
     due_date     = db.Column(db.Date, nullable=True)
+    start_date   = db.Column(db.Date, nullable=True)
     created_at   = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at   = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=True)
@@ -463,7 +569,7 @@ class Task(db.Model):
 
     @property
     def is_overdue(self):
-        if self.status != 'completed' and self.due_date:
+        if self.status != STATUS_COMPLETED and self.due_date:
             return self.due_date < date.today()
         return False
 

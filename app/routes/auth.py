@@ -82,6 +82,10 @@ def login():
     email    = (data.get('email') or '').strip().lower()
     password = data.get('password') or ''
     remember = bool(data.get('remember', False))
+    requested_role = (data.get('required_role') or '').strip().lower()
+
+    if requested_role not in ('', 'admin', 'team_lead', 'employee'):
+        return api_error('Invalid sign-in type.', 400)
 
     if not email or not password:
         return api_error('Email and password are required.', 400)
@@ -89,6 +93,15 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user or not user.check_password(password):
         return api_error('Invalid email or password.', 401)
+
+    # A role-specific sign-in page may only authenticate matching account types.
+    # Check this before login_user so a wrong-role attempt cannot create a session.
+    if requested_role == 'admin' and user.role not in ('super_admin', 'admin', 'admin_hr'):
+        return api_error('This account does not have administrator access. Use the correct sign-in page.', 403)
+    if requested_role == 'team_lead' and user.role not in ('team_lead', 'super_admin', 'admin', 'admin_hr'):
+        return api_error('This account does not have Team Lead access. Use Employee Login instead.', 403)
+    if requested_role == 'employee' and user.role != 'employee':
+        return api_error('This is not an employee account. Please use the correct sign-in page.', 403)
 
     # Reject deactivated accounts before creating a session
     if not user.account_active:
@@ -196,3 +209,80 @@ def change_password():
     return api_success(
         message='Password changed successfully. Please log in again on other devices.'
     )
+
+
+# ── Password Recovery ─────────────────────────────────────────────────────────
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """Initiates a secure password reset flow."""
+    import secrets
+    from datetime import datetime, timezone, timedelta
+    from app.models import PasswordResetToken
+
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+
+    if not email or not EMAIL_REGEX.match(email):
+        return api_error('A valid email address is required.', 400)
+
+    user = User.query.filter_by(email=email).first()
+    if not user or not user.account_active:
+        # Prevent user enumeration by returning consistent success message
+        return api_success(message='If this email is registered, password reset instructions have been generated.')
+
+    # Invalidate older pending tokens for this user
+    PasswordResetToken.query.filter_by(user_id=user.id, is_used=False).update({'is_used': True})
+
+    # Generate cryptographically secure token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    reset_token = PasswordResetToken(
+        user_id=user.id,
+        token=token,
+        expires_at=expires_at
+    )
+    db.session.add(reset_token)
+    db.session.commit()
+
+    reset_url = f'/reset-password/{token}'
+    return api_success(
+        {'reset_url': reset_url, 'token': token},
+        message='Password reset instructions generated successfully.'
+    )
+
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Resets user password with a validated token."""
+    from app.models import PasswordResetToken
+
+    data = request.get_json(silent=True) or {}
+    token = (data.get('token') or '').strip()
+    new_password = data.get('password') or ''
+    confirm_password = data.get('confirm_password') or ''
+
+    if not token:
+        return api_error('Reset token is required.', 400)
+
+    if not new_password or len(new_password) < 8:
+        return api_error('New password must be at least 8 characters long.', 400)
+
+    if new_password != confirm_password:
+        return api_error('Passwords do not match.', 400)
+
+    reset_token = PasswordResetToken.query.filter_by(token=token).first()
+    if not reset_token or not reset_token.is_valid():
+        return api_error('Reset token is invalid or has expired. Please request a new one.', 400)
+
+    user = User.query.get(reset_token.user_id)
+    if not user or not user.account_active:
+        return api_error('User account is invalid or deactivated.', 400)
+
+    user.set_password(new_password)
+    reset_token.is_used = True
+    db.session.commit()
+
+    return api_success(message='Password has been reset successfully. You may now sign in.')
+

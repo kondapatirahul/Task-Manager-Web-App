@@ -186,6 +186,7 @@ def can_user_review_task(user, task):
 
 @tasks_bp.route('', methods=['GET'])
 @login_required
+@active_account_required
 def get_tasks():
     # Base query based on user role and permitted boundaries
     if current_user.role in ('super_admin', 'admin'):
@@ -291,6 +292,7 @@ def get_tasks():
         query = query.order_by(Task.created_at.asc())
     elif sort == 'priority_desc':
         priority_weight = case(
+            (Task.priority == 'urgent', 4),
             (Task.priority == 'high', 3),
             (Task.priority == 'medium', 2),
             (Task.priority == 'low', 1),
@@ -299,6 +301,7 @@ def get_tasks():
         query = query.order_by(priority_weight.desc(), Task.created_at.desc())
     elif sort == 'priority_asc':
         priority_weight = case(
+            (Task.priority == 'urgent', 4),
             (Task.priority == 'high', 3),
             (Task.priority == 'medium', 2),
             (Task.priority == 'low', 1),
@@ -316,6 +319,7 @@ def get_tasks():
 
 @tasks_bp.route('', methods=['POST'])
 @login_required
+@active_account_required
 def create_task():
     if request.is_json:
         data = request.get_json(silent=True) or {}
@@ -423,6 +427,7 @@ def create_task():
         status=status,
         start_date=start_date,
         due_date=due_date,
+        start_date=start_date,
         completed_at=completed_at,
         category_id=category_id,
         team_id=team_id,
@@ -491,8 +496,12 @@ def create_task():
         raise e
 
 
+
+# ── Single Task Details ────────────────────────────────────────────────────────
+
 @tasks_bp.route('/<int:task_id>', methods=['GET'])
 @login_required
+@active_account_required
 def get_task(task_id):
     task = db.session.get(Task, task_id)
     if not task or not can_user_view_task(current_user, task):
@@ -503,9 +512,13 @@ def get_task(task_id):
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
 @login_required
+@active_account_required
 def update_task(task_id):
     task = db.session.get(Task, task_id)
     if not task or not can_user_view_task(current_user, task):
+        return api_error('Task not found.', 404)
+
+    if not can_manage_task(task, current_user) and task.assignee_id != current_user.id:
         return api_error('Task not found.', 404)
 
     data = request.get_json(silent=True) or {}
@@ -645,8 +658,12 @@ def update_task(task_id):
     return api_success(task.to_dict(include_history=True), message='Task updated successfully')
 
 
+
+# ── Delete Task ────────────────────────────────────────────────────────────────
+
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
 @login_required
+@active_account_required
 def delete_task(task_id):
     task = db.session.get(Task, task_id)
     if not task or not can_user_view_task(current_user, task):
@@ -667,11 +684,13 @@ def delete_task(task_id):
 
     db.session.delete(task)
     db.session.commit()
+    log_audit('task_deleted', 'Task', task_id, f'Deleted task ID {task_id}')
     return api_success(message='Task deleted successfully')
 
 
 @tasks_bp.route('/<int:task_id>/complete', methods=['PATCH'])
 @login_required
+@active_account_required
 def toggle_task_complete(task_id):
     task = db.session.get(Task, task_id)
     if not task or not can_user_view_task(current_user, task):

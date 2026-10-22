@@ -1,47 +1,172 @@
 {% extends "_app_layout.html" %}
 
-{% block title %}Dashboard — TaskNest{% endblock %}
+{% block title %}Dashboard — TaskNest Enterprise{% endblock %}
 
 {% block app_content %}
-<!-- Personalized Greeting & Action Bar -->
-<div class="page-intro">
+<!-- Personalized Greeting & Quick Attendance Action Bar -->
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
   <div>
-    <h1 class="page-title">
-      Hello, {{ (current_user.full_name or current_user.username).split(' ')[0] }}
-    </h1>
-    <p class="page-subtitle">Here is a summary of your workspace and active commitments today.</p>
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <h1 class="page-title" style="margin-bottom: 0;">
+        Hello, {{ (current_user.full_name or current_user.username).split(' ')[0] }}
+      </h1>
+      <span class="badge badge-{{ current_user.role }}">
+        {{ current_user.role | replace('_', ' ') | title }}
+      </span>
+    </div>
+    <p class="page-subtitle" style="margin-top: 0.35rem;">
+      {{ current_user.designation or 'Team Member' }} • {{ current_user.organization.name if current_user.organization else 'TaskNest Enterprise' }}
+    </p>
   </div>
-  <button class="btn btn-primary open-add-task-btn">
-    <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-    <span>Add New Task</span>
-  </button>
+
+  <!-- Attendance Quick Action Card -->
+  <div class="card" id="quick-attendance-widget" style="padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 1.25rem; background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+    <div>
+      <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.05em;">Today's Shift</div>
+      <div style="font-size: var(--font-size-lg); font-weight: 800; color: var(--color-primary);" id="dashboard-shift-hours">0.0 hrs</div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <button id="quick-checkin-btn" class="btn btn-primary btn-sm" style="display: none;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>Check In</span>
+      </button>
+      <button id="quick-checkout-btn" class="btn btn-secondary btn-sm" style="display: none; border-color: var(--color-danger); color: var(--color-danger);">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+        <span>Check Out</span>
+      </button>
+      <span id="quick-att-status" class="badge badge-employee" style="margin-left: 0.25rem;">Checking...</span>
+    </div>
+  </div>
 </div>
 
-<!-- 4 Real Database-Backed Metric Cards -->
-<div class="metrics-grid" id="dashboard-metrics">
-  <!-- Total -->
+{% if current_user.has_role('super_admin', 'admin') %}
+<!-- =========================================================================
+     ADMIN / HR DASHBOARD
+     ========================================================================= -->
+<div class="metrics-grid" id="admin-metrics" style="margin-bottom: 2rem;">
+  <div class="metric-card metric-total">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="admin-stat-employees">-</div>
+      <div class="metric-label">Total Employees</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-pending">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="admin-stat-teams">-</div>
+      <div class="metric-label">Active Teams</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-completed">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="admin-stat-active-att">-</div>
+      <div class="metric-label">Checked In Today</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-overdue">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="admin-stat-tasks">-</div>
+      <div class="metric-label">Company Tasks</div>
+    </div>
+  </div>
+</div>
+
+<div class="dashboard-grid">
+  <!-- Left: Recent Administrative Audit Events -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Recent Enterprise Activity</h2>
+      <a href="{{ url_for('web.organization') }}" class="btn btn-ghost btn-sm" style="font-weight: 700; color: var(--color-primary);">Manage Teams</a>
+    </div>
+    <div style="overflow-x: auto;">
+      <table class="table" id="admin-audit-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="admin-audit-tbody">
+          <tr><td colspan="4" class="text-muted" style="text-align: center; padding: 1.5rem;">Loading activity logs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Right: Quick Admin Navigation & Department Summary -->
+  <div>
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <h3 class="card-title">Organization Departments</h3>
+      </div>
+      <div id="admin-depts-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <p class="text-muted" style="font-size: var(--font-size-sm);">Loading departments...</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Quick Actions</h3>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+        <a href="{{ url_for('web.employees') }}" class="btn btn-secondary btn-sm" style="justify-content: flex-start;">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+          <span>Provision Employee Account</span>
+        </a>
+        <a href="{{ url_for('web.organization') }}" class="btn btn-secondary btn-sm" style="justify-content: flex-start;">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+          <span>Create Department or Team</span>
+        </a>
+        <a href="{{ url_for('web.reports') }}" class="btn btn-secondary btn-sm" style="justify-content: flex-start;">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          <span>Export Timesheet / Task CSV</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% elif current_user.is_team_lead %}
+<!-- =========================================================================
+     TEAM LEAD DASHBOARD
+     ========================================================================= -->
+<div class="metrics-grid" id="lead-metrics" style="margin-bottom: 2rem;">
   <div class="metric-card metric-total">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-total">0</div>
-      <div class="metric-label">Total Tasks</div>
+      <div class="metric-label">Team Tasks</div>
     </div>
   </div>
 
-  <!-- Pending -->
   <div class="metric-card metric-pending">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
     </div>
     <div class="metric-info">
-      <div class="metric-value" id="stat-pending">0</div>
-      <div class="metric-label">In Progress / Pending</div>
+      <div class="metric-value" id="lead-stat-in-review">0</div>
+      <div class="metric-label">Awaiting Review</div>
     </div>
   </div>
 
-  <!-- Completed -->
   <div class="metric-card metric-completed">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
@@ -52,37 +177,109 @@
     </div>
   </div>
 
-  <!-- Overdue -->
   <div class="metric-card metric-overdue">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-overdue">0</div>
-      <div class="metric-label">Overdue Tasks</div>
+      <div class="metric-label">Overdue / Blocked</div>
     </div>
   </div>
 </div>
 
-<!-- Two-Column Layout: Recent Tasks & Upcoming Panel -->
 <div class="dashboard-grid">
-  <!-- Left: Tasks Workspace -->
+  <!-- Left: Team Tasks & Review Queue -->
   <div class="card">
     <div class="card-header">
-      <h2 class="card-title">Recent Tasks</h2>
-      <a href="{{ url_for('web.tasks') }}" class="btn btn-ghost btn-sm" style="font-weight: 700; color: var(--color-primary);">
-        <span>View All</span>
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
-      </a>
+      <h2 class="card-title">Team Workload & Assignments</h2>
+      <a href="{{ url_for('web.tasks') }}" class="btn btn-ghost btn-sm" style="font-weight: 700; color: var(--color-primary);">Open Board</a>
     </div>
-
-    <!-- Task list container populated dynamically -->
     <div id="task-list-container"></div>
   </div>
 
-  <!-- Right: Upcoming Schedule & Productivity -->
+  <!-- Right: Team Attendance & Upcoming Meetings -->
   <div>
-    <!-- Upcoming Schedule Card -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <h3 class="card-title">Team Attendance Today</h3>
+        <a href="{{ url_for('web.attendance') }}" class="btn btn-link btn-xs">View Timesheets</a>
+      </div>
+      <div id="lead-team-attendance" style="display: flex; flex-direction: column; gap: 0.6rem;">
+        <p class="text-muted" style="font-size: var(--font-size-sm);">Checking team presence...</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Upcoming Meetings</h3>
+        <a href="{{ url_for('web.calendar') }}" class="btn btn-link btn-xs">Calendar</a>
+      </div>
+      <div id="dashboard-upcoming-list">
+        <p class="text-muted" style="font-size: var(--font-size-sm); padding: 1rem 0;">Checking meetings...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<!-- =========================================================================
+     EMPLOYEE DASHBOARD
+     ========================================================================= -->
+<div class="metrics-grid" id="dashboard-metrics" style="margin-bottom: 2rem;">
+  <div class="metric-card metric-total">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-total">0</div>
+      <div class="metric-label">Assigned Tasks</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-pending">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-pending">0</div>
+      <div class="metric-label">In Progress</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-completed">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-completed">0</div>
+      <div class="metric-label">Completed</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-overdue">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-overdue">0</div>
+      <div class="metric-label">Overdue</div>
+    </div>
+  </div>
+</div>
+
+<div class="dashboard-grid">
+  <!-- Left: My Tasks -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">My Active Tasks</h2>
+      <a href="{{ url_for('web.tasks') }}" class="btn btn-ghost btn-sm" style="font-weight: 700; color: var(--color-primary);">Open My Tasks</a>
+    </div>
+    <div id="task-list-container"></div>
+  </div>
+
+  <!-- Right: Upcoming Deadlines & Meetings -->
+  <div>
     <div class="card" style="margin-bottom: 1.5rem;">
       <div class="card-header">
         <h3 class="card-title">Upcoming Deadlines</h3>
@@ -92,20 +289,176 @@
       </div>
     </div>
 
-    <!-- Productivity Overview -->
     <div class="card">
       <div class="card-header">
-        <h3 class="card-title">Productivity Score</h3>
+        <h3 class="card-title">Upcoming Meetings</h3>
+        <a href="{{ url_for('web.calendar') }}" class="btn btn-link btn-xs">Calendar</a>
       </div>
-      <div style="text-align: center; padding: 1.5rem 1rem;">
-        <div id="stat-completion-rate" style="font-size: 2.5rem; font-weight: 800; color: var(--color-primary); line-height: 1;">
-          0%
-        </div>
-        <p style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.5rem; text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em;">
-          Overall Completion Rate
-        </p>
+      <div id="employee-meetings-list" style="display: flex; flex-direction: column; gap: 0.6rem;">
+        <p class="text-muted" style="font-size: var(--font-size-sm);">Checking schedule...</p>
       </div>
     </div>
   </div>
 </div>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // 1. Attendance widget controller
+  const checkinBtn = document.getElementById('quick-checkin-btn');
+  const checkoutBtn = document.getElementById('quick-checkout-btn');
+  const statusBadge = document.getElementById('quick-att-status');
+  const shiftHours = document.getElementById('dashboard-shift-hours');
+
+  async function loadAttendanceToday() {
+    try {
+      const res = await fetch('/api/attendance/today');
+      if (res.ok) {
+        const json = await res.json();
+        const d = json.data;
+        if (shiftHours) shiftHours.textContent = `${d.today_duration_hours} hrs`;
+        if (d.is_checked_in) {
+          if (checkinBtn) checkinBtn.style.display = 'none';
+          if (checkoutBtn) checkoutBtn.style.display = 'inline-flex';
+          if (statusBadge) {
+            statusBadge.className = 'badge badge-completed';
+            statusBadge.textContent = 'Active Shift';
+          }
+        } else {
+          if (checkinBtn) checkinBtn.style.display = 'inline-flex';
+          if (checkoutBtn) checkoutBtn.style.display = 'none';
+          if (statusBadge) {
+            statusBadge.className = 'badge badge-employee';
+            statusBadge.textContent = 'Not Checked In';
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (checkinBtn) {
+    checkinBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/attendance/check-in', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({notes: 'Dashboard quick check-in'})
+        });
+        if (res.ok) loadAttendanceToday();
+      } catch (e) {}
+    });
+  }
+
+  if (checkoutBtn) {
+    checkoutBtn.addEventListener('click', async () => {
+      try {
+        const res = await fetch('/api/attendance/check-out', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({notes: 'Dashboard quick check-out'})
+        });
+        if (res.ok) loadAttendanceToday();
+      } catch (e) {}
+    });
+  }
+
+  loadAttendanceToday();
+
+  // 2. Role-specific metric loaders
+  {% if current_user.has_role('super_admin', 'admin') %}
+  try {
+    const empRes = await fetch('/api/employees');
+    if (empRes.ok) {
+      const emps = (await empRes.json()).data;
+      document.getElementById('admin-stat-employees').textContent = emps.length;
+    }
+    const teamRes = await fetch('/api/organization/teams');
+    if (teamRes.ok) {
+      const teams = (await teamRes.json()).data;
+      document.getElementById('admin-stat-teams').textContent = teams.length;
+    }
+    const attRes = await fetch('/api/attendance/organization');
+    if (attRes.ok) {
+      const att = (await attRes.json()).data;
+      document.getElementById('admin-stat-active-att').textContent = att.currently_active_count;
+    }
+    const taskRes = await fetch('/api/tasks');
+    if (taskRes.ok) {
+      const tasks = (await taskRes.json()).data;
+      document.getElementById('admin-stat-tasks').textContent = tasks.length;
+    }
+    const deptRes = await fetch('/api/organization/departments');
+    if (deptRes.ok) {
+      const depts = (await deptRes.json()).data;
+      const list = document.getElementById('admin-depts-list');
+      if (list) {
+        list.innerHTML = depts.length ? depts.map(d => `
+          <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--color-border-subtle); font-size: var(--font-size-sm);">
+            <span style="font-weight: 600;">${d.name}</span>
+            <span class="badge badge-employee">${d.team_count} teams</span>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs);">No departments configured</p>';
+      }
+    }
+    const auditRes = await fetch('/api/organization/audit-logs');
+    if (auditRes.ok) {
+      const logs = (await auditRes.json()).data;
+      const tbody = document.getElementById('admin-audit-tbody');
+      if (tbody) {
+        tbody.innerHTML = logs.slice(0, 10).map(l => `
+          <tr>
+            <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(l.created_at).toLocaleString()}</td>
+            <td style="font-weight: 600;">${l.user_name}</td>
+            <td><span class="badge badge-team_lead">${l.action}</span></td>
+            <td style="font-size: var(--font-size-xs);">${l.details || ''}</td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (e) {}
+
+  {% elif current_user.is_team_lead %}
+  try {
+    const teamAttRes = await fetch('/api/attendance/team');
+    if (teamAttRes.ok) {
+      const teamAtt = (await teamAttRes.json()).data;
+      const attList = document.getElementById('lead-team-attendance');
+      if (attList) {
+        attList.innerHTML = teamAtt.length ? teamAtt.map(m => `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--color-border-subtle); font-size: var(--font-size-sm);">
+            <div>
+              <div style="font-weight: 600;">${m.name}</div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${m.designation || 'Member'}</div>
+            </div>
+            <span class="badge ${m.status === 'active' ? 'badge-completed' : 'badge-employee'}">
+              ${m.status === 'active' ? 'Checked In' : 'Away'}
+            </span>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs);">No team members</p>';
+      }
+    }
+  } catch (e) {}
+
+  {% else %}
+  // Employee upcoming meetings
+  try {
+    const meetRes = await fetch('/api/meetings?upcoming=1');
+    if (meetRes.ok) {
+      const meetings = (await meetRes.json()).data;
+      const mList = document.getElementById('employee-meetings-list');
+      if (mList) {
+        mList.innerHTML = meetings.length ? meetings.slice(0, 4).map(m => `
+          <div style="padding: 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary);">
+            <div style="font-weight: 600; font-size: var(--font-size-xs);">${m.title}</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(m.start_time).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}</div>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.5rem 0;">No upcoming meetings</p>';
+      }
+    }
+  } catch (e) {}
+  {% endif %}
+});
+</script>
 {% endblock %}

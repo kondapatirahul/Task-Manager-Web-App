@@ -1,5 +1,5 @@
 /**
- * TaskNest Task & Category Management Engine
+ * TaskNest Enterprise Task & Category Management Engine
  */
 
 const TaskManager = {
@@ -132,6 +132,39 @@ const TaskManager = {
       });
     }
 
+    // View Mode Switcher
+    const listBtn = document.getElementById('view-mode-list-btn');
+    const kanbanBtn = document.getElementById('view-mode-kanban-btn');
+    const listContainer = document.getElementById('task-list-container');
+    const kanbanContainer = document.getElementById('kanban-container');
+
+    if (listBtn && kanbanBtn) {
+      listBtn.addEventListener('click', () => {
+        this.viewMode = 'list';
+        listBtn.classList.add('active');
+        listBtn.style.backgroundColor = 'var(--color-surface-subtle)';
+        listBtn.style.color = 'var(--color-primary)';
+        kanbanBtn.classList.remove('active');
+        kanbanBtn.style.backgroundColor = 'transparent';
+        kanbanBtn.style.color = 'var(--color-text)';
+        if (listContainer) listContainer.style.display = 'block';
+        if (kanbanContainer) kanbanContainer.style.display = 'none';
+      });
+
+      kanbanBtn.addEventListener('click', () => {
+        this.viewMode = 'kanban';
+        kanbanBtn.classList.add('active');
+        kanbanBtn.style.backgroundColor = 'var(--color-surface-subtle)';
+        kanbanBtn.style.color = 'var(--color-primary)';
+        listBtn.classList.remove('active');
+        listBtn.style.backgroundColor = 'transparent';
+        listBtn.style.color = 'var(--color-text)';
+        if (listContainer) listContainer.style.display = 'none';
+        if (kanbanContainer) kanbanContainer.style.display = 'block';
+        this.renderKanban(this.tasks);
+      });
+    }
+
     // Add Task Button
     document.querySelectorAll('.open-add-task-btn').forEach(btn => {
       btn.addEventListener('click', () => this.openTaskModal());
@@ -149,7 +182,25 @@ const TaskManager = {
       catForm.addEventListener('submit', (e) => this.handleCategoryFormSubmit(e));
     }
 
-    // Modal Close
+    // Subtask Form Submit
+    const subtaskForm = document.getElementById('add-subtask-form');
+    if (subtaskForm) {
+      subtaskForm.addEventListener('submit', (e) => this.handleAddSubtask(e));
+    }
+
+    // Send Message Form Submit
+    const msgForm = document.getElementById('send-message-form');
+    if (msgForm) {
+      msgForm.addEventListener('submit', (e) => this.handleSendMessage(e));
+    }
+
+    // Submit Deliverable Form Submit
+    const deliverableForm = document.getElementById('submit-deliverable-form');
+    if (deliverableForm) {
+      deliverableForm.addEventListener('submit', (e) => this.handleSubmitDeliverable(e));
+    }
+
+    // Modal Close Triggers
     document.querySelectorAll('.modal-close-trigger').forEach(el => {
       el.addEventListener('click', () => this.closeModals());
     });
@@ -281,7 +332,6 @@ const TaskManager = {
       if (this.currentFilter.team_id) params.set('team_id', this.currentFilter.team_id);
       if (this.currentFilter.sort) params.set('sort', this.currentFilter.sort);
 
-      // Support URL search param from global search
       const urlParams = new URLSearchParams(window.location.search);
       const urlQ = urlParams.get('q');
       if (urlQ && !this.currentFilter.q) {
@@ -293,9 +343,10 @@ const TaskManager = {
 
       const res = await api('GET', `/tasks?${params.toString()}`);
       this.tasks = res.data || [];
+      this.renderSmartPriority(this.tasks);
       this.renderTasks(this.tasks, container);
+      this.renderKanban(this.tasks);
 
-      // Refresh stats if on dashboard
       if (document.getElementById('dashboard-metrics')) {
         this.loadDashboardStats();
       }
@@ -403,15 +454,93 @@ const TaskManager = {
 
       // Checkbox event
       const checkbox = item.querySelector('.task-checkbox');
-      checkbox.addEventListener('change', () => this.toggleTaskCompletion(task.id, checkbox.checked));
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        this.toggleTaskCompletion(task.id, checkbox.checked);
+      });
+
+      // Clicking task body opens detail modal
+      item.querySelector('.task-body').addEventListener('click', () => {
+        this.openTaskDetailModal(task);
+      });
+      item.querySelector('.view-detail-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openTaskDetailModal(task);
+      });
 
       // Edit event
-      item.querySelector('.edit-task-btn').addEventListener('click', () => this.openTaskModal(task));
+      item.querySelector('.edit-task-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.openTaskModal(task);
+      });
 
       // Delete event
-      item.querySelector('.delete-task-btn').addEventListener('click', () => this.confirmDeleteTask(task));
+      item.querySelector('.delete-task-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.confirmDeleteTask(task);
+      });
 
       container.appendChild(item);
+    });
+  },
+
+  renderKanban(tasks) {
+    const kanbanContainer = document.getElementById('kanban-container');
+    if (!kanbanContainer) return;
+
+    const cols = {
+      pending: document.getElementById('kanban-pending'),
+      in_progress: document.getElementById('kanban-in_progress'),
+      blocked: document.getElementById('kanban-blocked'),
+      in_review: document.getElementById('kanban-in_review'),
+      completed: document.getElementById('kanban-completed')
+    };
+
+    const counts = {
+      pending: document.getElementById('kanban-count-pending'),
+      in_progress: document.getElementById('kanban-count-in_progress'),
+      blocked: document.getElementById('kanban-count-blocked'),
+      in_review: document.getElementById('kanban-count-in_review'),
+      completed: document.getElementById('kanban-count-completed')
+    };
+
+    Object.values(cols).forEach(col => { if (col) col.innerHTML = ''; });
+    const colCounters = { pending: 0, in_progress: 0, blocked: 0, in_review: 0, completed: 0 };
+
+    tasks.forEach(task => {
+      let colKey = task.status;
+      if (colKey === 'todo') colKey = 'pending';
+      if (colKey === 'changes_requested') colKey = 'in_review';
+      if (!cols[colKey]) colKey = 'pending';
+
+      colCounters[colKey]++;
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'padding: 0.85rem; cursor: pointer; border-radius: var(--radius-sm); border: 1px solid var(--color-border); box-shadow: var(--shadow-sm); transition: transform 0.15s ease;';
+      card.innerHTML = `
+        <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-text); margin-bottom: 0.35rem;">
+          ${this.escapeHtml(task.title)}
+        </div>
+        ${task.description ? `<p style="font-size: var(--font-size-xs); color: var(--color-muted); margin: 0 0 0.5rem 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${this.escapeHtml(task.description)}</p>` : ''}
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.35rem; font-size: var(--font-size-xs);">
+          <span class="badge badge-${task.priority}">${task.priority}</span>
+          ${task.due_date ? `<span style="color: var(--color-muted); font-size: 0.7rem;">📅 ${task.due_date}</span>` : ''}
+        </div>
+        ${task.assignee_name ? `<div style="font-size: 0.7rem; color: var(--color-muted); margin-top: 0.4rem;">👤 ${this.escapeHtml(task.assignee_name)}</div>` : ''}
+      `;
+
+      card.addEventListener('mouseenter', () => { card.style.transform = 'translateY(-2px)'; });
+      card.addEventListener('mouseleave', () => { card.style.transform = 'translateY(0)'; });
+      card.addEventListener('click', () => this.openTaskDetailModal(task));
+
+      if (cols[colKey]) {
+        cols[colKey].appendChild(card);
+      }
+    });
+
+    Object.keys(counts).forEach(k => {
+      if (counts[k]) counts[k].textContent = colCounters[k];
     });
   },
 
@@ -445,7 +574,6 @@ const TaskManager = {
       if (overdueEl) overdueEl.textContent = stats.overdue ?? 0;
       if (rateEl) rateEl.textContent = `${stats.completion_rate ?? 0}%`;
 
-      // Render upcoming panel if on dashboard
       const upcomingContainer = document.getElementById('dashboard-upcoming-list');
       if (upcomingContainer) {
         if (!stats.upcoming || stats.upcoming.length === 0) {
@@ -582,6 +710,16 @@ const TaskManager = {
       is_recurring: Boolean(recurring),
       recurrence_interval: recurring || null
     };
+
+    if (assigneeField && assigneeField.value) {
+      payload.assignee_id = parseInt(assigneeField.value, 10);
+    }
+    if (recurrenceField && recurrenceField.value) {
+      payload.recurrence = recurrenceField.value;
+    }
+    if (criteriaField && criteriaField.value.trim()) {
+      payload.acceptance_criteria = criteriaField.value.trim();
+    }
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;

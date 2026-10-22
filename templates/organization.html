@@ -1,0 +1,433 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Organization & Teams — TaskNest Enterprise{% endblock %}
+
+{% block app_content %}
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 class="page-title">Organization & Structure</h1>
+    <p class="page-subtitle">Configure departments, cross-functional teams, leads, and review administrative audit logs.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem;">
+    {% if current_user.role in ['super_admin', 'admin_hr'] %}
+    <button id="open-add-dept-btn" class="btn btn-secondary btn-sm">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>New Department</span>
+    </button>
+    <button id="open-add-team-btn" class="btn btn-primary btn-sm">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>New Team</span>
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Tabs Navigation -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-header" style="border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.25rem;">
+    <div style="display: flex; gap: 1rem;">
+      <button class="btn btn-ghost btn-sm org-tab-btn active" data-tab="departments" style="font-weight: 700; color: var(--color-primary);">Departments</button>
+      <button class="btn btn-ghost btn-sm org-tab-btn" data-tab="teams" style="font-weight: 600;">Teams & Rosters</button>
+      {% if current_user.role in ['super_admin', 'admin_hr'] %}
+      <button class="btn btn-ghost btn-sm org-tab-btn" data-tab="audit" style="font-weight: 600;">Audit & Security History</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Tab 1: Departments -->
+  <div id="tab-departments" class="org-tab-pane" style="padding: 1.5rem;">
+    <div class="metrics-grid" id="dept-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
+      <div style="grid-column: 1 / -1; text-align: center; color: var(--color-muted); padding: 2rem;">Loading departments...</div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Teams -->
+  <div id="tab-teams" class="org-tab-pane" style="padding: 1.5rem; display: none;">
+    <div class="metrics-grid" id="teams-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+      <div style="grid-column: 1 / -1; text-align: center; color: var(--color-muted); padding: 2rem;">Loading teams...</div>
+    </div>
+  </div>
+
+  <!-- Tab 3: Audit Logs -->
+  {% if current_user.role in ['super_admin', 'admin_hr'] %}
+  <div id="tab-audit" class="org-tab-pane" style="padding: 1.5rem; display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="font-size: var(--font-size-base); font-weight: 700;">System & Action Logs</h3>
+      <button id="refresh-audit-btn" class="btn btn-secondary btn-sm">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        <span>Refresh</span>
+      </button>
+    </div>
+    <div style="overflow-x: auto;">
+      <table class="table" id="audit-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Target Resource</th>
+            <th>IP Address</th>
+          </tr>
+        </thead>
+        <tbody id="audit-tbody">
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--color-muted); padding: 2rem;">Loading audit records...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal: New Department -->
+<div class="modal-overlay" id="dept-modal" role="dialog" aria-modal="true" aria-labelledby="dept-modal-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="dept-modal-title">Create Department</h3>
+      <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="dept-form">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="dept-name">Department Name <span class="required">*</span></label>
+          <input type="text" id="dept-name" class="form-control" required placeholder="e.g. Engineering, Marketing, Operations">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="dept-desc">Description</label>
+          <textarea id="dept-desc" class="form-control" placeholder="Purpose and responsibility of this department..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Department</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New Team -->
+<div class="modal-overlay" id="team-modal" role="dialog" aria-modal="true" aria-labelledby="team-modal-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="team-modal-title">Create Team</h3>
+      <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="team-form">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="team-name">Team Name <span class="required">*</span></label>
+          <input type="text" id="team-name" class="form-control" required placeholder="e.g. Frontend Core, Growth Platform">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="team-dept-select">Department <span class="required">*</span></label>
+          <select id="team-dept-select" class="form-control" required>
+            <option value="">Select Department</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="team-lead-select">Team Lead</label>
+          <select id="team-lead-select" class="form-control">
+            <option value="">None / Assign Later</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="team-desc">Description</label>
+          <textarea id="team-desc" class="form-control" placeholder="Focus area for this team..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Team</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Add Team Member -->
+<div class="modal-overlay" id="add-member-modal" role="dialog" aria-modal="true" aria-labelledby="member-modal-title">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="member-modal-title">Add Team Member</h3>
+      <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="add-member-form">
+      <input type="hidden" id="target-team-id" value="">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="member-user-select">Employee <span class="required">*</span></label>
+          <select id="member-user-select" class="form-control" required>
+            <option value="">Select Employee</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="member-role">Role in Team</label>
+          <input type="text" id="member-role" class="form-control" placeholder="e.g. Senior Frontend Engineer, QA Specialist">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add to Team</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // Tab switching
+  const tabBtns = document.querySelectorAll('.org-tab-btn');
+  const tabPanes = document.querySelectorAll('.org-tab-pane');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => {
+        b.classList.remove('active');
+        b.style.fontWeight = '600';
+        b.style.color = 'var(--color-text)';
+      });
+      tabPanes.forEach(p => p.style.display = 'none');
+
+      btn.classList.add('active');
+      btn.style.fontWeight = '700';
+      btn.style.color = 'var(--color-primary)';
+      const target = document.getElementById(`tab-${btn.dataset.tab}`);
+      if (target) target.style.display = 'block';
+
+      if (btn.dataset.tab === 'audit') loadAuditLogs();
+    });
+  });
+
+  // Modal open/close
+  function openModal(modal) { if (modal) modal.classList.add('is-open'); }
+  function closeModal(modal) { if (modal) modal.classList.remove('is-open'); }
+  document.querySelectorAll('.modal-close-trigger').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.modal-overlay').forEach(closeModal);
+    });
+  });
+
+  const deptModal = document.getElementById('dept-modal');
+  const teamModal = document.getElementById('team-modal');
+  const memberModal = document.getElementById('add-member-modal');
+
+  document.getElementById('open-add-dept-btn')?.addEventListener('click', () => openModal(deptModal));
+  document.getElementById('open-add-team-btn')?.addEventListener('click', () => openModal(teamModal));
+
+  let departments = [];
+  let teams = [];
+  let employees = [];
+
+  async function loadDepartments() {
+    try {
+      const res = await fetch('/api/organization/departments');
+      const json = await res.json();
+      departments = json.data || [];
+      const grid = document.getElementById('dept-grid');
+      const deptSelect = document.getElementById('team-dept-select');
+      if (deptSelect) {
+        deptSelect.innerHTML = '<option value="">Select Department</option>' + departments.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
+      }
+
+      if (!departments.length) {
+        grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--color-muted); padding: 2rem;">No departments configured yet.</div>';
+        return;
+      }
+
+      grid.innerHTML = departments.map(d => `
+        <div class="card" style="padding: 1.25rem; border-top: 4px solid var(--color-primary);">
+          <div style="font-weight: 700; font-size: var(--font-size-base); color: var(--color-primary);">${d.name}</div>
+          <p style="font-size: var(--font-size-xs); color: var(--color-text-light); margin: 0.5rem 0 1rem; min-height: 32px;">
+            ${d.description || 'No description provided.'}
+          </p>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border); padding-top: 0.75rem; font-size: var(--font-size-xs); color: var(--color-muted);">
+            <span>Teams: <strong>${d.team_count || 0}</strong></span>
+            <span>Created ${new Date(d.created_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+      `).join('');
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function loadTeams() {
+    try {
+      const res = await fetch('/api/organization/teams');
+      const json = await res.json();
+      teams = json.data || [];
+      const grid = document.getElementById('teams-grid');
+
+      if (!teams.length) {
+        grid.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: var(--color-muted); padding: 2rem;">No teams configured yet.</div>';
+        return;
+      }
+
+      grid.innerHTML = teams.map(t => `
+        <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+              <h4 style="font-size: var(--font-size-base); font-weight: 700; color: var(--color-primary); margin: 0;">${t.name}</h4>
+              <span class="badge badge-category">${t.department_name || 'General'}</span>
+            </div>
+            <p style="font-size: var(--font-size-xs); color: var(--color-text-light); margin-bottom: 0.75rem;">
+              ${t.description || 'Dedicated organizational team.'}
+            </p>
+            <div style="background-color: var(--color-surface-subtle); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); font-size: var(--font-size-xs); margin-bottom: 0.75rem;">
+              <span style="color: var(--color-muted);">Lead:</span>
+              <strong style="color: var(--color-text); margin-left: 0.25rem;">${t.lead_name || 'Unassigned'}</strong>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border); padding-top: 0.75rem;">
+            <span style="font-size: var(--font-size-xs); color: var(--color-muted);">Members: <strong>${t.member_count || 0}</strong></span>
+            {% if current_user.role in ['super_admin', 'admin_hr', 'team_lead'] %}
+            <button class="btn btn-ghost btn-sm open-add-member-btn" data-team-id="${t.id}" data-team-name="${t.name}">
+              + Add Member
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      `).join('');
+
+      document.querySelectorAll('.open-add-member-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          document.getElementById('target-team-id').value = b.dataset.teamId;
+          document.getElementById('member-modal-title').textContent = `Add Member to ${b.dataset.teamName}`;
+          openModal(memberModal);
+        });
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function loadEmployeesForSelect() {
+    try {
+      const res = await fetch('/api/employees');
+      const json = await res.json();
+      employees = Array.isArray(json.data) ? json.data : (json.data?.employees || []);
+      const leadSelect = document.getElementById('team-lead-select');
+      const memberSelect = document.getElementById('member-user-select');
+
+      const leadOptions = employees.filter(e => e.role === 'team_lead').map(e => `<option value="${e.id}">${e.full_name || e.username} (@${e.username}) — ${e.role}</option>`).join('');
+      const memberOptions = employees.filter(e => !['super_admin', 'admin', 'admin_hr'].includes(e.role)).map(e => `<option value="${e.id}">${e.full_name || e.username} (@${e.username})</option>`).join('');
+      if (leadSelect) leadSelect.innerHTML = '<option value="">None / Assign Later</option>' + leadOptions;
+      if (memberSelect) memberSelect.innerHTML = '<option value="">Select Employee</option>' + memberOptions;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function loadAuditLogs() {
+    const tbody = document.getElementById('audit-tbody');
+    if (!tbody) return;
+    try {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">Loading audit records...</td></tr>';
+      const res = await fetch('/api/organization/audit-logs');
+      const json = await res.json();
+      const logs = Array.isArray(json.data) ? json.data : (json.data?.logs || []);
+
+      if (!logs.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--color-muted); padding: 2rem;">No audit logs recorded yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = logs.map(l => `
+        <tr>
+          <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(l.created_at).toLocaleString()}</td>
+          <td style="font-weight: 600;">${l.actor_name || 'System'}</td>
+          <td><span class="badge badge-category">${l.action}</span></td>
+          <td style="font-size: var(--font-size-xs);">${l.target_type || ''} ${l.target_id ? '#' + l.target_id : ''}</td>
+          <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${l.ip_address || '—'}</td>
+        </tr>
+      `).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" style="color: var(--color-danger); text-align: center; padding: 2rem;">${e.message}</td></tr>`;
+    }
+  }
+
+  document.getElementById('refresh-audit-btn')?.addEventListener('click', loadAuditLogs);
+
+  // Forms
+  document.getElementById('dept-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/organization/departments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({
+          name: document.getElementById('dept-name').value.trim(),
+          description: document.getElementById('dept-desc').value.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+      showToast('Department created successfully!', 'success');
+      closeModal(deptModal);
+      e.target.reset();
+      loadDepartments();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('team-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/organization/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({
+          name: document.getElementById('team-name').value.trim(),
+          department_id: document.getElementById('team-dept-select').value,
+          lead_id: document.getElementById('team-lead-select').value || null,
+          description: document.getElementById('team-desc').value.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+      showToast('Team created successfully!', 'success');
+      closeModal(teamModal);
+      e.target.reset();
+      loadTeams();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  document.getElementById('add-member-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const teamId = document.getElementById('target-team-id').value;
+    try {
+      const res = await fetch(`/api/organization/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({
+          user_id: document.getElementById('member-user-select').value,
+          role_in_team: document.getElementById('member-role').value.trim()
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || `Request failed (${res.status})`);
+      showToast('Team member added!', 'success');
+      closeModal(memberModal);
+      e.target.reset();
+      loadTeams();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  loadDepartments();
+  loadTeams();
+  loadEmployeesForSelect();
+});
+</script>
+{% endblock %}

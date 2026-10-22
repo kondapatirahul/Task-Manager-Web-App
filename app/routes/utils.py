@@ -1,9 +1,10 @@
 """
-Shared API response helpers and authorization decorators.
+Shared API response helpers, authorization decorators, and enterprise utilities.
 """
 from functools import wraps
-from flask import jsonify
+from flask import jsonify, request
 from flask_login import current_user
+from app import db
 
 
 # ── JSON envelope helpers ──────────────────────────────────────────────────────
@@ -66,7 +67,6 @@ def active_account_required(fn):
         if not current_user.is_authenticated:
             return api_error('Authentication required.', 401)
         # Raw scalar bypasses the ORM identity-map / cached proxy
-        from app import db
         from sqlalchemy import text
         result = db.session.execute(
             text('SELECT account_active FROM users WHERE id = :uid'),
@@ -80,3 +80,57 @@ def active_account_required(fn):
             )
         return fn(*args, **kwargs)
     return wrapped
+
+
+# ── Enterprise Utilities ───────────────────────────────────────────────────────
+
+def send_notification(user_id, title, message, link=None, notif_type='system', idempotency_key=None):
+    """
+    Create a persistent in-app notification with optional duplicate-prevention.
+    """
+    from app.models import Notification
+    try:
+        if idempotency_key:
+            existing = Notification.query.filter_by(idempotency_key=idempotency_key).first()
+            if existing:
+                return existing
+        notif = Notification(
+            user_id=user_id,
+            title=title,
+            message=message,
+            link=link,
+            type=notif_type,
+            idempotency_key=idempotency_key
+        )
+        db.session.add(notif)
+        db.session.commit()
+        return notif
+    except Exception:
+        db.session.rollback()
+        return None
+
+
+def log_audit(action, entity_type, entity_id=None, details=None):
+    """
+    Record an enterprise audit event with author, IP, and entity context.
+    """
+    from app.models import AuditLog
+    try:
+        uid = current_user.id if current_user.is_authenticated else None
+        org_id = getattr(current_user, 'organization_id', None) if current_user.is_authenticated else None
+        ip = request.remote_addr if request else None
+        entry = AuditLog(
+            organization_id=org_id,
+            user_id=uid,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            details=details,
+            ip_address=ip
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return entry
+    except Exception:
+        db.session.rollback()
+        return None

@@ -241,3 +241,20 @@ All endpoints return a uniform JSON envelope:
 
 ## License & Credits
 Developed with modern software craftsmanship for the TaskNest Web Project.
+
+## TaskNest repair bundle notes (October 2026)
+
+This repair pass fixes several integration issues found during browser review:
+
+- Public `/` stays on the two-column homepage even if a session exists; API `401` responses no longer trigger a global browser redirect.
+- Home navigation includes role-specific Admin, Team Lead, and Employee sign-in routes.
+- Admin roles (`admin` as well as `super_admin` and legacy `admin_hr`) route to the Admin dashboard after sign-in.
+- Employee directory handles the API's actual response shape (`data` is an array), so employee names can render.
+- Task messages accept multipart form submissions and optional attachments.
+- Work submission upload flow stores the attachment first and links its ID to the submission; review requests use the actual nested endpoint and request field names.
+- Header avatar opens Profile.
+- Attendance's current-shift duration stays live in `HH:MM:SS` and Today's Hours updates during an active shift.
+- Added a task-priority recommendation panel using task priority, due-date urgency, and status.
+- Added role-specific dashboard accent palettes and real About/Help homepage sections.
+
+This is a targeted repair pass, not a claim that every planned enterprise feature (notably full project/milestone dependency management, configurable custom recurrence rules, and a dedicated focus analytics module) is complete. Run the tests and manually verify workflows in the target Windows environment before deployment.
