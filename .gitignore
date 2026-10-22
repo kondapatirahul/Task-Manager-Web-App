@@ -5,8 +5,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .env
-instance/*.db
-instance/*.sqlite
+instance/
 *.db
 *.sqlite3
 .pytest_cache/

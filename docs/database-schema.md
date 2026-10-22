@@ -187,23 +187,118 @@ Stores actionable task records, priority flags, statuses, deadlines, and ownersh
 
 ---
 
-## 8. 	ask_status_history Table
-Stores immutable audit log records for every status transition and review event on a task.
+## 8. `task_status_history` Table
+Stores immutable audit log records for every status transition, review decision, comment, and upload event on a task.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| id | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique history record identifier |
-| 	ask_id | INTEGER | NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE) | Associated task identifier |
-| changed_by_id | INTEGER | NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL) | User who triggered the status change |
-| old_status | VARCHAR(30) | NULLABLE | Previous task status |
-| 
-ew_status | VARCHAR(30) | NOT NULL | New task status |
-| comment | TEXT | NULLABLE | Transition reason, review notes, or submission summary |
-| created_at | DATETIME | NOT NULL, DEFAULT utcnow | Timestamp of status event |
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique history record identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `changed_by_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | User who triggered the status change |
+| `old_status` | `VARCHAR(30)` | `NULLABLE` | Previous task status |
+| `new_status` | `VARCHAR(30)` | `NOT NULL` | New task status |
+| `comment` | `TEXT` | `NULLABLE` | Transition reason, review notes, or submission summary |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Timestamp of status event |
 
 - **Foreign Keys**:
-  - 	ask_id references 	asks.id (ondelete='CASCADE').
-  - changed_by_id references users.id (ondelete='SET NULL').
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `changed_by_id` references `users.id` (`ondelete='SET NULL'`).
+
+---
+
+## 9. `task_comments` Table
+Stores chronological task-centered communication messages and discussion questions.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique comment record identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `user_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Author user identifier |
+| `content` | `TEXT` | `NOT NULL` | Written message content (supports `@username` mentions) |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Message timestamp |
+| `updated_at` | `DATETIME` | `NULLABLE` | Last edit timestamp |
+
+- **Foreign Keys & Cascades**:
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `user_id` references `users.id` (`ondelete='SET NULL'`).
+  - `attachments`: 1-to-many relationship with `TaskAttachment` (`cascade='all, delete-orphan'`).
+
+---
+
+## 10. `task_submissions` Table
+Preserves complete work submission cycles and Team Lead review audit history.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique submission identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `submitted_by_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Employee submitter identifier |
+| `summary` | `TEXT` | `NOT NULL` | Written summary of deliverables, verification, notes |
+| `status` | `VARCHAR(30)` | `NOT NULL, DEFAULT 'pending_review'` | Status: `pending_review`, `approved`, `changes_requested` |
+| `reviewed_by_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Reviewing Team Lead / Admin |
+| `reviewed_at` | `DATETIME` | `NULLABLE` | Review decision timestamp |
+| `review_feedback` | `TEXT` | `NULLABLE` | Review feedback or approval notes |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Initial submission timestamp |
+
+- **Foreign Keys & Cascades**:
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `submitted_by_id` references `users.id` (`ondelete='SET NULL'`).
+  - `reviewed_by_id` references `users.id` (`ondelete='SET NULL'`).
+  - `attachments`: 1-to-many relationship with `TaskAttachment` deliverables (`cascade='all, delete-orphan'`).
+
+---
+
+## 11. `task_attachments` Table
+Stores metadata for all task-associated files outside the database.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique attachment identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `uploader_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Uploading user identifier |
+| `comment_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (task_comments.id ON DELETE CASCADE)` | Associated comment (for message attachments) |
+| `submission_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (task_submissions.id ON DELETE CASCADE)` | Associated submission (for deliverable files) |
+| `attachment_type` | `VARCHAR(20)` | `NOT NULL, DEFAULT 'comment'` | Type: `reference`, `comment`, `submission` |
+| `original_filename` | `VARCHAR(255)` | `NOT NULL` | Original user-supplied filename |
+| `storage_name` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Random UUID storage filename on disk |
+| `file_size` | `INTEGER` | `NOT NULL` | File byte length |
+| `file_type` | `VARCHAR(100)` | `NOT NULL` | Verified MIME type |
+| `file_extension` | `VARCHAR(20)` | `NOT NULL` | Normalized lowercase extension |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Upload timestamp |
+
+- **Foreign Keys & Cascades**:
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `comment_id` references `task_comments.id` (`ondelete='CASCADE'`).
+  - `submission_id` references `task_submissions.id` (`ondelete='CASCADE'`).
+  - `uploader_id` references `users.id` (`ondelete='SET NULL'`).
+
+---
+
+## Private File Storage Architecture & Security
+TaskNest implements strict durable file separation outside the database:
+
+1. **Storage Isolation**:
+   - Files are stored in `instance/uploads/task_<task_id>/` outside the public static directory.
+   - Client filenames are never used as filesystem paths. Storage names follow strictly `uuid4().hex + '.' + extension`.
+2. **Deep Content & Magic Byte Validation**:
+   - Extension whitelist: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.docx`, `.xlsx`, `.txt`.
+   - Magic bytes inspection:
+     - PDF: `%PDF-` signature.
+     - PNG: `\x89PNG\r\n\x1a\n` signature.
+     - JPEG: `\xff\xd8\xff` header.
+     - DOCX / XLSX: ZIP container signature `PK\x03\x04`.
+     - TXT: Valid UTF-8 encoding with no binary null bytes (`\x00`).
+   - Maximum file size: Configurable (default `10 MB`). Maximum files per batch: `5`.
+3. **Path Traversal & Download Authorization**:
+   - `os.path.commonpath([dest_path, upload_root]) == upload_root` assertions prevent traversal.
+   - Every file download and preview requires active user session authentication and task authorization.
+   - Unauthenticated or unauthorized download requests are rejected with `401` or `403`.
+   - Previews enforce `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` and `X-Content-Type-Options: nosniff`.
+4. **Lifecycle & Cleanup**:
+   - Failed file validations or database transaction failures automatically remove staged files to avoid orphan files.
+   - Deleting a task cleanly removes its disk directory recursively via `shutil.rmtree()`.
+
+---
 
 ## Database Initialization & Automatic Migrations
 The database schema can be initialized at any time from the command line:
@@ -215,4 +310,4 @@ flask --app run.py init-db
 Or via direct python startup (`python run.py`), which calls `db.create_all()` within application context to ensure all tables exist safely without dropping existing data.
 
 ### Automated Schema Evolution:
-`app/__init__.py` incorporates an automatic SQLite schema inspector that scans the `users` and `tasks` tables upon startup and dynamically executes non-destructive `ALTER TABLE ADD COLUMN` statements for newly introduced columns (`role`, `account_active`, `organization_id`, `department_id`, `job_title`, `phone`, `reports_to_id` on `users`; `team_id`, `assigned_to_id` on `tasks`), ensuring zero data loss across upgrades.
+`app/__init__.py` incorporates an automatic SQLite schema inspector that scans tables upon startup and dynamically executes non-destructive `ALTER TABLE ADD COLUMN` statements for newly introduced columns across migrations, ensuring zero data loss across upgrades.

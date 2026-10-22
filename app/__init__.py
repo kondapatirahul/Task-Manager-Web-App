@@ -25,15 +25,49 @@ def create_app(test_config=None):
         pass
 
     default_db_path = os.path.join(app.instance_path, 'tasks.db')
+    default_upload_path = os.getenv('TASKNEST_UPLOAD_FOLDER', os.path.join(app.instance_path, 'uploads'))
+    try:
+        os.makedirs(default_upload_path, exist_ok=True)
+    except OSError:
+        pass
+
     app.config.from_mapping(
         SECRET_KEY=os.getenv('SECRET_KEY', 'tasknest-dev-secret-key-change-in-prod'),
         SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', f'sqlite:///{default_db_path}'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         CSRF_ENABLED=True,
+        UPLOAD_FOLDER=default_upload_path,
+        MAX_CONTENT_LENGTH=25 * 1024 * 1024,
+        MAX_ATTACHMENT_SIZE=10 * 1024 * 1024,
+        MAX_ATTACHMENTS_PER_MESSAGE=5,
     )
 
     if test_config:
         app.config.update(test_config)
+
+    from werkzeug.exceptions import HTTPException
+
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(e):
+        if request.path.startswith('/api/'):
+            msg = e.name if e.code in (404, 405) else (e.description or e.name)
+            response = app.response_class(
+                response=app.json.dumps({'ok': False, 'error': msg}),
+                status=e.code,
+                mimetype='application/json'
+            )
+            for key, val in e.get_headers():
+                if key.lower() not in ('content-type', 'content-length'):
+                    response.headers[key] = val
+            return response
+        return e
+
+    @app.errorhandler(Exception)
+    def handle_unhandled_exception(e):
+        if request.path.startswith('/api/'):
+            app.logger.error(f"Unhandled API error: {e}", exc_info=True)
+            return {'ok': False, 'error': 'Internal server error'}, 500
+        raise e
 
     # Initialize extensions
     db.init_app(app)
