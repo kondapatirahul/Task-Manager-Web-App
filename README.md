@@ -51,12 +51,12 @@ Task-Manager-Web-App/
 │   ├── models.py             # User, Category, and Task database models
 │   └── routes/
 │       ├── __init__.py
-│       ├── web.py            # Page routes (landing, login, signup, dashboard, tasks, categories, profile)
-│       ├── auth.py           # /api/auth endpoints (signup, login, logout, me)
+│       ├── web.py            # Page routes (landing, login, signup, dashboard, tasks, categories, profile, settings)
+│       ├── auth.py           # /api/auth endpoints (signup, login, logout, me, profile, change-password)
 │       ├── tasks.py          # /api/tasks endpoints (CRUD, search, filters, complete toggle)
 │       ├── categories.py     # /api/categories endpoints (CRUD, safe unassign)
 │       ├── stats.py          # /api/stats endpoint (real metrics, overdue calculations)
-│       └── utils.py          # Standard JSON API response envelope helpers
+│       └── utils.py          # Standard JSON API envelopes & role authorization decorators
 ├── templates/
 │   ├── base.html             # Base layout, meta tags, CSRF, fonts, global task modal
 │   ├── _app_layout.html      # App shell (forest-green sidebar, header, user avatar)
@@ -66,17 +66,20 @@ Task-Manager-Web-App/
 │   ├── dashboard.html        # Main dashboard with 4 metric cards & upcoming panel
 │   ├── tasks.html            # My Tasks view with multi-filter bar and search
 │   ├── categories.html       # Category workspace management
-│   └── profile.html          # User account info and session details
+│   ├── profile.html          # User account info and session details
+│   └── settings.html         # User settings (display name edit, secure password change)
 ├── static/
 │   ├── css/
 │   │   └── style.css         # Complete design system & custom properties
 │   └── js/
 │       ├── api.js            # Fetch wrapper with CSRF injection & toast system
 │       ├── auth.js           # Auth forms, validation, and password toggles
+│       ├── settings.js       # Profile edit & secure change-password handler
 │       └── tasks.js          # Task manager, live filters, modals, and stats
 ├── tests/
 │   ├── conftest.py           # Isolated in-memory SQLite fixtures & test clients
 │   ├── test_auth.py          # Registration, login, hashing, session tests
+│   ├── test_employee_access.py # Role-based access, profile updates, password change tests
 │   ├── test_tasks.py         # Task CRUD, filters, complete/reopen, user isolation
 │   ├── test_categories.py    # Category CRUD, duplicate prevention, safe deletion
 │   ├── test_stats.py         # Real metric calculations & overdue task rules
