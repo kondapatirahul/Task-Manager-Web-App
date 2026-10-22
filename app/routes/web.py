@@ -19,13 +19,9 @@ def check_account_active():
     Before every page request on this blueprint: if the user is logged in
     but their account has been deactivated, force-log them out and redirect
     to the login page.
-
-    Uses a raw SQL scalar query to bypass SQLAlchemy's identity-map cache
-    so that admin-side deactivation takes effect on the very next request.
     """
     if current_user.is_authenticated:
         from app import db
-        # Raw scalar bypasses the ORM identity-map so we always read from DB
         result = db.session.execute(
             text('SELECT account_active FROM users WHERE id = :uid'),
             {'uid': current_user.id}
@@ -37,8 +33,7 @@ def check_account_active():
             return redirect(url_for('web.login_page'))
 
 
-
-# ── Public routes (no authentication required) ─────────────────────────────────
+# ── Public routes ──────────────────────────────────────────────────────────────
 
 @web_bp.route('/')
 def index():
@@ -61,7 +56,7 @@ def signup_page():
     return render_template('signup.html')
 
 
-# ── Private routes (login + active account required) ──────────────────────────
+# ── Private routes ─────────────────────────────────────────────────────────────
 
 @web_bp.route('/dashboard')
 @login_required
@@ -81,6 +76,36 @@ def categories():
     return render_template('categories.html', active_page='categories')
 
 
+@web_bp.route('/attendance')
+@login_required
+def attendance():
+    return render_template('attendance.html', active_page='attendance')
+
+
+@web_bp.route('/calendar')
+@login_required
+def calendar():
+    return render_template('calendar.html', active_page='calendar')
+
+
+@web_bp.route('/employees')
+@login_required
+def employees():
+    return render_template('employees.html', active_page='employees')
+
+
+@web_bp.route('/organization')
+@login_required
+def organization():
+    return render_template('organization.html', active_page='organization')
+
+
+@web_bp.route('/reports')
+@login_required
+def reports():
+    return render_template('reports.html', active_page='reports')
+
+
 @web_bp.route('/profile')
 @login_required
 def profile():
@@ -90,5 +115,4 @@ def profile():
 @web_bp.route('/settings')
 @login_required
 def settings():
-    """Account settings: display-name editing and password change."""
     return render_template('settings.html', active_page='settings')
