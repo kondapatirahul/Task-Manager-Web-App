@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block body %}
-<div class="app-layout">
+<div class="app-layout role-theme-{{ current_user.role }}">
   <!-- Mobile Sidebar Backdrop -->
   <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
@@ -137,9 +137,9 @@
           {{ current_user.role | replace('_', ' ') | title }}
         </span>
 
-        <div class="user-avatar-badge" title="{{ current_user.full_name or current_user.username }}">
+        <a href="{{ url_for('web.profile') }}" class="user-avatar-badge" title="Open your profile" aria-label="Open your profile" style="text-decoration:none; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;">
           {{ (current_user.full_name or current_user.username)[:1].upper() }}
-        </div>
+        </a>
       </div>
     </header>
 

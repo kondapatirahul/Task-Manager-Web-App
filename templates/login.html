@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Sign In — TaskNest{% endblock %}
+{% block title %}{{ login_heading or "Sign In" }} — TaskNest{% endblock %}
 
 {% block body %}
 <div class="auth-container">
@@ -14,13 +14,13 @@
   </div>
 
   <div class="auth-card">
-    <h1 class="auth-card-title">Welcome Back</h1>
+    <h1 class="auth-card-title">{{ login_heading or "Welcome Back" }}</h1>
     <p class="auth-card-subtitle">Sign in to your account to continue managing your workspace.</p>
 
     <!-- Error message banner -->
     <div id="login-error" class="alert alert-danger" style="display: none;" role="alert"></div>
 
-    <form id="login-form">
+    <form id="login-form" data-required-role="{{ expected_role or '' }}">
       <div class="form-group">
         <label class="form-label" for="email">Email Address <span class="required">*</span></label>
         <div class="input-with-icon">
@@ -47,6 +47,7 @@
           <input type="checkbox" id="remember" name="remember">
           <span>Remember me</span>
         </label>
+        <a href="{{ url_for('web.forgot_password_page') }}">Forgot password?</a>
       </div>
 
       <button type="submit" class="btn btn-primary" style="width: 100%;">
@@ -55,7 +56,11 @@
     </form>
 
     <div class="auth-footer">
-      Don't have an account? <a href="{{ url_for('web.signup_page') }}">Create one here</a>
+      {% if expected_role in ('admin', 'team_lead') %}
+        Admin and Team Lead accounts are created by your organization administrator.
+      {% else %}
+        New to TaskNest? <a href="{{ url_for('web.signup_page') }}">Create an employee account</a>
+      {% endif %}<br><a href="{{ url_for('web.index') }}">Back to homepage</a>
     </div>
   </div>
 </div>

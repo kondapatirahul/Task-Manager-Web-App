@@ -8,7 +8,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_, desc, asc, case
 from app import db
 from app.models import (
-    Task, Category, SubTask, User, Team,
+    Task, Category, SubTask, User, Team, TeamMember,
     STATUS_TODO, STATUS_IN_PROGRESS, STATUS_BLOCKED, STATUS_IN_REVIEW,
     STATUS_CHANGES_REQUESTED, STATUS_COMPLETED, STATUS_PENDING,
     ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD
@@ -21,7 +21,7 @@ from app.routes.utils import (
 tasks_bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
 
 VALID_PRIORITIES = {'low', 'medium', 'high', 'urgent'}
-VALID_CREATE_STATUSES = {'pending', 'completed', 'todo'}
+VALID_CREATE_STATUSES = {'pending', 'todo', STATUS_IN_PROGRESS, STATUS_BLOCKED, STATUS_IN_REVIEW, STATUS_COMPLETED}
 VALID_UPDATE_STATUSES = {
     STATUS_TODO, STATUS_IN_PROGRESS, STATUS_BLOCKED,
     STATUS_IN_REVIEW, STATUS_CHANGES_REQUESTED, STATUS_COMPLETED,
@@ -79,15 +79,15 @@ def get_tasks():
     # If employee: see tasks assigned to them or created by them
     if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
         query = Task.query
-    elif current_user.is_team_lead and current_user.team_id:
-        query = Task.query.filter(
-            or_(
-                Task.user_id == current_user.id,
-                Task.assignee_id == current_user.id,
-                Task.creator_id == current_user.id,
-                Task.team_id == current_user.team_id
-            )
-        )
+    elif current_user.is_team_lead:
+        led_team_ids = [team.id for team in Team.query.filter_by(lead_id=current_user.id).all()]
+        team_scope = [Task.team_id.in_(led_team_ids)] if led_team_ids else []
+        query = Task.query.filter(or_(
+            Task.user_id == current_user.id,
+            Task.assignee_id == current_user.id,
+            Task.creator_id == current_user.id,
+            *team_scope
+        ))
     else:
         query = Task.query.filter(
             or_(
@@ -227,16 +227,21 @@ def create_task():
     start_date = parse_date(data.get('start_date'))
     completed_at = utc_now() if status == 'completed' else None
 
-    # Assignee handling (Enterprise capability)
+    # Team leads can assign only to active members of teams they lead.
     assignee_id = data.get('assignee_id')
+    led_teams = Team.query.filter_by(lead_id=current_user.id).all() if current_user.is_team_lead else []
+    led_team_ids = {team.id for team in led_teams}
+    if current_user.is_team_lead and not led_team_ids:
+        return api_error('Your account is not assigned as the lead of a team yet. Ask an administrator to assign your team first.', 403)
+
     if assignee_id:
         try:
             assignee_id = int(assignee_id)
-            assignee_user = User.query.get(assignee_id)
-            if not assignee_user or not assignee_user.account_active:
-                assignee_id = current_user.id
         except (ValueError, TypeError):
-            assignee_id = current_user.id
+            return api_error('Select a valid assignee.', 400)
+        assignee_user = User.query.filter_by(id=assignee_id, account_active=True).first()
+        if not assignee_user:
+            return api_error('The selected assignee is not an active account.', 400)
     else:
         assignee_id = current_user.id
 
@@ -245,9 +250,26 @@ def create_task():
         try:
             team_id = int(team_id)
         except (ValueError, TypeError):
-            team_id = None
+            return api_error('Select a valid team.', 400)
+    elif current_user.is_team_lead:
+        # If the lead manages multiple teams, infer from the selected member's membership.
+        memberships = TeamMember.query.filter(TeamMember.user_id == assignee_id, TeamMember.team_id.in_(led_team_ids)).all()
+        team_id = memberships[0].team_id if memberships else next(iter(led_team_ids))
     elif current_user.team_id:
         team_id = current_user.team_id
+    else:
+        team_id = None
+
+    if current_user.is_team_lead:
+        if team_id not in led_team_ids:
+            return api_error('You can only assign tasks within a team you lead.', 403)
+        is_member = (TeamMember.query.filter_by(team_id=team_id, user_id=assignee_id).first()
+                     or Team.query.filter_by(id=team_id, lead_id=assignee_id).first()
+                     or User.query.filter_by(id=assignee_id, team_id=team_id).first())
+        if not is_member:
+            return api_error('The selected employee is not a member of your team.', 403)
+    elif not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN) and assignee_id != current_user.id:
+        return api_error('Only administrators and team leads can assign tasks to other employees.', 403)
 
     acceptance_criteria = (data.get('acceptance_criteria') or '').strip()
     progress = min(100, max(0, int(data.get('progress') or 0)))

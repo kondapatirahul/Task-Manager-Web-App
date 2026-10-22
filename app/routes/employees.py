@@ -28,6 +28,21 @@ def list_employees():
     """
     query = User.query
 
+    # Directory visibility: admins/HR see the organization; team leads see
+    # only members of teams they lead; employees see only their own profile.
+    if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+        pass
+    elif current_user.is_team_lead:
+        led_team_ids = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+        member_ids = {current_user.id}
+        if led_team_ids:
+            member_ids.update(m.user_id for m in TeamMember.query.filter(TeamMember.team_id.in_(led_team_ids)).all())
+            # Include legacy records whose team_id is populated even if the join row is missing.
+            member_ids.update(u.id for u in User.query.filter(User.team_id.in_(led_team_ids)).all())
+        query = query.filter(User.id.in_(member_ids))
+    else:
+        query = query.filter(User.id == current_user.id)
+
     # Scope to current user's organization if assigned
     if current_user.organization_id:
         query = query.filter(
@@ -87,6 +102,14 @@ def list_employees():
 @active_account_required
 def get_employee(user_id):
     user = User.query.get_or_404(user_id)
+    if not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN) and user.id != current_user.id:
+        if current_user.is_team_lead:
+            led_team_ids = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+            is_member = bool(led_team_ids and TeamMember.query.filter(TeamMember.team_id.in_(led_team_ids), TeamMember.user_id == user.id).first())
+            if not is_member:
+                return api_error('Employee not found or not in your team.', 404)
+        else:
+            return api_error('Employee not found.', 404)
     data = user.to_dict()
 
     # Include recent active task summary

@@ -249,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`/api/employees?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to load employee directory');
       const json = await res.json();
-      const employees = json.data.employees || [];
+      const employees = Array.isArray(json.data) ? json.data : (json.data?.employees || []);
 
       if (employees.length === 0) {
         empTable.innerHTML = `

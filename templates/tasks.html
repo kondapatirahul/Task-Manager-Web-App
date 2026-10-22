@@ -3,6 +3,12 @@
 {% block title %}Tasks & Collaboration — TaskNest Enterprise{% endblock %}
 
 {% block app_content %}
+<section id="smart-priority-panel" class="card" style="margin-bottom:1rem;padding:1rem;border-left:4px solid var(--color-accent);">
+  <div style="display:flex;justify-content:space-between;gap:1rem;align-items:center;flex-wrap:wrap;">
+    <div><h2 style="margin:0 0 .25rem;color:var(--color-primary);font-size:1rem;">What should I work on next?</h2><p id="smart-priority-summary" class="text-muted" style="margin:0;font-size:.85rem;">Loading recommendations from your tasks…</p></div>
+    <span class="badge badge-high">Smart priority</span>
+  </div><div id="smart-priority-list" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-top:.75rem;"></div>
+</section>
 <div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
   <div>
     <h1 class="page-title">Task Management</h1>
@@ -166,6 +172,7 @@
         <div style="display: flex; gap: 1rem; font-size: var(--font-size-xs); color: var(--color-muted);">
           <div>Assignee: <strong id="detail-assignee" style="color: var(--color-text);">—</strong></div>
           <div>Due: <strong id="detail-due" style="color: var(--color-text);">—</strong></div>
+          <div>Assigned by: <strong id="detail-creator" style="color: var(--color-text);">—</strong></div>
         </div>
 
         <!-- Subtasks Checklist -->

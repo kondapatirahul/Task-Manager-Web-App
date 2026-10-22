@@ -82,6 +82,10 @@ def login():
     email    = (data.get('email') or '').strip().lower()
     password = data.get('password') or ''
     remember = bool(data.get('remember', False))
+    requested_role = (data.get('required_role') or '').strip().lower()
+
+    if requested_role not in ('', 'admin', 'team_lead', 'employee'):
+        return api_error('Invalid sign-in type.', 400)
 
     if not email or not password:
         return api_error('Email and password are required.', 400)
@@ -89,6 +93,15 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user or not user.check_password(password):
         return api_error('Invalid email or password.', 401)
+
+    # A role-specific sign-in page may only authenticate matching account types.
+    # Check this before login_user so a wrong-role attempt cannot create a session.
+    if requested_role == 'admin' and user.role not in ('super_admin', 'admin', 'admin_hr'):
+        return api_error('This account does not have administrator access. Use the correct sign-in page.', 403)
+    if requested_role == 'team_lead' and user.role not in ('team_lead', 'super_admin', 'admin', 'admin_hr'):
+        return api_error('This account does not have Team Lead access. Use Employee Login instead.', 403)
+    if requested_role == 'employee' and user.role != 'employee':
+        return api_error('This is not an employee account. Please use the correct sign-in page.', 403)
 
     # Reject deactivated accounts before creating a session
     if not user.account_active:

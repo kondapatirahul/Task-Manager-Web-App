@@ -76,9 +76,16 @@ def departments():
 def teams():
     if request.method == 'GET':
         org_id = current_user.organization_id or 1
-        team_list = Team.query.filter(
+        team_query = Team.query.filter(
             (Team.organization_id == org_id) | (Team.organization_id.is_(None))
-        ).order_by(Team.name.asc()).all()
+        )
+        if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+            pass
+        elif current_user.is_team_lead:
+            team_query = team_query.filter(Team.lead_id == current_user.id)
+        else:
+            team_query = team_query.filter(Team.id.in_([m.team_id for m in TeamMember.query.filter_by(user_id=current_user.id).all()]))
+        team_list = team_query.order_by(Team.name.asc()).all()
         return api_success([t.to_dict() for t in team_list])
 
     # POST — create team
@@ -123,6 +130,12 @@ def teams():
 @active_account_required
 def team_members(team_id):
     team = Team.query.get_or_404(team_id)
+    if not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+        if current_user.is_team_lead:
+            if team.lead_id != current_user.id:
+                return api_error('You can only access teams you lead.', 403)
+        elif not TeamMember.query.filter_by(team_id=team.id, user_id=current_user.id).first():
+            return api_error('You are not a member of this team.', 403)
 
     if request.method == 'GET':
         members = TeamMember.query.filter_by(team_id=team.id).all()

@@ -198,7 +198,7 @@ const TaskManager = {
       const res = await fetch('/api/employees');
       if (res.ok) {
         const json = await res.json();
-        this.employees = json.data.employees || [];
+        this.employees = Array.isArray(json.data) ? json.data : (json.data?.employees || []);
         const assigneeSelect = document.getElementById('task-assignee-select');
         if (assigneeSelect) {
           const currentVal = assigneeSelect.value;
@@ -238,6 +238,37 @@ const TaskManager = {
     });
   },
 
+  renderSmartPriority(tasks) {
+    const summary = document.getElementById('smart-priority-summary');
+    const list = document.getElementById('smart-priority-list');
+    if (!summary || !list) return;
+    const now = new Date();
+    const openTasks = (Array.isArray(tasks) ? tasks : []).filter(task => !['completed', 'cancelled'].includes(String(task.status || '').toLowerCase()));
+    const priorityWeight = { urgent: 100, high: 75, medium: 45, low: 20 };
+    const score = task => {
+      let result = priorityWeight[String(task.priority || 'medium').toLowerCase()] || 45;
+      if (task.due_date) {
+        const due = new Date(`${String(task.due_date).slice(0, 10)}T23:59:59`);
+        const days = Math.ceil((due.getTime() - now.getTime()) / 86400000);
+        if (days < 0) result += 60;
+        else if (days === 0) result += 45;
+        else if (days <= 2) result += 25;
+        else if (days <= 7) result += 10;
+      }
+      if (String(task.status || '').toLowerCase() === 'blocked') result += 15;
+      return result;
+    };
+    openTasks.sort((a, b) => score(b) - score(a));
+    if (!openTasks.length) {
+      summary.textContent = 'You are all caught up. No open tasks need prioritizing.';
+      list.innerHTML = '';
+      return;
+    }
+    const next = openTasks[0];
+    summary.textContent = `Recommended next: ${next.title || 'Untitled task'} · ${next.priority || 'medium'} priority${next.due_date ? ` · Due ${String(next.due_date).slice(0, 10)}` : ''}`;
+    list.innerHTML = openTasks.slice(0, 3).map((task, index) => `<a class="card" style="padding:.75rem;text-decoration:none;color:inherit;" href="/tasks/${encodeURIComponent(task.id)}"><strong>${index + 1}. ${this.escapeHtml(task.title || 'Untitled task')}</strong><div class="text-muted" style="font-size:.8rem;margin-top:.35rem;">${this.escapeHtml(task.priority || 'medium')} priority · ${this.escapeHtml(String(task.status || 'todo').replaceAll('_', ' '))}${task.due_date ? ` · Due ${this.escapeHtml(String(task.due_date).slice(0, 10))}` : ''}</div></a>`).join('');
+  },
+
   async loadTasks() {
     const container = document.getElementById('task-list-container');
     if (!container) return;
@@ -268,6 +299,7 @@ const TaskManager = {
 
       const res = await api('GET', `/tasks?${params.toString()}`);
       this.tasks = res.data || [];
+      this.renderSmartPriority(this.tasks);
       this.renderTasks(this.tasks, container);
       this.renderKanban(this.tasks);
 
@@ -329,6 +361,7 @@ const TaskManager = {
             <span class="badge badge-${task.priority}">${task.priority}</span>
             <span class="badge badge-${task.status}">${task.status.replace('_', ' ')}</span>
             ${task.assignee_name ? `<span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name)}</span>` : ''}
+            ${task.creator_name ? `<span class="badge badge-category">Assigned by ${this.escapeHtml(task.creator_name)}</span>` : ''}
             ${task.recurrence && task.recurrence !== 'none' ? `<span class="badge badge-category">🔁 ${task.recurrence}</span>` : ''}
             ${task.due_date ? `
               <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
@@ -652,6 +685,8 @@ const TaskManager = {
 
     document.getElementById('detail-assignee').textContent = task.assignee_name || 'Self / Unassigned';
     document.getElementById('detail-due').textContent = task.due_date || 'No due date';
+    const creator = document.getElementById('detail-creator');
+    if (creator) creator.textContent = task.creator_name || 'Workspace administrator';
 
     modal.classList.add('is-active');
 
@@ -774,17 +809,13 @@ const TaskManager = {
 
     try {
       const res = await fetch(`/api/tasks/${this.activeTaskId}/messages`, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': csrfToken
-        },
-        body: formData
+        method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: formData
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to send message');
-      textarea.value = '';
-      fileInput.value = '';
-      this.loadMessages(this.activeTaskId);
+      if (!res.ok || json.ok === false) throw new Error(json.error || json.message || 'Failed to send message');
+      textarea.value = ''; fileInput.value = '';
+      showToast('Message sent.', 'success');
+      await this.loadMessages(this.activeTaskId);
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -807,23 +838,23 @@ const TaskManager = {
       container.innerHTML = subs.map(s => `
         <div style="background-color: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.75rem; font-size: var(--font-size-xs);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
-            <span>By <strong>${s.submitted_by_name}</strong> on ${new Date(s.created_at).toLocaleDateString()}</span>
-            <span class="badge ${s.status === 'approved' ? 'badge-completed' : s.status === 'rejected' ? 'badge-overdue' : 'badge-pending'}">${s.status.toUpperCase()}</span>
+            <span>By <strong>${s.submitter_name || s.submitted_by_name || "Employee"}</strong> on ${new Date(s.created_at).toLocaleDateString()}</span>
+            <span class="badge ${s.status === 'approved' ? 'badge-completed' : s.status === 'changes_requested' || s.status === 'rejected' ? 'badge-overdue' : 'badge-pending'}">${s.status.toUpperCase()}</span>
           </div>
-          <div style="color: var(--color-text); margin-bottom: 0.35rem;">${this.escapeHtml(s.message)}</div>
+          <div style="color: var(--color-text); margin-bottom: 0.35rem;">${this.escapeHtml(s.notes || s.message || "") }</div>
           ${s.attachments && s.attachments.length > 0 ? `
             <div style="margin-bottom: 0.35rem;">
               ${s.attachments.map(a => `<a href="/api/files/${a.id}/download" style="color: var(--color-primary); font-weight: 600;">📥 ${this.escapeHtml(a.filename)}</a>`).join(' ')}
             </div>
           ` : ''}
-          ${s.review_feedback ? `
+          ${(s.review_notes || s.review_feedback) ? `
             <div style="background: #FFF9F5; border-left: 2px solid var(--color-accent); padding: 0.4rem; font-size: 0.7rem; color: var(--color-accent);">
-              <strong>Review Feedback:</strong> ${this.escapeHtml(s.review_feedback)}
+              <strong>Review Feedback:</strong> ${this.escapeHtml(s.review_notes || s.review_feedback)}
             </div>
           ` : ''}
-          ${s.status === 'pending' ? `
+          ${['pending','submitted'].includes(s.status) ? `
             <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; justify-content: flex-end;">
-              <button class="btn btn-secondary btn-sm review-action-btn" data-sub-id="${s.id}" data-action="rejected">Request Changes</button>
+              <button class="btn btn-secondary btn-sm review-action-btn" data-sub-id="${s.id}" data-action="request_changes">Request Changes</button>
               <button class="btn btn-primary btn-sm review-action-btn" data-sub-id="${s.id}" data-action="approved">Approve</button>
             </div>
           ` : ''}
@@ -835,27 +866,27 @@ const TaskManager = {
           const subId = btn.dataset.subId;
           const action = btn.dataset.action;
           const feedback = prompt(action === 'approved' ? 'Optional approval notes:' : 'Please enter feedback describing changes needed:');
-          if (action === 'rejected' && !feedback) {
+          if (action === 'request_changes' && !feedback) {
             showToast('Feedback is required when requesting revisions.', 'error');
             return;
           }
 
           const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
           try {
-            const revRes = await fetch(`/api/submissions/${subId}/review`, {
+            const revRes = await fetch(`/api/tasks/${this.activeTaskId}/submissions/${subId}/review`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': csrfToken
               },
               body: JSON.stringify({
-                status: action,
-                feedback: feedback || ''
+                decision: action === 'approved' ? 'approve' : 'request_changes',
+                review_notes: feedback || ''
               })
             });
             const revData = await revRes.json();
-            if (!revRes.ok) throw new Error(revData.message || 'Review action failed');
-            showToast(`Submission ${action}!`, 'success');
+            if (!revRes.ok || revData.ok === false) throw new Error(revData.error || revData.message || 'Review action failed');
+            showToast(action === 'approved' ? 'Submission approved!' : 'Changes requested.', 'success');
             this.loadSubmissions(this.activeTaskId);
             this.loadTasks();
           } catch (err) {
@@ -879,26 +910,30 @@ const TaskManager = {
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const formData = new FormData();
-    formData.append('message', message);
+    formData.append('notes', message);
     if (fileInput.files.length > 0) {
       formData.append('file', fileInput.files[0]);
     }
 
     try {
+      // Upload the file first; the submissions endpoint links saved attachment IDs.
+      let attachmentIds = [];
+      if (fileInput.files.length > 0) {
+        const uploadData = new FormData(); uploadData.append('file', fileInput.files[0]);
+        const uploadRes = await fetch(`/api/tasks/${this.activeTaskId}/attachments`, { method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: uploadData });
+        const uploadJson = await uploadRes.json();
+        if (!uploadRes.ok || uploadJson.ok === false) throw new Error(uploadJson.error || uploadJson.message || 'File upload failed');
+        if (uploadJson.data && uploadJson.data.id) attachmentIds.push(uploadJson.data.id);
+      }
       const res = await fetch(`/api/tasks/${this.activeTaskId}/submissions`, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': csrfToken
-        },
-        body: formData
+        method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+        body: JSON.stringify({notes: message, attachment_ids: attachmentIds})
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to submit work deliverable');
+      if (!res.ok || json.ok === false) throw new Error(json.error || json.message || 'Failed to submit work deliverable');
       showToast('Deliverable submitted for review!', 'success');
-      msgInput.value = '';
-      fileInput.value = '';
-      this.loadSubmissions(this.activeTaskId);
-      this.loadTasks();
+      msgInput.value = ''; fileInput.value = '';
+      await this.loadSubmissions(this.activeTaskId); await this.loadTasks();
     } catch (err) {
       showToast(err.message, 'error');
     }

@@ -70,6 +70,12 @@ def create_app(test_config=None):
 
     @app.after_request
     def set_csrf_cookie(response):
+        # Never let authenticated application pages reappear from browser cache
+        # after logout. Public homepage and public authentication pages remain cacheable.
+        if request.path not in ('/', '/login', '/admin/login', '/lead/login', '/employee/login', '/signup', '/forgot-password') and not request.path.startswith('/static/'):
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
         if 'csrf_token' in session:
             response.set_cookie(
                 'csrf_token',

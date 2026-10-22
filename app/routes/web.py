@@ -60,16 +60,50 @@ def web_roles_required(*roles):
 
 @web_bp.route('/')
 def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('web.dashboard'))
+    # The public homepage must remain visible even for signed-in users.
     return render_template('index.html')
+
+
+def _role_home(role):
+    if role in ('super_admin', 'admin', 'admin_hr'):
+        return url_for('web.admin_dashboard')
+    if role == 'team_lead':
+        return url_for('web.lead_dashboard')
+    return url_for('web.employee_dashboard')
 
 
 @web_bp.route('/login')
 def login_page():
     if current_user.is_authenticated:
-        return redirect(url_for('web.dashboard'))
-    return render_template('login.html')
+        return redirect(_role_home(current_user.role))
+    return render_template('login.html', expected_role='')
+
+
+@web_bp.route('/admin/login')
+def admin_login_page():
+    if current_user.is_authenticated:
+        if current_user.role in ('super_admin', 'admin', 'admin_hr'):
+            return redirect(url_for('web.admin_dashboard'))
+        return redirect(url_for('web.unauthorized_page'))
+    return render_template('login.html', expected_role='admin', login_heading='Administrator Sign In')
+
+
+@web_bp.route('/lead/login')
+def lead_login_page():
+    if current_user.is_authenticated:
+        if current_user.role == 'team_lead' or current_user.role in ('super_admin', 'admin', 'admin_hr'):
+            return redirect(_role_home(current_user.role))
+        return redirect(url_for('web.unauthorized_page'))
+    return render_template('login.html', expected_role='team_lead', login_heading='Team Lead Sign In')
+
+
+@web_bp.route('/employee/login')
+def employee_login_page():
+    if current_user.is_authenticated:
+        if current_user.role == 'employee':
+            return redirect(url_for('web.employee_dashboard'))
+        return redirect(_role_home(current_user.role))
+    return render_template('login.html', expected_role='employee', login_heading='Employee Sign In')
 
 
 @web_bp.route('/signup')
@@ -101,9 +135,12 @@ def unauthorized_page():
 # ── Core Dashboard Route (Role Adaptive) ──────────────────────────────────────
 
 @web_bp.route('/dashboard')
-@login_required
 def dashboard():
-    return render_template('dashboard.html', active_page='dashboard')
+    # Keep the public homepage as the default for anonymous visitors.
+    if not current_user.is_authenticated:
+        return redirect(url_for('web.index'))
+    # A generic dashboard URL must never show a role-neutral page or bypass role routing.
+    return redirect(_role_home(current_user.role))
 
 
 # ── Admin Module Routes (/admin/*) ───────────────────────────────────────────

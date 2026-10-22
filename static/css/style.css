@@ -1534,3 +1534,30 @@ textarea.form-control {
   border: 1px solid #FCD34D;
 }
 
+
+
+/* Role-specific enterprise dashboard themes */
+.role-theme-super_admin, .role-theme-admin { --color-primary: #8A4B16; --color-primary-hover: #713A10; --color-primary-light: #B66B2A; --color-primary-subtle: #FFF0DF; --color-accent: #C86D3A; --color-surface-subtle: #FFF7EE; --color-border: #EAD7C4; }
+.role-theme-team_lead { --color-primary: #175B55; --color-primary-hover: #124841; --color-primary-light: #28766E; --color-primary-subtle: #E5F4F0; --color-accent: #3A8C7E; --color-surface-subtle: #F0F8F6; --color-border: #CDE4DE; }
+.user-avatar-badge:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+
+
+/* Attendance timesheet: stable column spacing and readable timestamps. */
+.attendance-timesheet-table {
+  width: 100%;
+  min-width: 780px;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.attendance-timesheet-table th,
+.attendance-timesheet-table td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.attendance-timesheet-table th { font-size: 0.82rem; color: var(--color-muted); font-weight: 700; }
+.attendance-timesheet-table td { border-top: 1px solid var(--color-border-subtle); }
+.attendance-timesheet-table th:last-child,
+.attendance-timesheet-table td:last-child { min-width: 220px; white-space: normal; }

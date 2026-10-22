@@ -54,7 +54,7 @@ def task_messages(task_id):
         return api_success([m.to_dict() for m in msgs])
 
     # POST message
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or request.form
     content = (data.get('content') or '').strip()
     if not content:
         return api_error('Message content cannot be empty.', 400)
@@ -63,6 +63,21 @@ def task_messages(task_id):
 
     msg = TaskMessage(task_id=task.id, user_id=current_user.id, content=content)
     db.session.add(msg)
+    db.session.flush()
+    uploaded = request.files.get('file')
+    if uploaded and uploaded.filename:
+        if not allowed_file(uploaded.filename):
+            db.session.rollback()
+            return api_error(f"File extension not permitted. Allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}", 400)
+        filename = secure_filename(uploaded.filename)
+        uploaded.seek(0, os.SEEK_END); size = uploaded.tell(); uploaded.seek(0)
+        if size > MAX_FILE_SIZE:
+            db.session.rollback(); return api_error('File exceeds maximum allowed size of 16MB.', 400)
+        ext = filename.rsplit('.', 1)[1].lower()
+        upload_dir = os.path.join(current_app.instance_path, 'uploads'); os.makedirs(upload_dir, exist_ok=True)
+        saved_path = os.path.join(upload_dir, f"{uuid.uuid4().hex}.{ext}")
+        uploaded.save(saved_path)
+        db.session.add(TaskAttachment(task_id=task.id, message_id=msg.id, user_id=current_user.id, filename=filename, file_path=saved_path, file_size=size, content_type=uploaded.content_type))
     db.session.commit()
 
     # Notify counterparty (if sender is assignee, notify creator; else notify assignee)
@@ -189,8 +204,8 @@ def task_submissions(task_id):
         return api_success([s.to_dict() for s in subs])
 
     # POST work submission
-    data = request.get_json(silent=True) or {}
-    notes = (data.get('notes') or '').strip()
+    data = request.get_json(silent=True) or request.form
+    notes = (data.get('notes') or data.get('message') or '').strip()
     if not notes:
         return api_error('Submission notes/summary are required.', 400)
 

@@ -227,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadDepartments() {
     try {
-      const res = await fetch('/api/departments');
+      const res = await fetch('/api/organization/departments');
       const json = await res.json();
       departments = json.data || [];
       const grid = document.getElementById('dept-grid');
@@ -260,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function loadTeams() {
     try {
-      const res = await fetch('/api/teams');
+      const res = await fetch('/api/organization/teams');
       const json = await res.json();
       teams = json.data || [];
       const grid = document.getElementById('teams-grid');
@@ -312,13 +312,14 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/employees');
       const json = await res.json();
-      employees = json.data.employees || [];
+      employees = Array.isArray(json.data) ? json.data : (json.data?.employees || []);
       const leadSelect = document.getElementById('team-lead-select');
       const memberSelect = document.getElementById('member-user-select');
 
-      const options = employees.map(e => `<option value="${e.id}">${e.full_name || e.username} (@${e.username})</option>`).join('');
-      if (leadSelect) leadSelect.innerHTML = '<option value="">None / Assign Later</option>' + options;
-      if (memberSelect) memberSelect.innerHTML = '<option value="">Select Employee</option>' + options;
+      const leadOptions = employees.filter(e => e.role === 'team_lead').map(e => `<option value="${e.id}">${e.full_name || e.username} (@${e.username}) — ${e.role}</option>`).join('');
+      const memberOptions = employees.filter(e => !['super_admin', 'admin', 'admin_hr'].includes(e.role)).map(e => `<option value="${e.id}">${e.full_name || e.username} (@${e.username})</option>`).join('');
+      if (leadSelect) leadSelect.innerHTML = '<option value="">None / Assign Later</option>' + leadOptions;
+      if (memberSelect) memberSelect.innerHTML = '<option value="">Select Employee</option>' + memberOptions;
     } catch (e) {
       console.error(e);
     }
@@ -329,9 +330,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!tbody) return;
     try {
       tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">Loading audit records...</td></tr>';
-      const res = await fetch('/api/audit-logs');
+      const res = await fetch('/api/organization/audit-logs');
       const json = await res.json();
-      const logs = json.data.logs || [];
+      const logs = Array.isArray(json.data) ? json.data : (json.data?.logs || []);
 
       if (!logs.length) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--color-muted); padding: 2rem;">No audit logs recorded yet.</td></tr>';
@@ -358,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('dept-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/departments', {
+      const res = await fetch('/api/organization/departments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
         body: JSON.stringify({
@@ -367,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || `Request failed (${res.status})`);
       showToast('Department created successfully!', 'success');
       closeModal(deptModal);
       e.target.reset();
@@ -380,7 +381,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('team-form')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/teams', {
+      const res = await fetch('/api/organization/teams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
         body: JSON.stringify({
@@ -391,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || `Request failed (${res.status})`);
       showToast('Team created successfully!', 'success');
       closeModal(teamModal);
       e.target.reset();
@@ -405,7 +406,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const teamId = document.getElementById('target-team-id').value;
     try {
-      const res = await fetch(`/api/teams/${teamId}/members`, {
+      const res = await fetch(`/api/organization/teams/${teamId}/members`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
         body: JSON.stringify({
@@ -414,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || `Request failed (${res.status})`);
       showToast('Team member added!', 'success');
       closeModal(memberModal);
       e.target.reset();

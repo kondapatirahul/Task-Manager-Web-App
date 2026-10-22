@@ -86,7 +86,7 @@
   <!-- 1. My Timesheet Tab -->
   <div id="tab-my-timesheet" class="att-tab-pane" style="padding: 1.25rem;">
     <div style="overflow-x: auto;">
-      <table class="table" id="my-timesheet-table">
+      <table class="table attendance-timesheet-table" id="my-timesheet-table">
         <thead>
           <tr>
             <th>Date</th>
@@ -207,6 +207,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (attTimer) {
       attTimer.textContent = `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
     }
+    const liveTodayHours = document.getElementById('att-today-hours');
+    if (liveTodayHours) liveTodayHours.textContent = (diffMs / 3600000).toFixed(2);
   }
 
   async function loadMyAttendance() {
