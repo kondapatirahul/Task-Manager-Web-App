@@ -102,6 +102,26 @@ def create_app(test_config=None):
                     return {'ok': False, 'error': 'Invalid CSRF token'}, 403
                 return 'Invalid CSRF token', 403
 
+    # Error handlers
+    from flask import render_template
+    @app.errorhandler(403)
+    def handle_403(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Forbidden'}, 403
+        return render_template('unauthorized.html'), 403
+
+    @app.errorhandler(404)
+    def handle_404(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Not Found'}, 404
+        return render_template('404.html'), 404
+
+    @app.errorhandler(500)
+    def handle_500(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Internal server error'}, 500
+        return render_template('500.html'), 500
+
     # Register blueprints
     from app.routes.web import web_bp
     from app.routes.auth import auth_bp

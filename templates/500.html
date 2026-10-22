@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}500 — Server Error | TaskNest{% endblock %}
+
+{% block body %}
+<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1.5rem; background-color: var(--color-bg);">
+  <div class="card" style="width: 100%; max-width: 500px; text-align: center; padding: 3rem 2rem; border: 1px solid var(--color-border); box-shadow: var(--shadow-lg);">
+    
+    <div style="width: 64px; height: 64px; border-radius: 50%; background-color: #FEF2F2; color: var(--color-danger); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+    </div>
+
+    <span class="badge badge-overdue" style="font-size: var(--font-size-xs); margin-bottom: 0.75rem;">HTTP 500</span>
+    <h1 style="font-size: var(--font-size-2xl); font-weight: 800; color: var(--color-primary); margin-bottom: 0.5rem;">
+      Internal Server Error
+    </h1>
+    <p style="font-size: var(--font-size-sm); color: var(--color-text-light); line-height: 1.6; margin-bottom: 2rem;">
+      An unexpected condition occurred while processing your request. Please try again shortly or contact support if the issue persists.
+    </p>
+
+    <div style="display: flex; gap: 1rem; justify-content: center;">
+      <a href="/dashboard" class="btn btn-primary" style="padding: 0.65rem 1.25rem;">
+        <span>Return to Dashboard</span>
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,386 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}{{ task.title }} — TaskNest Enterprise{% endblock %}
+
+{% block app_content %}
+<!-- Breadcrumb -->
+<div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+  <a href="/tasks" style="color: var(--color-primary); text-decoration: none; font-weight: 600;">Tasks</a>
+  <span>&rsaquo;</span>
+  <span style="color: var(--color-text);">Task #{{ task.id }}</span>
+</div>
+
+<!-- Header -->
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+  <div>
+    <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem;">
+      <h1 class="page-title" style="margin-bottom: 0;">{{ task.title }}</h1>
+      <span class="badge badge-{{ task.priority }}">{{ task.priority }}</span>
+      <span class="badge badge-{{ task.status }}" id="main-status-badge">{{ task.status | replace('_', ' ') }}</span>
+      {% if task.is_recurring %}
+      <span class="badge badge-category">🔁 {{ task.recurrence_interval or 'recurring' }}</span>
+      {% endif %}
+    </div>
+    <p class="page-subtitle">
+      Created by <strong>{{ creator_name }}</strong> on {{ task.created_at.strftime('%b %d, %Y') if task.created_at else '—' }}
+      {% if task.due_date %} · Due <strong>{{ task.due_date.strftime('%b %d, %Y') }}</strong>{% endif %}
+    </p>
+  </div>
+
+  <div style="display: flex; gap: 0.75rem;">
+    {% if current_user.is_management or current_user.id == task.assignee_id %}
+    <select id="quick-status-select" class="form-control" style="width: auto; margin-bottom: 0;">
+      <option value="pending" {% if task.status in ['pending', 'todo'] %}selected{% endif %}>To Do / Pending</option>
+      <option value="in_progress" {% if task.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+      <option value="blocked" {% if task.status == 'blocked' %}selected{% endif %}>Blocked</option>
+      <option value="in_review" {% if task.status == 'in_review' %}selected{% endif %}>In Review</option>
+      <option value="completed" {% if task.status == 'completed' %}selected{% endif %}>Completed</option>
+    </select>
+    {% endif %}
+    <a href="/tasks" class="btn btn-secondary btn-sm">Back to Tasks</a>
+  </div>
+</div>
+
+<!-- Two-Column Task Content Layout -->
+<div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 2rem;" class="task-detail-grid">
+  
+  <!-- LEFT: Overview, Acceptance Criteria, Subtasks, Deliverables -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    
+    <!-- Description -->
+    <div class="card" style="padding: 1.5rem;">
+      <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Description</h3>
+      <p style="font-size: var(--font-size-sm); color: var(--color-text); line-height: 1.6; white-space: pre-wrap; margin: 0;">
+        {{ task.description or 'No detailed description provided for this task.' }}
+      </p>
+    </div>
+
+    <!-- Acceptance Criteria -->
+    {% if task.acceptance_criteria %}
+    <div class="card" style="padding: 1.5rem; border-left: 4px solid var(--color-primary); background-color: #FAF7F2;">
+      <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin-bottom: 0.5rem;">Acceptance Criteria</h3>
+      <p style="font-size: var(--font-size-xs); color: var(--color-text); line-height: 1.6; margin: 0;">
+        {{ task.acceptance_criteria }}
+      </p>
+    </div>
+    {% endif %}
+
+    <!-- Subtasks Checklist -->
+    <div class="card" style="padding: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin: 0; text-transform: uppercase; letter-spacing: 0.04em;">Subtasks</h3>
+        <span class="badge badge-employee" id="subtask-counter">Checklist</span>
+      </div>
+      
+      <div id="subtasks-container" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+        <!-- Subtask items rendered here -->
+      </div>
+
+      <form id="add-subtask-form" style="display: flex; gap: 0.5rem;">
+        <input type="text" id="subtask-input" class="form-control" placeholder="Add a new subtask..." style="margin-bottom: 0; font-size: var(--font-size-xs);" required>
+        <button type="submit" class="btn btn-secondary btn-sm">+ Add</button>
+      </form>
+    </div>
+
+    <!-- Work Deliverables & Reviews -->
+    <div class="card" style="padding: 1.5rem;">
+      <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.04em;">Deliverables & Reviews</h3>
+
+      <div id="submissions-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <span style="font-size: var(--font-size-xs); color: var(--color-muted);">Loading deliverables...</span>
+      </div>
+
+      <!-- Employee Submit Form -->
+      <form id="submission-form" style="background: var(--color-surface-subtle); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+        <div style="font-size: var(--font-size-xs); font-weight: 700; margin-bottom: 0.5rem; color: var(--color-primary);">Submit Work Deliverable for Review</div>
+        <textarea id="submission-notes" class="form-control" rows="2" placeholder="Summary of work completed, documentation links, or notes..." style="font-size: var(--font-size-xs);" required></textarea>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+          <input type="file" id="submission-file" style="font-size: var(--font-size-xs);">
+          <button type="submit" class="btn btn-primary btn-sm">Submit for Review</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: Discussion Thread & Meta Details -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    
+    <!-- Meta Details Card -->
+    <div class="card" style="padding: 1.25rem;">
+      <h3 style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase; margin-bottom: 0.75rem;">Task Details</h3>
+      <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: var(--font-size-xs);">
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--color-muted);">Assignee:</span>
+          <strong>{{ assignee_name }}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--color-muted);">Team:</span>
+          <strong>{{ team_name }}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--color-muted);">Category:</span>
+          <span>{{ task.category.name if task.category else 'General' }}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--color-muted);">Due Date:</span>
+          <strong>{{ task.due_date.strftime('%Y-%m-%d') if task.due_date else 'No deadline' }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Discussion Feed -->
+    <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; min-height: 400px;">
+      <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin-bottom: 0.75rem;">Discussion & Comments</h3>
+      
+      <div id="detail-messages-feed" style="flex: 1; max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; padding-right: 0.5rem; margin-bottom: 1rem;">
+        <div style="text-align: center; color: var(--color-muted); font-size: var(--font-size-xs); padding: 2rem;">Loading comments...</div>
+      </div>
+
+      <form id="detail-msg-form" style="border-top: 1px solid var(--color-border); padding-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+        <textarea id="detail-msg-input" class="form-control" rows="2" placeholder="Post a comment, question, or update..." style="font-size: var(--font-size-xs); margin-bottom: 0;" required></textarea>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <input type="file" id="detail-msg-file" style="font-size: var(--font-size-xs); max-width: 170px;">
+          <button type="submit" class="btn btn-primary btn-sm">Send</button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<style>
+@media (max-width: 850px) {
+  .task-detail-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const taskId = {{ task.id }};
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // Quick Status Select
+  const statusSelect = document.getElementById('quick-status-select');
+  if (statusSelect) {
+    statusSelect.addEventListener('change', async () => {
+      try {
+        await api('PUT', `/tasks/${taskId}`, { status: statusSelect.value });
+        showToast('Task status updated!', 'success');
+        const badge = document.getElementById('main-status-badge');
+        if (badge) {
+          badge.className = `badge badge-${statusSelect.value}`;
+          badge.textContent = statusSelect.value.replace('_', ' ');
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
+  // Load Subtasks
+  async function loadSubtasks() {
+    const box = document.getElementById('subtasks-container');
+    try {
+      const res = await api('GET', `/tasks/${taskId}`);
+      const subs = res.data.subtasks || [];
+      if (!subs.length) {
+        box.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No subtasks yet.</span>';
+        return;
+      }
+      box.innerHTML = subs.map(s => `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: var(--font-size-xs);">
+          <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; flex: 1; margin: 0;">
+            <input type="checkbox" class="task-sub-check" data-id="${s.id}" ${s.is_completed ? 'checked' : ''}>
+            <span style="${s.is_completed ? 'text-decoration: line-through; color: var(--color-muted);' : 'color: var(--color-text);'}">${s.title}</span>
+          </label>
+        </div>
+      `).join('');
+
+      box.querySelectorAll('.task-sub-check').forEach(cb => {
+        cb.addEventListener('change', async () => {
+          try {
+            await api('PATCH', `/tasks/${taskId}/subtasks/${cb.dataset.id}`, { is_completed: cb.checked });
+            loadSubtasks();
+          } catch (e) {
+            showToast('Failed to update subtask', 'error');
+          }
+        });
+      });
+    } catch (e) {
+      box.innerHTML = '<span style="color: var(--color-danger); font-size: var(--font-size-xs);">Failed to load subtasks</span>';
+    }
+  }
+
+  document.getElementById('add-subtask-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('subtask-input');
+    const title = input.value.trim();
+    if (!title) return;
+    try {
+      await api('POST', `/tasks/${taskId}/subtasks`, { title });
+      input.value = '';
+      loadSubtasks();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // Load Submissions
+  async function loadSubmissions() {
+    const box = document.getElementById('submissions-list');
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/submissions`);
+      const json = await res.json();
+      const subs = json.data || [];
+      if (!subs.length) {
+        box.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No deliverables submitted yet.</span>';
+        return;
+      }
+      box.innerHTML = subs.map(s => `
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.75rem; font-size: var(--font-size-xs);">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
+            <span>Submitted by <strong>${s.submitted_by_name}</strong></span>
+            <span class="badge ${s.status === 'approved' ? 'badge-completed' : s.status === 'rejected' ? 'badge-overdue' : 'badge-pending'}">${s.status.toUpperCase()}</span>
+          </div>
+          <div style="color: var(--color-text); margin-bottom: 0.4rem;">${s.message}</div>
+          ${s.attachments && s.attachments.length ? `
+            <div style="margin-bottom: 0.4rem;">
+              ${s.attachments.map(a => `<a href="/api/files/${a.id}/download" style="color: var(--color-primary); font-weight: 600;">📥 ${a.filename}</a>`).join(' ')}
+            </div>
+          ` : ''}
+          ${s.review_feedback ? `
+            <div style="background: #FFF9F5; border-left: 2px solid var(--color-accent); padding: 0.4rem; font-size: 0.7rem; color: var(--color-accent);">
+              <strong>Feedback:</strong> ${s.review_feedback}
+            </div>
+          ` : ''}
+          ${s.status === 'pending' ? `
+            <div style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem;">
+              <button class="btn btn-secondary btn-sm lead-rev-btn" data-id="${s.id}" data-action="rejected">Request Changes</button>
+              <button class="btn btn-primary btn-sm lead-rev-btn" data-id="${s.id}" data-action="approved">Approve</button>
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+
+      box.querySelectorAll('.lead-rev-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const subId = btn.dataset.id;
+          const action = btn.dataset.action;
+          const feedback = prompt(action === 'approved' ? 'Optional approval notes:' : 'Feedback for requested revisions:');
+          if (action === 'rejected' && !feedback) {
+            showToast('Feedback required when requesting changes.', 'error');
+            return;
+          }
+          try {
+            const revRes = await fetch(`/api/submissions/${subId}/review`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+              body: JSON.stringify({ status: action, feedback: feedback || '' })
+            });
+            const revData = await revRes.json();
+            if (!revRes.ok) throw new Error(revData.message);
+            showToast(`Submission ${action}!`, 'success');
+            loadSubmissions();
+          } catch (e) {
+            showToast(e.message, 'error');
+          }
+        });
+      });
+    } catch (e) {
+      box.innerHTML = '<span style="color: var(--color-danger); font-size: var(--font-size-xs);">Failed to load submissions</span>';
+    }
+  }
+
+  document.getElementById('submission-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const notes = document.getElementById('submission-notes').value.trim();
+    const file = document.getElementById('submission-file').files[0];
+    if (!notes) return;
+
+    const fd = new FormData();
+    fd.append('message', notes);
+    if (file) fd.append('file', file);
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/submissions`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: fd
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      showToast('Deliverable submitted!', 'success');
+      document.getElementById('submission-notes').value = '';
+      document.getElementById('submission-file').value = '';
+      loadSubmissions();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  // Load Messages
+  async function loadMessages() {
+    const feed = document.getElementById('detail-messages-feed');
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/messages`);
+      const json = await res.json();
+      const msgs = json.data || [];
+      if (!msgs.length) {
+        feed.innerHTML = '<div style="text-align: center; color: var(--color-muted); font-size: var(--font-size-xs); padding: 2rem;">No comments yet. Start the conversation!</div>';
+        return;
+      }
+      feed.innerHTML = msgs.map(m => `
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; font-size: var(--font-size-xs);">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.35rem;">
+            <strong style="color: var(--color-primary);">${m.author_name}</strong>
+            <span style="font-size: 0.65rem; color: var(--color-muted);">${new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div style="color: var(--color-text); white-space: pre-wrap;">${m.content}</div>
+          ${m.attachments && m.attachments.length ? `
+            <div style="margin-top: 0.4rem; border-top: 1px dashed var(--color-border); padding-top: 0.35rem;">
+              ${m.attachments.map(a => `<a href="/api/files/${a.id}/download" target="_blank" style="color: var(--color-accent); font-weight: 600;">📎 ${a.filename}</a>`).join(' ')}
+            </div>
+          ` : ''}
+        </div>
+      `).join('');
+      feed.scrollTop = feed.scrollHeight;
+    } catch (e) {
+      feed.innerHTML = '<div style="color: var(--color-danger); font-size: var(--font-size-xs); padding: 1rem;">Failed to load comments</div>';
+    }
+  }
+
+  document.getElementById('detail-msg-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const content = document.getElementById('detail-msg-input').value.trim();
+    const file = document.getElementById('detail-msg-file').files[0];
+    if (!content) return;
+
+    const fd = new FormData();
+    fd.append('content', content);
+    if (file) fd.append('file', file);
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/messages`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: fd
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      document.getElementById('detail-msg-input').value = '';
+      document.getElementById('detail-msg-file').value = '';
+      loadMessages();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  });
+
+  loadSubtasks();
+  loadSubmissions();
+  loadMessages();
+});
+</script>
+{% endblock %}

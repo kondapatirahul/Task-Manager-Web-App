@@ -465,3 +465,140 @@ def test_productivity_reports_and_csv_exports(client, enterprise_setup):
     assert csv_res.status_code == 200
     assert csv_res.headers['Content-Type'].startswith('text/csv')
     assert b'Title' in csv_res.data
+
+
+# ── Website Multi-Page & Role Route Tests ──────────────────────────────────────
+
+def test_public_homepage_and_login_layout(client, enterprise_setup):
+    res = client.get('/')
+    assert res.status_code == 200
+    assert b'Work together.' in res.data
+    assert b'Deliver better.' in res.data
+    assert b'Assign and track work' in res.data
+    assert b'Welcome back' in res.data
+    assert b'Sign In' in res.data
+
+    # Working login authentication against database
+    login_res = client.post('/api/auth/login', json={
+        'email': 'superadmin@acme.com',
+        'password': 'AdminPass123!'
+    })
+    assert login_res.status_code == 200
+    assert login_res.get_json()['data']['role'] == 'super_admin'
+
+
+def test_password_recovery_and_reset_workflow(client, enterprise_setup):
+    # 1. Request forgot password
+    forgot_res = client.post('/api/auth/forgot-password', json={
+        'email': 'alice@acme.com'
+    })
+    assert forgot_res.status_code == 200
+    token = forgot_res.get_json()['data']['token']
+    assert token is not None
+
+    # 2. Reset page with token loads
+    reset_page_res = client.get(f'/reset-password/{token}')
+    assert reset_page_res.status_code == 200
+    assert b'Set New Password' in reset_page_res.data
+
+    # 3. Post new password
+    reset_res = client.post('/api/auth/reset-password', json={
+        'token': token,
+        'password': 'BrandNewAlicePass456!',
+        'confirm_password': 'BrandNewAlicePass456!'
+    })
+    assert reset_res.status_code == 200
+
+    # 4. Login with old password fails
+    fail_res = client.post('/api/auth/login', json={
+        'email': 'alice@acme.com',
+        'password': 'AlicePass123!'
+    })
+    assert fail_res.status_code == 401
+
+    # 5. Login with new password succeeds
+    success_res = client.post('/api/auth/login', json={
+        'email': 'alice@acme.com',
+        'password': 'BrandNewAlicePass456!'
+    })
+    assert success_res.status_code == 200
+
+
+def test_role_based_page_access_and_unauthorized_protection(client, enterprise_setup):
+    # Login as Employee Alice
+    login(client, 'alice@acme.com', 'AlicePass123!')
+
+    # Employee accesses Employee pages -> 200
+    emp_dash = client.get('/employee/dashboard')
+    assert emp_dash.status_code == 200
+
+    emp_tasks = client.get('/employee/my-tasks')
+    assert emp_tasks.status_code == 200
+
+    emp_att = client.get('/employee/attendance')
+    assert emp_att.status_code == 200
+
+    emp_cal = client.get('/employee/calendar')
+    assert emp_cal.status_code == 200
+
+    # Employee tries to access Admin pages -> Redirects to /unauthorized
+    admin_access = client.get('/admin/employees')
+    assert admin_access.status_code == 302
+    assert '/unauthorized' in admin_access.headers['Location']
+
+    # Employee tries to access Lead pages -> Redirects to /unauthorized
+    lead_access = client.get('/lead/dashboard')
+    assert lead_access.status_code == 302
+    assert '/unauthorized' in lead_access.headers['Location']
+
+    # Visiting /unauthorized returns 403 Forbidden
+    unauth_page = client.get('/unauthorized')
+    assert unauth_page.status_code == 403
+    assert b'Access Restricted' in unauth_page.data
+
+    # Login as Admin -> Admin pages return 200
+    client.post('/api/auth/logout')
+    login(client, 'hradmin@acme.com', 'AdminPass123!')
+
+    admin_dash = client.get('/admin/dashboard')
+    assert admin_dash.status_code == 200
+
+    admin_emp = client.get('/admin/employees')
+    assert admin_emp.status_code == 200
+
+    admin_rep = client.get('/admin/reports')
+    assert admin_rep.status_code == 200
+
+
+def test_task_detail_page_view(client, enterprise_setup):
+    login(client, 'techlead@acme.com', 'LeadPass123!')
+
+    # Create task
+    create_res = client.post('/api/tasks', json={
+        'title': 'Standalone Task Detail Test',
+        'description': 'Comprehensive detail page test description',
+        'priority': 'high',
+        'assignee_id': enterprise_setup['emp_a_id']
+    })
+    task_id = create_res.get_json()['data']['id']
+
+    # Lead can view dedicated task detail page
+    detail_res = client.get(f'/tasks/{task_id}')
+    assert detail_res.status_code == 200
+    assert b'Standalone Task Detail Test' in detail_res.data
+    assert b'Subtasks' in detail_res.data
+    assert b'Discussion' in detail_res.data
+
+    # Assignee Alice can view
+    client.post('/api/auth/logout')
+    login(client, 'alice@acme.com', 'AlicePass123!')
+    alice_view = client.get(f'/tasks/{task_id}')
+    assert alice_view.status_code == 200
+
+    # Unrelated user Bob (different org/team unassigned) is unauthorized
+    client.post('/api/auth/logout')
+    login(client, 'bob@acme.com', 'BobPass123!')
+    bob_view = client.get(f'/tasks/{task_id}')
+    assert bob_view.status_code == 302
+    assert '/unauthorized' in bob_view.headers['Location']
+

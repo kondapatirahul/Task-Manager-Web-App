@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}404 — Page Not Found | TaskNest{% endblock %}
+
+{% block body %}
+<div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1.5rem; background-color: var(--color-bg);">
+  <div class="card" style="width: 100%; max-width: 500px; text-align: center; padding: 3rem 2rem; border: 1px solid var(--color-border); box-shadow: var(--shadow-lg);">
+    
+    <div style="width: 64px; height: 64px; border-radius: 50%; background-color: #F7F3EC; color: var(--color-primary); display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+
+    <span class="badge badge-category" style="font-size: var(--font-size-xs); margin-bottom: 0.75rem;">HTTP 404</span>
+    <h1 style="font-size: var(--font-size-2xl); font-weight: 800; color: var(--color-primary); margin-bottom: 0.5rem;">
+      Page Not Found
+    </h1>
+    <p style="font-size: var(--font-size-sm); color: var(--color-text-light); line-height: 1.6; margin-bottom: 2rem;">
+      The page or task you are looking for does not exist or may have been relocated.
+    </p>
+
+    <div style="display: flex; gap: 1rem; justify-content: center;">
+      <a href="/" class="btn btn-primary" style="padding: 0.65rem 1.25rem;">
+        <span>Go to Homepage</span>
+      </a>
+      <a href="/dashboard" class="btn btn-secondary" style="padding: 0.65rem 1.25rem;">
+        Dashboard
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

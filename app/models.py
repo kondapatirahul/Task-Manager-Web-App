@@ -165,7 +165,7 @@ class User(UserMixin, db.Model):
 
     @property
     def is_admin(self):
-        return self.role in ADMIN_ROLES
+        return self.role in ADMIN_ROLES or self.role == 'admin_hr'
 
     @property
     def is_team_lead(self):
@@ -173,12 +173,16 @@ class User(UserMixin, db.Model):
 
     @property
     def is_management(self):
-        """True for super_admin, admin, and team_lead."""
-        return self.role in MANAGEMENT_ROLES
+        """True for super_admin, admin, admin_hr, and team_lead."""
+        return self.role in MANAGEMENT_ROLES or self.role == 'admin_hr'
 
     def has_role(self, *roles):
         """Return True if this user's role is among the given roles."""
-        return self.role in roles
+        expanded = set(roles)
+        if 'admin' in expanded or 'admin_hr' in expanded:
+            expanded.add('admin')
+            expanded.add('admin_hr')
+        return self.role in expanded
 
     # ── Credentials ───────────────────────────────────────────────────────────
     def set_password(self, password):
@@ -647,3 +651,26 @@ class AuditLog(db.Model):
             'details': self.details or '',
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
+
+
+# ── Password Reset Token ───────────────────────────────────────────────────────
+
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_tokens'
+
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    token      = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    is_used    = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    user = db.relationship('User', backref=db.backref('reset_tokens', cascade='all, delete-orphan'))
+
+    def is_valid(self):
+        now = datetime.now(timezone.utc)
+        exp = self.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        return not self.is_used and exp > now
+
