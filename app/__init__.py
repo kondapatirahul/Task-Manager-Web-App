@@ -123,5 +123,18 @@ def create_app(test_config=None):
     # Create tables automatically on start if they don't exist
     with app.app_context():
         db.create_all()
+        # Automatically migrate existing SQLite database tables if missing new columns
+        from sqlalchemy import inspect as sa_inspect, text
+        try:
+            inspector = sa_inspect(db.engine)
+            if 'users' in inspector.get_table_names():
+                existing_cols = {c['name'] for c in inspector.get_columns('users')}
+                if 'role' not in existing_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"))
+                if 'account_active' not in existing_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"))
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     return app
