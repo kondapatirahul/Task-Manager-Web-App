@@ -1,5 +1,4 @@
-git status
-git difffrom datetime import date, timedelta
+from datetime import date, timedelta
 import pytest
 from app import db
 from app.models import (
