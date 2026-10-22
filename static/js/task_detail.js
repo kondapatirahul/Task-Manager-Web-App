@@ -44,6 +44,19 @@ const TaskDetail = {
     document.querySelectorAll('.close-submit-modal').forEach((btn) => {
       btn.addEventListener('click', () => {
         document.getElementById('submit-review-modal')?.classList.remove('active');
+        document.getElementById('submit-review-modal')?.classList.remove('is-active');
+        document.body.classList.remove('modal-open');
+      });
+    });
+
+    // Close on backdrop overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          overlay.classList.remove('active');
+          overlay.classList.remove('is-active');
+          document.body.classList.remove('modal-open');
+        }
       });
     });
 
@@ -58,6 +71,8 @@ const TaskDetail = {
           if (res && res.ok) {
             window.API.toast('Work submitted for review successfully!', 'success');
             document.getElementById('submit-review-modal')?.classList.remove('active');
+            document.getElementById('submit-review-modal')?.classList.remove('is-active');
+            document.body.classList.remove('modal-open');
             this.task = res.data;
             this.renderTask();
           } else {
@@ -73,6 +88,8 @@ const TaskDetail = {
     document.querySelectorAll('.close-review-modal').forEach((btn) => {
       btn.addEventListener('click', () => {
         document.getElementById('review-action-modal')?.classList.remove('active');
+        document.getElementById('review-action-modal')?.classList.remove('is-active');
+        document.body.classList.remove('modal-open');
       });
     });
 
@@ -89,6 +106,8 @@ const TaskDetail = {
             const msg = action === 'approve' ? 'Task approved and completed!' : 'Changes requested.';
             window.API.toast(msg, 'success');
             document.getElementById('review-action-modal')?.classList.remove('active');
+            document.getElementById('review-action-modal')?.classList.remove('is-active');
+            document.body.classList.remove('modal-open');
             this.task = res.data;
             this.renderTask();
           } else {
@@ -360,7 +379,9 @@ const TaskDetail = {
       const submitBtn = document.getElementById('review-submit-btn');
       submitBtn.textContent = 'Approve & Mark Completed';
       submitBtn.className = 'btn btn-success';
+      document.body.classList.add('modal-open');
       document.getElementById('review-action-modal')?.classList.add('active');
+      document.getElementById('review-action-modal')?.classList.add('is-active');
     });
 
     document.getElementById('btn-request-changes')?.addEventListener('click', () => {
@@ -370,11 +391,15 @@ const TaskDetail = {
       const submitBtn = document.getElementById('review-submit-btn');
       submitBtn.textContent = 'Send Changes Requested';
       submitBtn.className = 'btn btn-danger';
+      document.body.classList.add('modal-open');
       document.getElementById('review-action-modal')?.classList.add('active');
+      document.getElementById('review-action-modal')?.classList.add('is-active');
     });
 
     document.getElementById('btn-open-submit-modal')?.addEventListener('click', () => {
+      document.body.classList.add('modal-open');
       document.getElementById('submit-review-modal')?.classList.add('active');
+      document.getElementById('submit-review-modal')?.classList.add('is-active');
     });
 
     document.getElementById('quick-status-select')?.addEventListener('change', async (e) => {

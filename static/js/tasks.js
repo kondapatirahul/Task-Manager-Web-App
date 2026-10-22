@@ -154,6 +154,13 @@ const TaskManager = {
       el.addEventListener('click', () => this.closeModals());
     });
 
+    // Close on backdrop overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) this.closeModals();
+      });
+    });
+
     // Close on Escape
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.closeModals();
@@ -532,9 +539,14 @@ const TaskManager = {
       if (recurringField) recurringField.value = '';
     }
 
+    document.body.classList.add('modal-open');
     modal.classList.add('is-active');
     modal.classList.add('active');
-    setTimeout(() => titleField.focus(), 50);
+    setTimeout(() => {
+      const modalBody = modal.querySelector('.modal-body');
+      if (modalBody) modalBody.scrollTop = 0;
+      titleField.focus();
+    }, 50);
   },
 
   closeModals() {
@@ -542,6 +554,7 @@ const TaskManager = {
       modal.classList.remove('is-active');
       modal.classList.remove('active');
     });
+    document.body.classList.remove('modal-open');
   },
 
   async handleTaskFormSubmit(e) {
