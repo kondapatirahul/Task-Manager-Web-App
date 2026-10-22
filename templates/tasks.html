@@ -1,6 +1,6 @@
 {% extends "_app_layout.html" %}
 
-{% block title %}Tasks & Collaboration — TaskNest Enterprise{% endblock %}
+{% block title %}Tasks & Assignments — TaskNest{% endblock %}
 
 {% block app_content %}
 <section id="smart-priority-panel" class="card" style="margin-bottom:1rem;padding:1rem;border-left:4px solid var(--color-accent);">
@@ -11,43 +11,42 @@
 </section>
 <div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
   <div>
-    <h1 class="page-title">Task Management</h1>
-    <p class="page-subtitle">Track, prioritize, discuss, and deliver organizational tasks with full lifecycle tracking.</p>
+    <h1 class="page-title">Tasks & Assignments</h1>
+    <p class="page-subtitle">Track, assign, prioritize, and manage tasks across your personal workflow and teams.</p>
   </div>
-  <div style="display: flex; gap: 0.75rem; align-items: center;">
-    <div class="btn-group" style="display: flex; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden;">
-      <button id="view-mode-list-btn" class="btn btn-ghost btn-sm active" style="padding: 0.4rem 0.75rem; font-weight: 700; color: var(--color-primary); background-color: var(--color-surface-subtle);" title="List View">
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-        <span>List</span>
-      </button>
-      <button id="view-mode-kanban-btn" class="btn btn-ghost btn-sm" style="padding: 0.4rem 0.75rem; font-weight: 600;" title="Kanban Board View">
-        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1"></rect><rect x="10" y="3" width="5" height="12" rx="1"></rect><rect x="17" y="3" width="5" height="15" rx="1"></rect></svg>
-        <span>Kanban</span>
-      </button>
-    </div>
-    <button class="btn btn-primary open-add-task-btn">
-      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-      <span>Add Task</span>
-    </button>
-  </div>
+  <button class="btn btn-primary open-add-task-btn" id="open-add-task-btn">
+    <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    <span>Add Task</span>
+  </button>
 </div>
 
 <!-- Filter and Search Bar -->
 <div class="filter-bar">
   <!-- Search -->
-  <div class="input-with-icon" style="flex: 2; min-width: 200px;">
+  <div class="input-with-icon" style="flex: 1; min-width: 220px;">
     <svg class="icon icon-sm leading-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-    <input type="search" id="task-search" class="form-control" placeholder="Search tasks by title, description..." style="margin-bottom: 0;">
+    <input type="search" id="task-search" class="form-control" placeholder="Search tasks by title, description, criteria..." style="margin-bottom: 0;">
+  </div>
+
+  <!-- Scope Filter -->
+  <div class="filter-group">
+    <select id="filter-scope" class="filter-select" aria-label="Filter by Assignment Scope">
+      <option value="">All Tasks</option>
+      <option value="assigned_to_me">Assigned to Me</option>
+      <option value="created_by_me">Created by Me</option>
+      <option value="team">Team Tasks</option>
+    </select>
   </div>
 
   <!-- Status Filter -->
   <div class="filter-group">
     <select id="filter-status" class="filter-select" aria-label="Filter by Status">
       <option value="">All Statuses</option>
-      <option value="pending">To Do / Pending</option>
+      <option value="todo">To Do</option>
       <option value="in_progress">In Progress</option>
       <option value="blocked">Blocked</option>
       <option value="in_review">In Review</option>
+      <option value="changes_requested">Changes Requested</option>
       <option value="completed">Completed</option>
     </select>
   </div>
@@ -69,6 +68,13 @@
     </select>
   </div>
 
+  <!-- Team Filter -->
+  <div class="filter-group">
+    <select id="filter-team" class="filter-select" aria-label="Filter by Team">
+      <option value="">All Teams</option>
+    </select>
+  </div>
+
   <!-- Sort Filter -->
   <div class="filter-group">
     <select id="filter-sort" class="filter-select" aria-label="Sort Tasks">
@@ -77,6 +83,7 @@
       <option value="due_date_asc">Due Date (Earliest)</option>
       <option value="due_date_desc">Due Date (Latest)</option>
       <option value="priority_desc">Highest Priority First</option>
+      <option value="priority_asc">Lowest Priority First</option>
       <option value="title_asc">Title (A-Z)</option>
     </select>
   </div>

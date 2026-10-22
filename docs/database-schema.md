@@ -4,39 +4,143 @@ The application uses **SQLite** managed via **Flask-SQLAlchemy**.
 
 ## Entity Relationship Summary
 ```
-+----------------+          1 : N          +--------------------+
-|     users      | ----------------------< |       tasks        |
-+----------------+                         +--------------------+
-        | 1                                          | N
-        |                                            |
-        | N                                          | 1 (nullable)
-+----------------+                         +--------------------+
-|   categories   | ------------------------+     category_id    |
-+----------------+
++--------------------+ 1 : N +--------------------+ 1 : N +--------------------+
+|   organizations    | ----< |    departments     | ----< |       teams        |
++--------------------+       +--------------------+       +--------------------+
+          | 1                          | 1                          | 1
+          |                            |                            |
+          | N                          | N                          | N
++--------------------+                 |                            |
+|       users        | <---------------+----------------------------+
++--------------------+
+    | 1            | 1 (reports_to)           | M
+    |              v                          v
+    |          users (manager)        +--------------------+
+    | 1 : N                           |    team_members    |
+    +--------------+                  +--------------------+
+    |              |
+    v              v
++---------+  +------------+ 1 : N (optional)
+| tasks   |  | categories | --------------------+
++---------+  +------------+                     |
+    |                                           |
+    +-------------------------------------------+ (tasks.category_id)
+    |
+    +------------> team_id (optional -> teams.id)
+    |
+    +------------> assigned_to_id (optional -> users.id)
 ```
 
 ---
 
 ## 1. `users` Table
-Stores registered user accounts, authentication credentials, and account timestamps.
+Stores registered user accounts, authentication credentials, organizational placement, and account state.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique identifier for user |
 | `username` | `VARCHAR(80)` | `NOT NULL, UNIQUE` | Unique login username |
-| `full_name` | `VARCHAR(100)` | `NOT NULL` | Display name for greeting & profile |
+| `full_name` | `VARCHAR(100)` | `NOT NULL, DEFAULT ''` | Display name for greeting & profile |
 | `email` | `VARCHAR(120)` | `NOT NULL, UNIQUE` | Unique email for authentication |
 | `password_hash` | `VARCHAR(256)` | `NOT NULL` | Secure Werkzeug scrypt/pbkdf2 hash |
 | `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Registration timestamp |
+| `role` | `VARCHAR(20)` | `NOT NULL, DEFAULT 'employee'` | Role: `super_admin`, `admin`, `hr`, `team_lead`, `employee` |
+| `account_active` | `BOOLEAN` | `NOT NULL, DEFAULT 1` | Active status: `1` (active) or `0` (deactivated) |
+| `organization_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (organizations.id ON DELETE SET NULL)` | Organization identifier |
+| `department_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (departments.id ON DELETE SET NULL)` | Department identifier |
+| `job_title` | `VARCHAR(100)` | `NULLABLE` | Job title / position designation |
+| `phone` | `VARCHAR(30)` | `NULLABLE` | Contact telephone number |
+| `reports_to_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Reporting manager user identifier |
 
 - **Relationships**:
-  - `tasks`: 1-to-many relationship with `Task` (`cascade='all, delete-orphan'`).
+  - `organization`: References `Organization` via `organization_id`.
+  - `department`: References `Department` via `department_id`.
+  - `reports_to` / `direct_reports`: Self-referencing reporting hierarchy.
+  - `teams`: Many-to-many relationship with `Team` via `team_members` association table.
+  - `tasks`: 1-to-many relationship with `Task` created by this user (`cascade='all, delete-orphan'`).
+  - `assigned_tasks`: 1-to-many relationship with `Task` delegated/assigned to this user.
   - `categories`: 1-to-many relationship with `Category` (`cascade='all, delete-orphan'`).
+- **Deactivation Policy**:
+  - Soft-deactivation via `account_active = 0`. Prevents login while preserving all historic tasks, logs, and relationships.
 
 ---
 
-## 2. `categories` Table
-Organizes tasks into customizable workspaces per user.
+## 2. `organizations` Table
+Stores enterprise organizations / tenants.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique organization identifier |
+| `name` | `VARCHAR(100)` | `NOT NULL, UNIQUE` | Organization name |
+| `description` | `TEXT` | `NULLABLE` | Company mission, description, or notes |
+| `created_by_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Founder / creator user identifier |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Creation timestamp |
+
+- **Relationships**:
+  - `departments`: 1-to-many relationship with `Department` (`cascade='all, delete-orphan'`).
+  - `teams`: 1-to-many relationship with `Team` (`cascade='all, delete-orphan'`).
+  - `members`: 1-to-many relationship with `User` members.
+
+---
+
+## 3. `departments` Table
+Represents business units or divisions within an organization.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique department identifier |
+| `name` | `VARCHAR(100)` | `NOT NULL` | Department name (e.g., Engineering, Sales) |
+| `description` | `TEXT` | `NULLABLE` | Department summary or focus |
+| `organization_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (organizations.id ON DELETE CASCADE)` | Associated organization |
+| `head_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Department Head user identifier |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Creation timestamp |
+
+- **Relationships**:
+  - `organization`: References `Organization` via `organization_id`.
+  - `head`: References `User` via `head_id`.
+  - `members`: 1-to-many relationship with `User` members assigned to this department.
+  - `teams`: 1-to-many relationship with `Team` under this department.
+- **Safe Deletion Policy**:
+  - Upon deletion, associated employees have their `department_id` set to `NULL`, preventing user deletion.
+
+---
+
+## 4. `teams` Table
+Represents cross-functional or departmental squads led by team leads.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique team identifier |
+| `name` | `VARCHAR(100)` | `NOT NULL` | Team name (e.g., Frontend Core, DevOps) |
+| `description` | `TEXT` | `NULLABLE` | Team focus or responsibilities |
+| `organization_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (organizations.id ON DELETE CASCADE)` | Associated organization |
+| `department_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (departments.id ON DELETE SET NULL)` | Associated department |
+| `lead_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Appointed Team Lead user identifier |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Creation timestamp |
+
+- **Relationships**:
+  - `organization`: References `Organization` via `organization_id`.
+  - `department`: References `Department` via `department_id`.
+  - `lead`: References `User` via `lead_id`.
+  - `members`: Many-to-many relationship with `User` via `team_members`.
+  - `tasks`: 1-to-many relationship with `Task` assigned to this team workspace.
+
+---
+
+## 5. `team_members` Association Table
+Represents team membership rosters and role within team.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `team_id` | `INTEGER` | `PRIMARY KEY, FOREIGN KEY (teams.id ON DELETE CASCADE)` | Team identifier |
+| `user_id` | `INTEGER` | `PRIMARY KEY, FOREIGN KEY (users.id ON DELETE CASCADE)` | Member user identifier |
+| `role` | `VARCHAR(20)` | `NOT NULL, DEFAULT 'member'` | Team role: `lead` or `member` |
+| `joined_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Membership start timestamp |
+
+---
+
+## 6. `categories` Table
+Organizes personal tasks into customizable workspaces per user.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -53,8 +157,8 @@ Organizes tasks into customizable workspaces per user.
 
 ---
 
-## 3. `tasks` Table
-Stores actionable task records, priority flags, statuses, deadlines, and ownership.
+## 7. `tasks` Table
+Stores actionable task records, priority flags, statuses, deadlines, and ownership/delegation.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
@@ -66,16 +170,137 @@ Stores actionable task records, priority flags, statuses, deadlines, and ownersh
 | `due_date` | `DATE` | `NULLABLE` | Optional completion target date |
 | `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Creation timestamp |
 | `completed_at` | `DATETIME` | `NULLABLE` | Timestamp when marked completed |
-| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | Owning user identifier |
+| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | Owning / author user identifier |
 | `category_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (categories.id ON DELETE SET NULL)` | Optional category assignment |
+| `team_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (teams.id ON DELETE SET NULL)` | Optional team workspace assignment |
+| `assigned_to_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Optional delegated assignee user identifier |
 
 - **Foreign Keys**:
   - `user_id` references `users.id`.
   - `category_id` references `categories.id` (`ondelete='SET NULL'`).
+  - `team_id` references `teams.id` (`ondelete='SET NULL'`).
+  - `assigned_to_id` references `users.id` (`ondelete='SET NULL'`).
 
 ---
 
-## Database Initialization
+
+
+---
+
+## 8. `task_status_history` Table
+Stores immutable audit log records for every status transition, review decision, comment, and upload event on a task.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique history record identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `changed_by_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | User who triggered the status change |
+| `old_status` | `VARCHAR(30)` | `NULLABLE` | Previous task status |
+| `new_status` | `VARCHAR(30)` | `NOT NULL` | New task status |
+| `comment` | `TEXT` | `NULLABLE` | Transition reason, review notes, or submission summary |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Timestamp of status event |
+
+- **Foreign Keys**:
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `changed_by_id` references `users.id` (`ondelete='SET NULL'`).
+
+---
+
+## 9. `task_comments` Table
+Stores chronological task-centered communication messages and discussion questions.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique comment record identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `user_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Author user identifier |
+| `content` | `TEXT` | `NOT NULL` | Written message content (supports `@username` mentions) |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Message timestamp |
+| `updated_at` | `DATETIME` | `NULLABLE` | Last edit timestamp |
+
+- **Foreign Keys & Cascades**:
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `user_id` references `users.id` (`ondelete='SET NULL'`).
+  - `attachments`: 1-to-many relationship with `TaskAttachment` (`cascade='all, delete-orphan'`).
+
+---
+
+## 10. `task_submissions` Table
+Preserves complete work submission cycles and Team Lead review audit history.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique submission identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `submitted_by_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Employee submitter identifier |
+| `summary` | `TEXT` | `NOT NULL` | Written summary of deliverables, verification, notes |
+| `status` | `VARCHAR(30)` | `NOT NULL, DEFAULT 'pending_review'` | Status: `pending_review`, `approved`, `changes_requested` |
+| `reviewed_by_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Reviewing Team Lead / Admin |
+| `reviewed_at` | `DATETIME` | `NULLABLE` | Review decision timestamp |
+| `review_feedback` | `TEXT` | `NULLABLE` | Review feedback or approval notes |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Initial submission timestamp |
+
+- **Foreign Keys & Cascades**:
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `submitted_by_id` references `users.id` (`ondelete='SET NULL'`).
+  - `reviewed_by_id` references `users.id` (`ondelete='SET NULL'`).
+  - `attachments`: 1-to-many relationship with `TaskAttachment` deliverables (`cascade='all, delete-orphan'`).
+
+---
+
+## 11. `task_attachments` Table
+Stores metadata for all task-associated files outside the database.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | `INTEGER` | `PRIMARY KEY AUTOINCREMENT` | Unique attachment identifier |
+| `task_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (tasks.id ON DELETE CASCADE)` | Associated task identifier |
+| `uploader_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (users.id ON DELETE SET NULL)` | Uploading user identifier |
+| `comment_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (task_comments.id ON DELETE CASCADE)` | Associated comment (for message attachments) |
+| `submission_id` | `INTEGER` | `NULLABLE, FOREIGN KEY (task_submissions.id ON DELETE CASCADE)` | Associated submission (for deliverable files) |
+| `attachment_type` | `VARCHAR(20)` | `NOT NULL, DEFAULT 'comment'` | Type: `reference`, `comment`, `submission` |
+| `original_filename` | `VARCHAR(255)` | `NOT NULL` | Original user-supplied filename |
+| `storage_name` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | Random UUID storage filename on disk |
+| `file_size` | `INTEGER` | `NOT NULL` | File byte length |
+| `file_type` | `VARCHAR(100)` | `NOT NULL` | Verified MIME type |
+| `file_extension` | `VARCHAR(20)` | `NOT NULL` | Normalized lowercase extension |
+| `created_at` | `DATETIME` | `NOT NULL, DEFAULT utcnow` | Upload timestamp |
+
+- **Foreign Keys & Cascades**:
+  - `task_id` references `tasks.id` (`ondelete='CASCADE'`).
+  - `comment_id` references `task_comments.id` (`ondelete='CASCADE'`).
+  - `submission_id` references `task_submissions.id` (`ondelete='CASCADE'`).
+  - `uploader_id` references `users.id` (`ondelete='SET NULL'`).
+
+---
+
+## Private File Storage Architecture & Security
+TaskNest implements strict durable file separation outside the database:
+
+1. **Storage Isolation**:
+   - Files are stored in `instance/uploads/task_<task_id>/` outside the public static directory.
+   - Client filenames are never used as filesystem paths. Storage names follow strictly `uuid4().hex + '.' + extension`.
+2. **Deep Content & Magic Byte Validation**:
+   - Extension whitelist: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.docx`, `.xlsx`, `.txt`.
+   - Magic bytes inspection:
+     - PDF: `%PDF-` signature.
+     - PNG: `\x89PNG\r\n\x1a\n` signature.
+     - JPEG: `\xff\xd8\xff` header.
+     - DOCX / XLSX: ZIP container signature `PK\x03\x04`.
+     - TXT: Valid UTF-8 encoding with no binary null bytes (`\x00`).
+   - Maximum file size: Configurable (default `10 MB`). Maximum files per batch: `5`.
+3. **Path Traversal & Download Authorization**:
+   - `os.path.commonpath([dest_path, upload_root]) == upload_root` assertions prevent traversal.
+   - Every file download and preview requires active user session authentication and task authorization.
+   - Unauthenticated or unauthorized download requests are rejected with `401` or `403`.
+   - Previews enforce `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox` and `X-Content-Type-Options: nosniff`.
+4. **Lifecycle & Cleanup**:
+   - Failed file validations or database transaction failures automatically remove staged files to avoid orphan files.
+   - Deleting a task cleanly removes its disk directory recursively via `shutil.rmtree()`.
+
+---
+
+## Database Initialization & Automatic Migrations
 The database schema can be initialized at any time from the command line:
 
 ```powershell
@@ -83,3 +308,6 @@ flask --app run.py init-db
 ```
 
 Or via direct python startup (`python run.py`), which calls `db.create_all()` within application context to ensure all tables exist safely without dropping existing data.
+
+### Automated Schema Evolution:
+`app/__init__.py` incorporates an automatic SQLite schema inspector that scans tables upon startup and dynamically executes non-destructive `ALTER TABLE ADD COLUMN` statements for newly introduced columns across migrations, ensuring zero data loss across upgrades.

@@ -328,6 +328,12 @@ def tasks():
     return render_template('tasks.html', active_page='tasks')
 
 
+@web_bp.route('/tasks/<int:task_id>')
+@login_required
+def task_detail(task_id):
+    return render_template('task_detail.html', active_page='tasks', task_id=task_id)
+
+
 @web_bp.route('/categories')
 @login_required
 def categories():
@@ -374,3 +380,17 @@ def profile():
 @login_required
 def settings():
     return render_template('settings.html', active_page='settings')
+
+
+@web_bp.route('/employees')
+@login_required
+def employees():
+    """Employee directory with search, filters, and team/department assignments."""
+    return render_template('employees.html', active_page='employees')
+
+
+@web_bp.route('/teams')
+@login_required
+def teams():
+    """Department and team administration with member rosters and team tasks."""
+    return render_template('teams.html', active_page='teams')
