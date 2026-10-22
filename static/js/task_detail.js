@@ -422,3 +422,4 @@ const TaskDetail = {
 document.addEventListener('DOMContentLoaded', () => {
   TaskDetail.init();
 });
+
