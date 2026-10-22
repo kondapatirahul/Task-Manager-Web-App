@@ -10,6 +10,7 @@ load_dotenv()
 db = SQLAlchemy()
 login_manager = LoginManager()
 
+
 def create_app(test_config=None):
     app = Flask(
         __name__,
@@ -18,9 +19,11 @@ def create_app(test_config=None):
         static_folder='../static'
     )
 
-    # Ensure instance directory exists
+    # Ensure instance and upload directories exist
+    upload_dir = os.path.join(app.instance_path, 'uploads')
     try:
         os.makedirs(app.instance_path, exist_ok=True)
+        os.makedirs(upload_dir, exist_ok=True)
     except OSError:
         pass
 
@@ -30,6 +33,8 @@ def create_app(test_config=None):
         SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', f'sqlite:///{default_db_path}'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         CSRF_ENABLED=True,
+        UPLOAD_FOLDER=upload_dir,
+        MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16 MB max upload
     )
 
     if test_config:
@@ -66,7 +71,6 @@ def create_app(test_config=None):
     @app.after_request
     def set_csrf_cookie(response):
         if 'csrf_token' in session:
-            # Set cookie for JavaScript access
             response.set_cookie(
                 'csrf_token',
                 session['csrf_token'],
@@ -84,8 +88,7 @@ def create_app(test_config=None):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return
 
-        # Exempt initial auth signup/login endpoints if session doesn't exist yet
-        # But if CSRF token was supplied, validate it.
+        # Exempt file downloads or auth endpoints when session doesn't exist yet
         csrf_token = (
             request.headers.get('X-CSRFToken') or
             request.headers.get('X-CSRF-Token') or
@@ -105,14 +108,28 @@ def create_app(test_config=None):
     from app.routes.tasks import tasks_bp
     from app.routes.categories import categories_bp
     from app.routes.stats import stats_bp
+    from app.routes.organization import org_bp
+    from app.routes.employees import employees_bp
+    from app.routes.attendance import attendance_bp
+    from app.routes.meetings import meetings_bp
+    from app.routes.notifications import notifications_bp
+    from app.routes.discussions import discussions_bp
+    from app.routes.reports import reports_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(categories_bp)
     app.register_blueprint(stats_bp)
+    app.register_blueprint(org_bp)
+    app.register_blueprint(employees_bp)
+    app.register_blueprint(attendance_bp)
+    app.register_blueprint(meetings_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(discussions_bp)
+    app.register_blueprint(reports_bp)
 
-    # CLI command to initialize database
+    # CLI commands
     @app.cli.command('init-db')
     def init_db_command():
         """Initialize SQLite database tables."""
@@ -120,20 +137,105 @@ def create_app(test_config=None):
             db.create_all()
         print("Database initialized successfully.")
 
-    # Create tables automatically on start if they don't exist
+    @app.cli.command('process-recurring')
+    def process_recurring_command():
+        """CLI trigger to process recurring tasks on a schedule."""
+        from datetime import date, timedelta
+        from app.models import Task
+        with app.app_context():
+            today = date.today()
+            recurring = Task.query.filter(Task.is_recurring == True, Task.status == 'completed').all()
+            cnt = 0
+            for t in recurring:
+                interval = t.recurrence_interval or 'weekly'
+                next_due = (
+                    t.due_date + timedelta(days=1 if interval == 'daily' else 30 if interval == 'monthly' else 7)
+                ) if t.due_date else None
+                nxt = Task(
+                    title=t.title,
+                    description=t.description,
+                    priority=t.priority,
+                    status='todo',
+                    due_date=next_due,
+                    start_date=today,
+                    category_id=t.category_id,
+                    user_id=t.user_id,
+                    assignee_id=t.assignee_id,
+                    creator_id=t.creator_id,
+                    team_id=t.team_id,
+                    organization_id=t.organization_id,
+                    is_recurring=True,
+                    recurrence_interval=t.recurrence_interval
+                )
+                t.is_recurring = False
+                db.session.add(nxt)
+                cnt += 1
+            db.session.commit()
+            print(f"Spawned {cnt} recurring tasks.")
+
+    # Create tables automatically on start and perform safe SQLite migrations
     with app.app_context():
         db.create_all()
-        # Automatically migrate existing SQLite database tables if missing new columns
         from sqlalchemy import inspect as sa_inspect, text
         try:
             inspector = sa_inspect(db.engine)
-            if 'users' in inspector.get_table_names():
-                existing_cols = {c['name'] for c in inspector.get_columns('users')}
-                if 'role' not in existing_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"))
-                if 'account_active' not in existing_cols:
-                    db.session.execute(text("ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"))
+            table_names = set(inspector.get_table_names())
+
+            # 1. Migrate `users` table
+            if 'users' in table_names:
+                user_cols = {c['name'] for c in inspector.get_columns('users')}
+                user_migrations = [
+                    ('role', "ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"),
+                    ('account_active', "ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"),
+                    ('organization_id', "ALTER TABLE users ADD COLUMN organization_id INTEGER"),
+                    ('department_id', "ALTER TABLE users ADD COLUMN department_id INTEGER"),
+                    ('team_id', "ALTER TABLE users ADD COLUMN team_id INTEGER"),
+                    ('manager_id', "ALTER TABLE users ADD COLUMN manager_id INTEGER"),
+                    ('designation', "ALTER TABLE users ADD COLUMN designation VARCHAR(100) DEFAULT 'Employee' NOT NULL"),
+                    ('employee_id_code', "ALTER TABLE users ADD COLUMN employee_id_code VARCHAR(30)"),
+                    ('phone', "ALTER TABLE users ADD COLUMN phone VARCHAR(30)"),
+                ]
+                for col_name, sql in user_migrations:
+                    if col_name not in user_cols:
+                        db.session.execute(text(sql))
                 db.session.commit()
+
+            # 2. Migrate `tasks` table
+            if 'tasks' in table_names:
+                task_cols = {c['name'] for c in inspector.get_columns('tasks')}
+                task_migrations = [
+                    ('creator_id', "ALTER TABLE tasks ADD COLUMN creator_id INTEGER"),
+                    ('assignee_id', "ALTER TABLE tasks ADD COLUMN assignee_id INTEGER"),
+                    ('team_id', "ALTER TABLE tasks ADD COLUMN team_id INTEGER"),
+                    ('organization_id', "ALTER TABLE tasks ADD COLUMN organization_id INTEGER"),
+                    ('start_date', "ALTER TABLE tasks ADD COLUMN start_date DATE"),
+                    ('acceptance_criteria', "ALTER TABLE tasks ADD COLUMN acceptance_criteria TEXT"),
+                    ('progress', "ALTER TABLE tasks ADD COLUMN progress INTEGER DEFAULT 0 NOT NULL"),
+                    ('is_recurring', "ALTER TABLE tasks ADD COLUMN is_recurring BOOLEAN DEFAULT 0 NOT NULL"),
+                    ('recurrence_interval', "ALTER TABLE tasks ADD COLUMN recurrence_interval VARCHAR(20)"),
+                    ('next_recurrence_date', "ALTER TABLE tasks ADD COLUMN next_recurrence_date DATE"),
+                    ('updated_at', "ALTER TABLE tasks ADD COLUMN updated_at DATETIME"),
+                ]
+                for col_name, sql in task_migrations:
+                    if col_name not in task_cols:
+                        db.session.execute(text(sql))
+                db.session.commit()
+
+            # 3. Ensure Default Organization exists and backfill
+            from app.models import Organization
+            default_org = Organization.query.first()
+            if not default_org:
+                default_org = Organization(name='TaskNest Enterprise', slug='tasknest-enterprise')
+                db.session.add(default_org)
+                db.session.commit()
+
+            # Backfill any null organization_id or assignee_id
+            db.session.execute(text(f"UPDATE users SET organization_id = {default_org.id} WHERE organization_id IS NULL"))
+            db.session.execute(text(f"UPDATE tasks SET organization_id = {default_org.id} WHERE organization_id IS NULL"))
+            db.session.execute(text("UPDATE tasks SET assignee_id = user_id WHERE assignee_id IS NULL"))
+            db.session.execute(text("UPDATE tasks SET creator_id = user_id WHERE creator_id IS NULL"))
+            db.session.commit()
+
         except Exception:
             db.session.rollback()
 
