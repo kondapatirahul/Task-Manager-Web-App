@@ -25,7 +25,7 @@
   <!-- Reusable Task Modal (Add / Edit) -->
   {% if current_user.is_authenticated %}
   <div class="modal-overlay" id="task-modal" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
-    <div class="modal-card">
+    <div class="modal-card modal-card-lg">
       <div class="modal-header">
         <h3 id="task-modal-title">Add New Task</h3>
         <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
@@ -38,12 +38,17 @@
           
           <div class="form-group">
             <label class="form-label" for="task-title-input">Task Title <span class="required">*</span></label>
-            <input type="text" id="task-title-input" class="form-control" placeholder="e.g., Review project roadmap" required>
+            <input type="text" id="task-title-input" class="form-control" placeholder="e.g., Implement authentication review flow" required>
           </div>
 
           <div class="form-group">
             <label class="form-label" for="task-desc-input">Description</label>
-            <textarea id="task-desc-input" class="form-control" placeholder="Add additional details, notes, or subtasks..."></textarea>
+            <textarea id="task-desc-input" class="form-control" rows="3" placeholder="Add additional details, background, or scope..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="task-criteria-input">Acceptance Criteria</label>
+            <textarea id="task-criteria-input" class="form-control" rows="2" placeholder="Specific requirements and outcomes required for sign-off..."></textarea>
           </div>
 
           <div class="form-row">
@@ -58,9 +63,39 @@
             <div class="form-group">
               <label class="form-label" for="task-status-select">Status</label>
               <select id="task-status-select" class="form-control">
-                <option value="pending" selected>Pending</option>
+                <option value="todo" selected>To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="blocked">Blocked</option>
+                <option value="in_review">In Review</option>
+                <option value="changes_requested">Changes Requested</option>
                 <option value="completed">Completed</option>
               </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="task-team-select">Team / Project</label>
+              <select id="task-team-select" class="form-control">
+                <option value="">No Team (Personal Task)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-assignee-select">Assignee</label>
+              <select id="task-assignee-select" class="form-control">
+                <option value="">Unassigned (Self / Open)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="task-start-date-input">Start Date</label>
+              <input type="date" id="task-start-date-input" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="task-due-date-input">Due Date</label>
+              <input type="date" id="task-due-date-input" class="form-control">
             </div>
           </div>
 
@@ -72,8 +107,13 @@
               </select>
             </div>
             <div class="form-group">
-              <label class="form-label" for="task-due-date-input">Due Date</label>
-              <input type="date" id="task-due-date-input" class="form-control">
+              <label class="form-label" for="task-recurring-input">Recurrence (Optional)</label>
+              <select id="task-recurring-select" class="form-control">
+                <option value="">Does Not Repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
             </div>
           </div>
         </div>

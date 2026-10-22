@@ -17,6 +17,34 @@ ROLE_HR          = 'hr'  # Permission alias / HR role
 ALL_ROLES        = (ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD, ROLE_EMPLOYEE)
 ADMIN_HR_ROLES   = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR}
 MANAGEMENT_ROLES = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR, ROLE_TEAM_LEAD}
+# ── Task Status Constants ───────────────────────────────────────────────────────
+STATUS_TODO              = 'todo'
+STATUS_IN_PROGRESS       = 'in_progress'
+STATUS_BLOCKED           = 'blocked'
+STATUS_IN_REVIEW         = 'in_review'
+STATUS_COMPLETED         = 'completed'
+STATUS_CHANGES_REQUESTED = 'changes_requested'
+STATUS_PENDING           = 'pending'  # Legacy alias for todo
+
+COMPANY_TASK_STATUSES = (
+    STATUS_TODO,
+    STATUS_IN_PROGRESS,
+    STATUS_BLOCKED,
+    STATUS_IN_REVIEW,
+    STATUS_COMPLETED,
+    STATUS_CHANGES_REQUESTED,
+)
+
+STATUS_LABELS = {
+    STATUS_TODO:              'To Do',
+    STATUS_PENDING:           'To Do',
+    STATUS_IN_PROGRESS:       'In Progress',
+    STATUS_BLOCKED:           'Blocked',
+    STATUS_IN_REVIEW:         'In Review',
+    STATUS_COMPLETED:         'Completed',
+    STATUS_CHANGES_REQUESTED: 'Changes Requested',
+}
+
 
 
 class User(UserMixin, db.Model):
@@ -250,17 +278,54 @@ class Category(db.Model):
         }
 
 
+class TaskStatusHistory(db.Model):
+    __tablename__ = 'task_status_history'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    task_id       = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
+    changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    old_status    = db.Column(db.String(30), nullable=True)
+    new_status    = db.Column(db.String(30), nullable=False)
+    comment       = db.Column(db.Text, nullable=True)
+    created_at    = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    task       = db.relationship('Task', backref=db.backref('status_history', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskStatusHistory.created_at.desc()'))
+    changed_by = db.relationship('User', foreign_keys=[changed_by_id])
+
+    def to_dict(self):
+        return {
+            'id':              self.id,
+            'task_id':         self.task_id,
+            'changed_by_id':   self.changed_by_id,
+            'changed_by_name': (self.changed_by.full_name or self.changed_by.username) if self.changed_by else 'System',
+            'changed_by_role': self.changed_by.role if self.changed_by else None,
+            'old_status':      self.old_status,
+            'new_status':      self.new_status,
+            'comment':         self.comment or '',
+            'created_at':      self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class Task(db.Model):
     __tablename__ = 'tasks'
 
     id           = db.Column(db.Integer, primary_key=True)
     title        = db.Column(db.String(200), nullable=False)
     description  = db.Column(db.Text, nullable=True)
-    status       = db.Column(db.String(20), default='pending', nullable=False)  # 'pending', 'completed'
+    status       = db.Column(db.String(30), default='pending', nullable=False)
     priority     = db.Column(db.String(10), default='medium', nullable=False)   # 'low', 'medium', 'high'
+    start_date   = db.Column(db.Date, nullable=True)
     due_date     = db.Column(db.Date, nullable=True)
     created_at   = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at   = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=True)
+
+    # Workflow & company fields
+    acceptance_criteria  = db.Column(db.Text, nullable=True)
+    submission_notes     = db.Column(db.Text, nullable=True)
+    review_notes         = db.Column(db.Text, nullable=True)
+    is_recurring         = db.Column(db.Boolean, default=False, nullable=False)
+    recurrence_interval  = db.Column(db.String(20), nullable=True)
 
     user_id        = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     category_id    = db.Column(db.Integer,
@@ -283,22 +348,42 @@ class Task(db.Model):
             return self.due_date < date.today()
         return False
 
-    def to_dict(self):
-        return {
-            'id':               self.id,
-            'title':            self.title,
-            'description':      self.description or '',
-            'status':           self.status,
-            'priority':         self.priority,
-            'due_date':         self.due_date.isoformat() if self.due_date else None,
-            'created_at':       self.created_at.isoformat() if self.created_at else None,
-            'completed_at':     self.completed_at.isoformat() if self.completed_at else None,
-            'is_overdue':       self.is_overdue,
-            'user_id':          self.user_id,
-            'category_id':      self.category_id,
-            'category_name':    self.category.name if self.category else None,
-            'team_id':          self.team_id,
-            'team_name':        self.team.name if self.team else None,
-            'assigned_to_id':   self.assigned_to_id,
-            'assigned_to_name': (self.assigned_to.full_name or self.assigned_to.username) if self.assigned_to else None,
+    @property
+    def status_label(self):
+        return STATUS_LABELS.get(self.status, self.status.replace('_', ' ').title())
+
+    def to_dict(self, include_history=False):
+        data = {
+            'id':                  self.id,
+            'title':               self.title,
+            'description':         self.description or '',
+            'status':              self.status,
+            'status_label':        self.status_label,
+            'priority':            self.priority,
+            'start_date':          self.start_date.isoformat() if self.start_date else None,
+            'due_date':            self.due_date.isoformat() if self.due_date else None,
+            'created_at':          self.created_at.isoformat() if self.created_at else None,
+            'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
+            'completed_at':        self.completed_at.isoformat() if self.completed_at else None,
+            'is_overdue':          self.is_overdue,
+            'acceptance_criteria': self.acceptance_criteria or '',
+            'submission_notes':    self.submission_notes or '',
+            'review_notes':        self.review_notes or '',
+            'is_recurring':        bool(self.is_recurring),
+            'recurrence_interval': self.recurrence_interval or '',
+            'user_id':             self.user_id,
+            'creator_id':          self.user_id,
+            'creator_name':        (self.user.full_name or self.user.username) if self.user else None,
+            'creator_role':        self.user.role if self.user else None,
+            'category_id':         self.category_id,
+            'category_name':       self.category.name if self.category else None,
+            'team_id':             self.team_id,
+            'team_name':           self.team.name if self.team else None,
+            'assigned_to_id':      self.assigned_to_id,
+            'assigned_to_name':    (self.assigned_to.full_name or self.assigned_to.username) if self.assigned_to else None,
+            'assigned_to_email':   self.assigned_to.email if self.assigned_to else None,
+            'assigned_to_role':    self.assigned_to.role if self.assigned_to else None,
         }
+        if include_history and hasattr(self, 'status_history'):
+            data['status_history'] = [h.to_dict() for h in self.status_history.all()]
+        return data

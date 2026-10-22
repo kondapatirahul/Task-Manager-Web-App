@@ -5,17 +5,25 @@
 const TaskManager = {
   tasks: [],
   categories: [],
+  teams: [],
+  employees: [],
   currentFilter: {
     q: '',
+    scope: '',
     status: '',
     priority: '',
     category_id: '',
+    team_id: '',
     sort: 'created_at_desc'
   },
 
   init() {
     this.bindEvents();
-    this.loadCategories().then(() => {
+    Promise.all([
+      this.loadCategories(),
+      this.loadTeams(),
+      this.loadEmployees()
+    ]).then(() => {
       if (document.getElementById('task-list-container')) {
         this.loadTasks();
       }
@@ -54,7 +62,16 @@ const TaskManager = {
       });
     }
 
-    // Filters
+    // Scope Filter
+    const filterScope = document.getElementById('filter-scope');
+    if (filterScope) {
+      filterScope.addEventListener('change', (e) => {
+        this.currentFilter.scope = e.target.value;
+        this.loadTasks();
+      });
+    }
+
+    // Status Filter
     const filterStatus = document.getElementById('filter-status');
     if (filterStatus) {
       filterStatus.addEventListener('change', (e) => {
@@ -63,6 +80,7 @@ const TaskManager = {
       });
     }
 
+    // Priority Filter
     const filterPriority = document.getElementById('filter-priority');
     if (filterPriority) {
       filterPriority.addEventListener('change', (e) => {
@@ -71,6 +89,7 @@ const TaskManager = {
       });
     }
 
+    // Category Filter
     const filterCategory = document.getElementById('filter-category');
     if (filterCategory) {
       filterCategory.addEventListener('change', (e) => {
@@ -79,6 +98,16 @@ const TaskManager = {
       });
     }
 
+    // Team Filter
+    const filterTeam = document.getElementById('filter-team');
+    if (filterTeam) {
+      filterTeam.addEventListener('change', (e) => {
+        this.currentFilter.team_id = e.target.value;
+        this.loadTasks();
+      });
+    }
+
+    // Sort Filter
     const filterSort = document.getElementById('filter-sort');
     if (filterSort) {
       filterSort.addEventListener('change', (e) => {
@@ -87,14 +116,17 @@ const TaskManager = {
       });
     }
 
+    // Reset Filters
     const clearFiltersBtn = document.getElementById('clear-filters-btn');
     if (clearFiltersBtn) {
       clearFiltersBtn.addEventListener('click', () => {
-        this.currentFilter = { q: '', status: '', priority: '', category_id: '', sort: 'created_at_desc' };
+        this.currentFilter = { q: '', scope: '', status: '', priority: '', category_id: '', team_id: '', sort: 'created_at_desc' };
         if (searchInput) searchInput.value = '';
+        if (filterScope) filterScope.value = '';
         if (filterStatus) filterStatus.value = '';
         if (filterPriority) filterPriority.value = '';
         if (filterCategory) filterCategory.value = '';
+        if (filterTeam) filterTeam.value = '';
         if (filterSort) filterSort.value = 'created_at_desc';
         this.loadTasks();
       });
@@ -138,6 +170,27 @@ const TaskManager = {
     }
   },
 
+  async loadTeams() {
+    try {
+      const res = await api('GET', '/teams');
+      this.teams = res.data || [];
+      this.populateTeamDropdowns();
+    } catch (err) {
+      // Teams endpoint may return empty if none created yet
+      this.teams = [];
+    }
+  },
+
+  async loadEmployees() {
+    try {
+      const res = await api('GET', '/employees');
+      this.employees = res.data || [];
+      this.populateAssigneeDropdown();
+    } catch (err) {
+      this.employees = [];
+    }
+  },
+
   populateCategoryDropdowns() {
     const selects = [
       document.getElementById('filter-category'),
@@ -164,6 +217,49 @@ const TaskManager = {
     });
   },
 
+  populateTeamDropdowns() {
+    const filterTeam = document.getElementById('filter-team');
+    if (filterTeam) {
+      const cur = filterTeam.value;
+      filterTeam.innerHTML = '<option value="">All Teams</option>';
+      this.teams.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        filterTeam.appendChild(opt);
+      });
+      if (cur) filterTeam.value = cur;
+    }
+
+    const modalTeam = document.getElementById('task-team-select');
+    if (modalTeam) {
+      const cur = modalTeam.value;
+      modalTeam.innerHTML = '<option value="">No Team (Personal Task)</option>';
+      this.teams.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = t.name;
+        modalTeam.appendChild(opt);
+      });
+      if (cur) modalTeam.value = cur;
+    }
+  },
+
+  populateAssigneeDropdown() {
+    const select = document.getElementById('task-assignee-select');
+    if (!select) return;
+
+    const cur = select.value;
+    select.innerHTML = '<option value="">Unassigned (Self / Open)</option>';
+    this.employees.forEach(emp => {
+      const opt = document.createElement('option');
+      opt.value = emp.id;
+      opt.textContent = `${emp.full_name || emp.username} (${emp.role.replace('_', ' ')})`;
+      select.appendChild(opt);
+    });
+    if (cur) select.value = cur;
+  },
+
   async loadTasks() {
     const container = document.getElementById('task-list-container');
     if (!container) return;
@@ -176,12 +272,13 @@ const TaskManager = {
     `;
 
     try {
-      // Build query string
       const params = new URLSearchParams();
       if (this.currentFilter.q) params.set('q', this.currentFilter.q);
+      if (this.currentFilter.scope) params.set('scope', this.currentFilter.scope);
       if (this.currentFilter.status) params.set('status', this.currentFilter.status);
       if (this.currentFilter.priority) params.set('priority', this.currentFilter.priority);
       if (this.currentFilter.category_id) params.set('category_id', this.currentFilter.category_id);
+      if (this.currentFilter.team_id) params.set('team_id', this.currentFilter.team_id);
       if (this.currentFilter.sort) params.set('sort', this.currentFilter.sort);
 
       // Support URL search param from global search
@@ -209,6 +306,24 @@ const TaskManager = {
           <span>Error loading tasks: ${err.message}</span>
         </div>
       `;
+    }
+  },
+
+  getStatusBadgeClass(status) {
+    switch (status) {
+      case 'completed':
+        return 'badge-success';
+      case 'in_progress':
+        return 'badge-primary';
+      case 'in_review':
+        return 'badge-warning';
+      case 'changes_requested':
+      case 'blocked':
+        return 'badge-danger';
+      case 'todo':
+      case 'pending':
+      default:
+        return 'badge-neutral';
     }
   },
 
@@ -247,15 +362,24 @@ const TaskManager = {
         formattedDate = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       }
 
+      const statusLabel = task.status_label || task.status.replace('_', ' ').toUpperCase();
+      const statusClass = this.getStatusBadgeClass(task.status);
+
       item.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} aria-label="Toggle task status" />
         <div class="task-body">
-          <div class="task-title">${this.escapeHtml(task.title)}</div>
+          <div class="task-title">
+            <a href="/tasks/${task.id}" class="task-title-link" style="color: inherit; text-decoration: none;">
+              ${this.escapeHtml(task.title)}
+            </a>
+          </div>
           ${task.description ? `<div class="task-desc-preview">${this.escapeHtml(task.description)}</div>` : ''}
           <div class="task-meta">
+            ${task.team_name ? `<span class="badge badge-neutral" title="Team"><svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>${this.escapeHtml(task.team_name)}</span>` : ''}
+            ${task.assigned_to_name ? `<span class="badge badge-neutral" title="Assignee"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${this.escapeHtml(task.assigned_to_name)}</span>` : ''}
             ${task.category_name ? `<span class="badge badge-category"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>${this.escapeHtml(task.category_name)}</span>` : ''}
-            <span class="badge badge-${task.priority}">${task.priority}</span>
-            <span class="badge badge-${task.status}">${task.status}</span>
+            <span class="badge badge-${task.priority}">${task.priority.toUpperCase()}</span>
+            <span class="badge ${statusClass}">${statusLabel}</span>
             ${task.due_date ? `
               <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -265,6 +389,9 @@ const TaskManager = {
           </div>
         </div>
         <div class="task-actions">
+          <a href="/tasks/${task.id}" class="btn btn-ghost btn-sm btn-icon-only" title="View Details" aria-label="View Details">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          </a>
           <button class="btn btn-ghost btn-sm btn-icon-only edit-task-btn" title="Edit Task" aria-label="Edit Task">
             <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
           </button>
@@ -297,7 +424,7 @@ const TaskManager = {
       this.loadTasks();
     } catch (err) {
       showToast(err.message || 'Failed to update task status', 'error');
-      this.loadTasks(); // Revert check state
+      this.loadTasks();
     }
   },
 
@@ -327,10 +454,14 @@ const TaskManager = {
           upcomingContainer.innerHTML = stats.upcoming.map(t => `
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid var(--color-border-subtle);">
               <div>
-                <div style="font-weight: 600; font-size: var(--font-size-sm); color: var(--color-text);">${this.escapeHtml(t.title)}</div>
-                <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${t.category_name || 'General'}</div>
+                <a href="/tasks/${t.id}" style="font-weight: 600; font-size: var(--font-size-sm); color: var(--color-text); text-decoration: none;">
+                  ${this.escapeHtml(t.title)}
+                </a>
+                <div style="font-size: var(--font-size-xs); color: var(--color-muted);">
+                  ${t.team_name ? `[${this.escapeHtml(t.team_name)}] ` : ''}${t.category_name || 'General'}
+                </div>
               </div>
-              <span class="badge ${t.is_overdue ? 'badge-overdue' : 'badge-low'}">
+              <span class="badge ${t.is_overdue ? 'badge-danger' : 'badge-neutral'}">
                 ${t.due_date ? t.due_date : 'No date'}
               </span>
             </div>
@@ -342,6 +473,17 @@ const TaskManager = {
     }
   },
 
+  async openEditModal(taskId) {
+    try {
+      const res = await api('GET', `/tasks/${taskId}`);
+      if (res && res.ok) {
+        this.openTaskModal(res.data);
+      }
+    } catch (err) {
+      showToast('Could not load task for editing.', 'error');
+    }
+  },
+
   openTaskModal(task = null) {
     const modal = document.getElementById('task-modal');
     if (!modal) return;
@@ -350,33 +492,56 @@ const TaskManager = {
     const taskIdField = document.getElementById('task-id');
     const titleField = document.getElementById('task-title-input');
     const descField = document.getElementById('task-desc-input');
+    const criteriaField = document.getElementById('task-criteria-input');
     const priorityField = document.getElementById('task-priority-select');
     const statusField = document.getElementById('task-status-select');
-    const categoryField = document.getElementById('task-category-select');
+    const teamField = document.getElementById('task-team-select');
+    const assigneeField = document.getElementById('task-assignee-select');
+    const startDateField = document.getElementById('task-start-date-input');
     const dueDateField = document.getElementById('task-due-date-input');
+    const categoryField = document.getElementById('task-category-select');
+    const recurringField = document.getElementById('task-recurring-select');
 
     if (task) {
       modalTitle.textContent = 'Edit Task';
       taskIdField.value = task.id;
       titleField.value = task.title;
       descField.value = task.description || '';
+      if (criteriaField) criteriaField.value = task.acceptance_criteria || '';
       priorityField.value = task.priority || 'medium';
-      statusField.value = task.status || 'pending';
-      categoryField.value = task.category_id || '';
-      dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
+      statusField.value = task.status || 'todo';
+      if (teamField) teamField.value = task.team_id || '';
+      if (assigneeField) assigneeField.value = task.assigned_to_id || '';
+      if (startDateField) startDateField.value = task.start_date ? task.start_date.split('T')[0] : '';
+      if (dueDateField) dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
+      if (categoryField) categoryField.value = task.category_id || '';
+      if (recurringField) recurringField.value = task.recurrence_interval || '';
     } else {
       modalTitle.textContent = 'Add New Task';
       taskIdField.value = '';
       titleField.value = '';
       descField.value = '';
+      if (criteriaField) criteriaField.value = '';
       priorityField.value = 'medium';
-      statusField.value = 'pending';
-      categoryField.value = '';
-      dueDateField.value = '';
+      statusField.value = 'todo';
+      if (teamField) teamField.value = '';
+      if (assigneeField) assigneeField.value = '';
+      if (startDateField) startDateField.value = '';
+      if (dueDateField) dueDateField.value = '';
+      if (categoryField) categoryField.value = '';
+      if (recurringField) recurringField.value = '';
     }
 
     modal.classList.add('is-active');
+    modal.classList.add('active');
     setTimeout(() => titleField.focus(), 50);
+  },
+
+  closeModals() {
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+      modal.classList.remove('is-active');
+      modal.classList.remove('active');
+    });
   },
 
   async handleTaskFormSubmit(e) {
@@ -386,8 +551,14 @@ const TaskManager = {
     const description = document.getElementById('task-desc-input').value.trim();
     const priority = document.getElementById('task-priority-select').value;
     const status = document.getElementById('task-status-select').value;
-    const categoryId = document.getElementById('task-category-select').value;
-    const dueDate = document.getElementById('task-due-date-input').value;
+    const categoryId = document.getElementById('task-category-select')?.value;
+    const dueDate = document.getElementById('task-due-date-input')?.value;
+
+    const criteria = document.getElementById('task-criteria-input')?.value.trim() || '';
+    const teamId = document.getElementById('task-team-select')?.value;
+    const assigneeId = document.getElementById('task-assignee-select')?.value;
+    const startDate = document.getElementById('task-start-date-input')?.value;
+    const recurring = document.getElementById('task-recurring-select')?.value;
 
     if (!title) {
       showToast('Task title is required.', 'error');
@@ -400,7 +571,13 @@ const TaskManager = {
       priority,
       status,
       category_id: categoryId ? parseInt(categoryId, 10) : null,
-      due_date: dueDate || null
+      team_id: teamId ? parseInt(teamId, 10) : null,
+      assigned_to_id: assigneeId ? parseInt(assigneeId, 10) : null,
+      start_date: startDate || null,
+      due_date: dueDate || null,
+      acceptance_criteria: criteria,
+      is_recurring: Boolean(recurring),
+      recurrence_interval: recurring || null
     };
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -417,6 +594,11 @@ const TaskManager = {
       this.closeModals();
       this.loadTasks();
       this.loadDashboardStats();
+
+      // If on detail page, refresh
+      if (window.TaskDetail && typeof window.TaskDetail.init === 'function') {
+        window.TaskDetail.init();
+      }
     } catch (err) {
       showToast(err.message || 'Failed to save task', 'error');
     } finally {
@@ -442,6 +624,13 @@ const TaskManager = {
     }
   },
 
+  escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  },
+
   // Category page methods
   renderCategoriesPage() {
     const container = document.getElementById('categories-list-container');
@@ -453,8 +642,8 @@ const TaskManager = {
           <div class="empty-icon-wrap">
             <svg class="icon icon-xl" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           </div>
-          <h3>No categories created</h3>
-          <p>Organize your tasks by creating categories like Work, Personal, or Projects.</p>
+          <h3>No categories yet</h3>
+          <p>Create categories to group, organize, and sort your tasks easily.</p>
         </div>
       `;
       return;
@@ -463,12 +652,10 @@ const TaskManager = {
     container.innerHTML = `
       <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
         ${this.categories.map(cat => `
-          <div class="card" style="display: flex; align-items: center; justify-content: space-between; padding: 1.25rem;">
+          <div class="card" style="display: flex; align-items: center; justify-content: space-between;">
             <div>
-              <div style="font-weight: 700; font-size: var(--font-size-base); color: var(--color-primary);">${this.escapeHtml(cat.name)}</div>
-              <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.25rem;">
-                ${cat.task_count ?? 0} associated tasks
-              </div>
+              <div style="font-weight: 700; color: var(--color-text);">${this.escapeHtml(cat.name)}</div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${cat.task_count ?? 0} associated tasks</div>
             </div>
             <button class="btn btn-ghost btn-sm btn-icon-only text-danger delete-cat-btn" data-id="${cat.id}" data-name="${this.escapeHtml(cat.name)}" title="Delete Category">
               <svg class="icon" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -482,8 +669,7 @@ const TaskManager = {
       btn.addEventListener('click', () => {
         const catId = btn.getAttribute('data-id');
         const catName = btn.getAttribute('data-name');
-        const ok = window.confirm(`Delete category "${catName}"? Tasks in this category will remain safe and be unassigned.`);
-        if (ok) {
+        if (confirm(`Delete category "${catName}"? Tasks in this category will become unassigned.`)) {
           this.deleteCategory(catId);
         }
       });
@@ -492,17 +678,14 @@ const TaskManager = {
 
   async handleCategoryFormSubmit(e) {
     e.preventDefault();
-    const nameInput = document.getElementById('new-category-name');
-    const name = nameInput.value.trim();
-    if (!name) {
-      showToast('Please enter a category name.', 'error');
-      return;
-    }
+    const input = document.getElementById('category-name-input');
+    const name = input?.value.trim();
+    if (!name) return;
 
     try {
       await api('POST', '/categories', { name });
-      showToast(`Category "${name}" created!`, 'success');
-      nameInput.value = '';
+      showToast('Category created!', 'success');
+      if (input) input.value = '';
       await this.loadCategories();
       this.renderCategoriesPage();
     } catch (err) {
@@ -513,30 +696,16 @@ const TaskManager = {
   async deleteCategory(catId) {
     try {
       await api('DELETE', `/categories/${catId}`);
-      showToast('Category deleted and tasks unassigned safely.', 'success');
+      showToast('Category deleted.', 'success');
       await this.loadCategories();
       this.renderCategoriesPage();
     } catch (err) {
       showToast(err.message || 'Failed to delete category', 'error');
     }
-  },
-
-  closeModals() {
-    document.querySelectorAll('.modal-overlay').forEach(modal => {
-      modal.classList.remove('is-active');
-    });
-  },
-
-  escapeHtml(str) {
-    if (!str) return '';
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
   }
 };
+
+window.TaskManager = TaskManager;
 
 document.addEventListener('DOMContentLoaded', () => {
   TaskManager.init();
