@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from sqlalchemy import or_, desc, asc, case
 from app import db
 from app.models import (
+<<<<<<< Updated upstream
     Task,
     Category,
     User,
@@ -27,6 +28,14 @@ from app.models import (
     STATUS_PENDING,
     COMPANY_TASK_STATUSES,
     STATUS_LABELS,
+=======
+<<<<<<< Updated upstream
+    Task, Category, SubTask, User, Team, TeamMember,
+    TaskStatusHistory, TaskMessage, TaskAttachment, WorkSubmission,
+    STATUS_TODO, STATUS_IN_PROGRESS, STATUS_BLOCKED, STATUS_IN_REVIEW,
+    STATUS_CHANGES_REQUESTED, STATUS_COMPLETED, STATUS_PENDING,
+    ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD, ROLE_EMPLOYEE
+>>>>>>> Stashed changes
 )
 from app.routes.utils import api_success, api_error, active_account_required
 from app.file_utils import (
@@ -62,6 +71,37 @@ from app.services.handovers import (
     task_can_be_viewed,
     validate_handover_attachments,
 )
+=======
+    Task,
+    Category,
+    User,
+    Team,
+    team_members,
+    TaskStatusHistory,
+    TaskComment,
+    TaskSubmission,
+    TaskAttachment,
+    STATUS_TODO,
+    STATUS_IN_PROGRESS,
+    STATUS_BLOCKED,
+    STATUS_IN_REVIEW,
+    STATUS_COMPLETED,
+    STATUS_CHANGES_REQUESTED,
+    STATUS_PENDING,
+    COMPANY_TASK_STATUSES,
+    STATUS_LABELS,
+)
+from app.routes.utils import api_success, api_error
+from app.file_utils import (
+    validate_uploaded_file,
+    save_attachment_file,
+    get_attachment_filepath,
+    delete_attachment_file,
+    DEFAULT_MAX_FILE_SIZE,
+    DEFAULT_MAX_FILES_PER_MESSAGE,
+)
+from app.services.notifications import notify_task_collaboration_event
+>>>>>>> Stashed changes
 
 tasks_bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
 
@@ -75,7 +115,19 @@ VALID_STATUSES = {
     STATUS_CHANGES_REQUESTED,
     STATUS_PENDING,
 }
+<<<<<<< Updated upstream
 MAX_COMMENT_LENGTH = 5000
+=======
+<<<<<<< Updated upstream
+VALID_STATUSES = VALID_UPDATE_STATUSES
+ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'xlsx', 'txt'}
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
 
 def parse_date(date_str):
@@ -370,6 +422,7 @@ def create_task():
     else:
         status = STATUS_PENDING
 
+<<<<<<< Updated upstream
     # Parse dates
     due_date = parse_date(data.get('due_date'))
     start_date = parse_date(data.get('start_date'))
@@ -382,6 +435,16 @@ def create_task():
         return api_error('Estimated effort must be between 0 and 10000 hours.', 400)
 
     # Category validation
+=======
+<<<<<<< Updated upstream
+=======
+    # Parse dates
+    due_date = parse_date(data.get('due_date'))
+    start_date = parse_date(data.get('start_date'))
+
+    # Category validation
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     category_id = data.get('category_id')
     if category_id:
         try:
@@ -458,9 +521,17 @@ def create_task():
         description=(data.get('description') or '').strip(),
         priority=priority,
         status=status,
+<<<<<<< Updated upstream
         start_date=start_date,
         due_date=due_date,
         estimated_effort_hours=estimated_effort_hours,
+=======
+        due_date=due_date,
+<<<<<<< Updated upstream
+        start_date=start_date,
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
         completed_at=completed_at,
         category_id=category_id,
         team_id=team_id,
@@ -508,6 +579,7 @@ def create_task():
         db.session.add(history)
         db.session.commit()
 
+<<<<<<< Updated upstream
         notify_task_collaboration_event(
             'task_created',
             task,
@@ -529,6 +601,23 @@ def create_task():
             include_collaboration=True,
             dependency_user=current_user,
         ), message='Task created successfully', status_code=201)
+=======
+<<<<<<< Updated upstream
+    log_audit('task_created', 'Task', task.id, f'Created task {task.title} (assigned to {assignee_id})')
+    return api_success(task.to_dict(), message='Task created successfully', status_code=201)
+
+=======
+        if validated_files:
+            notify_task_collaboration_event(
+                'reference_uploaded',
+                task,
+                current_user,
+                recipients=[task.assigned_to_id] if task.assigned_to_id else [],
+                metadata={'count': len(validated_files)}
+            )
+
+        return api_success(task.to_dict(include_history=True, include_collaboration=True), message='Task created successfully', status_code=201)
+>>>>>>> Stashed changes
     except Exception as e:
         db.session.rollback()
         for p in saved_filepaths:
@@ -538,6 +627,10 @@ def create_task():
                 except OSError:
                     pass
         raise e
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
 
 @tasks_bp.route('/<int:task_id>', methods=['GET'])
@@ -547,6 +640,7 @@ def get_task(task_id):
     if not task or not can_user_view_task(current_user, task):
         return api_error('Task not found.', 404)
 
+<<<<<<< Updated upstream
     payload = task.to_dict(
         include_history=True,
         include_collaboration=True,
@@ -635,6 +729,19 @@ def delete_task_dependency(task_id, blocking_task_id):
         message='Dependency removed.',
     )
 
+=======
+<<<<<<< Updated upstream
+    task_dict = task.to_dict()
+    task_dict['subtasks'] = [st.to_dict() for st in task.subtasks.all()]
+    return api_success(task_dict)
+
+
+# ── Update Task ────────────────────────────────────────────────────────────────
+=======
+    return api_success(task.to_dict(include_history=True, include_collaboration=True))
+
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
 @login_required
@@ -647,6 +754,7 @@ def update_task(task_id):
     is_manager = can_user_manage_task(current_user, task)
     is_assignee = (task.assigned_to_id == current_user.id)
 
+<<<<<<< Updated upstream
     # Security check: If caller is regular employee assignee and NOT manager
     if not is_manager:
         protected_fields = [
@@ -664,6 +772,135 @@ def update_task(task_id):
     old_assigned_id = task.assigned_to_id
     old_due_date = task.due_date
     status_changed = False
+=======
+<<<<<<< Updated upstream
+    data = request.form.to_dict() if request.form else (request.get_json(silent=True) or {})
+    if not isinstance(data, dict):
+        return api_error('A JSON object is required', 400)
+
+    is_manager = can_manage_task(task, current_user)
+    is_assigned = (current_user.id in (task.assignee_id, task.user_id))
+
+    if not is_manager and not is_assigned:
+        return api_error('Task not found.', 404)
+
+    # Employee security check
+    if not is_manager and is_assigned:
+        protected_fields = {'title', 'description', 'priority', 'due_date', 'start_date', 'team_id', 'category_id', 'assignee_id', 'assigned_to_id', 'acceptance_criteria'}
+        if any(k in data for k in protected_fields):
+            return api_error('Employees cannot modify protected task details', 403)
+        if data.get('status') == 'completed':
+            return api_error('Employees cannot mark tasks as completed directly; submit work for review.', 403)
+
+    old_status = task.status
+=======
+    # Security check: If caller is regular employee assignee and NOT manager
+    if not is_manager:
+        protected_fields = [
+            'title', 'description', 'priority', 'due_date',
+            'start_date', 'acceptance_criteria', 'assigned_to_id',
+            'team_id', 'category_id', 'is_recurring'
+        ]
+        for field in protected_fields:
+            if field in data and data[field] != getattr(task, field):
+                return api_error('Employees cannot modify protected task details or assignment.', 403)
+
+    old_status = task.status
+    status_changed = False
+
+    # Update title
+    if 'title' in data:
+        title = (data.get('title') or '').strip()
+        if not title:
+            return api_error('Title cannot be empty.', 400)
+        task.title = title
+
+    # Update description
+    if 'description' in data:
+        task.description = (data.get('description') or '').strip()
+
+    # Update priority
+    if 'priority' in data:
+        priority = (data.get('priority') or '').strip().lower()
+        if priority not in VALID_PRIORITIES:
+            return api_error(f"Priority must be one of: {', '.join(sorted(VALID_PRIORITIES))}", 400)
+        task.priority = priority
+
+    # Update dates
+    if 'due_date' in data:
+        raw_due = data.get('due_date')
+        task.due_date = parse_date(raw_due) if raw_due else None
+
+    if 'start_date' in data:
+        raw_start = data.get('start_date')
+        task.start_date = parse_date(raw_start) if raw_start else None
+
+    # Update acceptance criteria
+    if 'acceptance_criteria' in data and is_manager:
+        task.acceptance_criteria = (data.get('acceptance_criteria') or '').strip()
+
+    # Update submission notes
+    if 'submission_notes' in data:
+        task.submission_notes = (data.get('submission_notes') or '').strip()
+
+    # Update recurring
+    if 'is_recurring' in data and is_manager:
+        task.is_recurring = bool(data.get('is_recurring'))
+    if 'recurrence_interval' in data and is_manager:
+        task.recurrence_interval = (data.get('recurrence_interval') or '').strip() or None
+
+    # Update category
+    if 'category_id' in data and is_manager:
+        cat_id = data.get('category_id')
+        if cat_id:
+            try:
+                cat_id = int(cat_id)
+                cat = Category.query.filter_by(id=cat_id).first()
+                if not cat or (cat.user_id != current_user.id and current_user.role not in ('super_admin', 'admin')):
+                    return api_error('Category not found.', 404)
+                task.category_id = cat_id
+            except (ValueError, TypeError):
+                task.category_id = None
+        else:
+            task.category_id = None
+
+    # Update team & assignment (manager only)
+    if ('team_id' in data or 'assigned_to_id' in data) and is_manager:
+        new_team_id = task.team_id
+        if 'team_id' in data:
+            raw_t = data.get('team_id')
+            new_team_id = int(raw_t) if raw_t else None
+
+        new_assigned_id = task.assigned_to_id
+        if 'assigned_to_id' in data:
+            raw_a = data.get('assigned_to_id')
+            new_assigned_id = int(raw_a) if raw_a else None
+
+        if current_user.role == 'team_lead':
+            led_teams = get_user_led_team_ids(current_user)
+            if new_team_id and new_team_id not in led_teams:
+                return api_error('Team Leads cannot assign tasks outside their authorized scope.', 403)
+            if new_assigned_id and new_assigned_id != current_user.id:
+                allowed_assignees = get_permitted_assignee_ids_for_user(current_user, team_id=new_team_id)
+                if allowed_assignees is not None and new_assigned_id not in allowed_assignees:
+                    return api_error('Team Leads cannot assign tasks outside their authorized scope.', 403)
+
+        task.team_id = new_team_id
+        task.assigned_to_id = new_assigned_id
+
+    # Update status
+>>>>>>> Stashed changes
+    if 'status' in data:
+        status = (data.get('status') or '').strip().lower()
+        if status not in VALID_UPDATE_STATUSES:
+            return api_error(f"Invalid status: status must be one of: {', '.join(sorted(VALID_UPDATE_STATUSES))}", 400)
+        task.status = status
+        if status == 'completed':
+            task.completed_at = utc_now()
+            task.progress = 100
+        else:
+            task.completed_at = None
+>>>>>>> Stashed changes
 
     # Update title
     if 'title' in data:
@@ -795,6 +1032,7 @@ def update_task(task_id):
         db.session.add(history)
 
     db.session.commit()
+<<<<<<< Updated upstream
     if status_changed:
         notify_dependency_status_change(task, old_status, current_user)
     if status_changed and task.status == STATUS_COMPLETED:
@@ -839,6 +1077,12 @@ def update_task(task_id):
         include_history=True,
         dependency_user=current_user,
     ), message='Task updated successfully')
+=======
+<<<<<<< Updated upstream
+=======
+    return api_success(task.to_dict(include_history=True), message='Task updated successfully')
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
@@ -848,6 +1092,7 @@ def delete_task(task_id):
     if not task or not can_user_view_task(current_user, task):
         return api_error('Task not found.', 404)
 
+<<<<<<< Updated upstream
     if not can_user_manage_task(current_user, task):
         return api_error('You do not have permission to delete this task.', 403)
     dependent_count = TaskDependency.query.filter_by(
@@ -858,6 +1103,12 @@ def delete_task(task_id):
             'Task cannot be deleted while other tasks depend on it.',
             409,
         )
+=======
+<<<<<<< Updated upstream
+=======
+    if not can_user_manage_task(current_user, task):
+        return api_error('You do not have permission to delete this task.', 403)
+>>>>>>> Stashed changes
 
     # Clean up attachment files from disk
     upload_root = current_app.config.get('UPLOAD_FOLDER')
@@ -869,6 +1120,10 @@ def delete_task(task_id):
             except OSError:
                 pass
 
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     db.session.delete(task)
     db.session.commit()
     return api_success(message='Task deleted successfully')
@@ -906,7 +1161,194 @@ def toggle_task_complete(task_id):
             task.status = STATUS_COMPLETED
             task.completed_at = datetime.now(timezone.utc)
 
+<<<<<<< Updated upstream
     history = TaskStatusHistory(
+=======
+<<<<<<< Updated upstream
+    if task.status != old_status:
+        db.session.add(TaskStatusHistory(
+            task_id=task.id,
+            changed_by_id=current_user.id,
+            old_status=old_status,
+            new_status=task.status,
+            comment='Toggle complete'
+        ))
+
+    task.updated_at = utc_now()
+    db.session.commit()
+    return api_success(task.to_dict(), message='Task status updated')
+=======
+    history = TaskStatusHistory(
+        task_id=task.id,
+        changed_by_id=current_user.id,
+        old_status=old_status,
+        new_status=task.status,
+        comment='Task completion toggled',
+    )
+    db.session.add(history)
+    db.session.commit()
+    return api_success(task.to_dict(include_history=True, include_collaboration=True), message='Task status updated')
+
+
+@tasks_bp.route('/<int:task_id>/submit', methods=['POST'])
+@login_required
+def submit_task_for_review(task_id):
+    """Assignee employee or creator submits task work for lead review with deliverable files."""
+    task = db.session.get(Task, task_id)
+    if not task or not can_user_view_task(current_user, task):
+        return api_error('Task not found.', 404)
+
+    # Caller must be assignee or creator or lead
+    if task.assigned_to_id != current_user.id and not can_user_manage_task(current_user, task):
+        return api_error('You do not have permission to submit work for this task.', 403)
+
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        notes = (data.get('notes') or '').strip()
+        files = []
+    else:
+        notes = (request.form.get('notes') or '').strip()
+        files = request.files.getlist('files') or request.files.getlist('deliverables')
+
+    max_size = current_app.config.get('MAX_ATTACHMENT_SIZE', DEFAULT_MAX_FILE_SIZE)
+    max_files = current_app.config.get('MAX_ATTACHMENTS_PER_MESSAGE', DEFAULT_MAX_FILES_PER_MESSAGE)
+
+    if len(files) > max_files:
+        return api_error(f"Cannot upload more than {max_files} deliverable files at once.", 400)
+
+    # Validate deliverable files
+    validated_files = []
+    for f in files:
+        if f and f.filename and f.filename.strip():
+            ok, err, meta = validate_uploaded_file(f, max_size)
+            if not ok:
+                return api_error(err, 400)
+            validated_files.append((f, meta))
+
+    saved_filepaths = []
+    try:
+        old_status = task.status
+        task.status = STATUS_IN_REVIEW
+        task.submission_notes = notes
+
+        # Create structured submission record
+        submission = TaskSubmission(
+            task_id=task.id,
+            submitted_by_id=current_user.id,
+            summary=notes,
+            status='pending_review',
+        )
+        db.session.add(submission)
+        db.session.flush()
+
+        # Save deliverable attachments
+        upload_root = current_app.config.get('UPLOAD_FOLDER')
+        for f, meta in validated_files:
+            storage_name, dest_path = save_attachment_file(f, task.id, upload_root, meta['extension'])
+            saved_filepaths.append(dest_path)
+            attachment = TaskAttachment(
+                task_id=task.id,
+                uploader_id=current_user.id,
+                submission_id=submission.id,
+                attachment_type='submission',
+                original_filename=meta['original_filename'],
+                storage_name=storage_name,
+                file_size=meta['file_size'],
+                file_type=meta['mime_type'],
+                file_extension=meta['extension'],
+            )
+            db.session.add(attachment)
+
+        deliverable_count = len(validated_files)
+        hist_comment = f"Submitted work for review ({deliverable_count} deliverable(s)): {notes}" if deliverable_count else (f"Submitted for review: {notes}" if notes else "Submitted work for review")
+
+        history = TaskStatusHistory(
+            task_id=task.id,
+            changed_by_id=current_user.id,
+            old_status=old_status,
+            new_status=STATUS_IN_REVIEW,
+            comment=hist_comment,
+        )
+        db.session.add(history)
+        db.session.commit()
+
+        notify_task_collaboration_event(
+            'submission_created',
+            task,
+            current_user,
+            recipients=[task.user_id] if task.user_id != current_user.id else [],
+            metadata={'deliverable_count': deliverable_count}
+        )
+
+        return api_success(task.to_dict(include_history=True, include_collaboration=True), message='Task submitted for review successfully')
+    except Exception as e:
+        db.session.rollback()
+        for p in saved_filepaths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        raise e
+>>>>>>> Stashed changes
+
+
+# ── Submit Work ────────────────────────────────────────────────────────────────
+
+@tasks_bp.route('/<int:task_id>/submit', methods=['POST'])
+@login_required
+@active_account_required
+def submit_task_work(task_id):
+    task = db.session.get(Task, task_id)
+    if not task or not can_view_task(task, current_user):
+        return api_error('Task not found.', 404)
+
+    data = request.form.to_dict() if request.form else (request.get_json(silent=True) or {})
+    notes = (data.get('notes') or data.get('summary') or data.get('message') or '').strip()
+    if not notes:
+        return api_error('Submission notes/summary are required.', 400)
+
+    files = request.files.getlist('files')
+    if files:
+        max_files = current_app.config.get('MAX_ATTACHMENTS_PER_MESSAGE', 10)
+        if len(files) > max_files:
+            return api_error(f'Cannot upload more than {max_files} files in a single message.', 400)
+        for f in files:
+            err = validate_uploaded_file(f)
+            if err:
+                return api_error(err, 400)
+
+    sub = WorkSubmission(
+        task_id=task.id,
+        user_id=current_user.id,
+        notes=notes,
+        status='submitted'
+    )
+    db.session.add(sub)
+    db.session.flush()
+
+    if files:
+        for f in files:
+            fname, fpath, fsize = save_file_safely(f)
+            att = TaskAttachment(
+                task_id=task.id,
+                submission_id=sub.id,
+                user_id=current_user.id,
+                filename=fname,
+                file_path=fpath,
+                file_size=fsize,
+                content_type=f.content_type,
+                attachment_type='submission'
+            )
+            db.session.add(att)
+
+    old_status = task.status
+    task.status = STATUS_IN_REVIEW
+    task.completed_at = None
+
+<<<<<<< Updated upstream
+    db.session.add(TaskStatusHistory(
+>>>>>>> Stashed changes
         task_id=task.id,
         changed_by_id=current_user.id,
         old_status=old_status,
@@ -1047,8 +1489,71 @@ def submit_task_for_review(task_id):
 
 @tasks_bp.route('/<int:task_id>/review', methods=['POST'])
 @login_required
+<<<<<<< Updated upstream
 def review_task(task_id):
     """Team Lead / Manager approves task or requests changes and preserves review history."""
+=======
+@active_account_required
+def review_task_work(task_id):
+=======
+    if action == 'approve':
+        new_status = STATUS_COMPLETED
+        task.status = STATUS_COMPLETED
+        task.completed_at = datetime.now(timezone.utc)
+        task.review_notes = notes
+        submission_status = 'approved'
+        comment = f"Review approved: {notes}" if notes else "Task approved and marked completed"
+        message = 'Task approved and completed'
+        event_type = 'review_approved'
+    elif action in ('request_changes', 'changes_requested', 'reject'):
+        new_status = STATUS_CHANGES_REQUESTED
+        task.status = STATUS_CHANGES_REQUESTED
+        task.completed_at = None
+        task.review_notes = notes
+        submission_status = 'changes_requested'
+        comment = f"Changes requested: {notes}" if notes else "Changes requested on submitted work"
+        message = 'Changes requested on task'
+        event_type = 'review_changes_requested'
+    else:
+        return api_error("Action must be either 'approve' or 'request_changes'.", 400)
+
+    # Update latest pending submission record if available
+    latest_sub = task.submissions.filter_by(status='pending_review').first()
+    if not latest_sub:
+        latest_sub = task.submissions.first()
+    if latest_sub:
+        latest_sub.status = submission_status
+        latest_sub.reviewed_by_id = current_user.id
+        latest_sub.reviewed_at = datetime.now(timezone.utc)
+        latest_sub.review_feedback = notes
+
+    history = TaskStatusHistory(
+        task_id=task.id,
+        changed_by_id=current_user.id,
+        old_status=old_status,
+        new_status=new_status,
+        comment=comment,
+    )
+    db.session.add(history)
+    db.session.commit()
+
+    notify_task_collaboration_event(
+        event_type,
+        task,
+        current_user,
+        recipients=[task.assigned_to_id] if task.assigned_to_id else [],
+        metadata={'review_action': action}
+    )
+
+    return api_success(task.to_dict(include_history=True, include_collaboration=True), message=message)
+
+
+@tasks_bp.route('/<int:task_id>/comments', methods=['GET'])
+@login_required
+def get_task_comments(task_id):
+    """Retrieve chronological discussion messages for a task."""
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     task = db.session.get(Task, task_id)
     if not task or not can_user_view_task(current_user, task):
         return api_error('Task not found.', 404)
@@ -1065,6 +1570,7 @@ def review_task(task_id):
     if action == 'approve':
         new_status = STATUS_COMPLETED
         task.status = STATUS_COMPLETED
+<<<<<<< Updated upstream
         task.completed_at = datetime.now(timezone.utc)
         task.review_notes = notes
         submission_status = 'approved'
@@ -1362,6 +1868,38 @@ def post_task_comment(task_id):
         return api_error('Comment content is required.', 400)
     if len(content) > MAX_COMMENT_LENGTH:
         return api_error(f'Comment cannot exceed {MAX_COMMENT_LENGTH} characters.', 400)
+=======
+        task.completed_at = now
+        task.progress = 100
+        if sub:
+            sub.status = 'approved'
+            sub.reviewed_by = current_user.id
+            sub.reviewed_at = now
+            sub.review_notes = notes
+        db.session.add(TaskStatusHistory(
+            task_id=task.id,
+            changed_by_id=current_user.id,
+            old_status=old_status,
+            new_status=STATUS_COMPLETED,
+            comment=notes
+        ))
+    else:
+<<<<<<< Updated upstream
+        task.status = STATUS_CHANGES_REQUESTED
+        task.completed_at = None
+        if sub:
+            sub.status = 'changes_requested'
+            sub.reviewed_by = current_user.id
+            sub.reviewed_at = now
+            sub.review_notes = notes
+        db.session.add(TaskStatusHistory(
+=======
+        content = (request.form.get('content') or '').strip()
+        files = request.files.getlist('files') or request.files.getlist('attachments')
+
+    if not content and not files:
+        return api_error('Comment content or file attachment is required.', 400)
+>>>>>>> Stashed changes
 
     max_size = current_app.config.get('MAX_ATTACHMENT_SIZE', DEFAULT_MAX_FILE_SIZE)
     max_files = current_app.config.get('MAX_ATTACHMENTS_PER_MESSAGE', DEFAULT_MAX_FILES_PER_MESSAGE)
@@ -1407,6 +1945,10 @@ def post_task_comment(task_id):
         # Activity log in TaskStatusHistory
         act_comment = f"Posted message with {len(validated_files)} attachment(s)" if validated_files else "Added comment to task discussion"
         history = TaskStatusHistory(
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
             task_id=task.id,
             changed_by_id=current_user.id,
             old_status=task.status,
@@ -1416,10 +1958,16 @@ def post_task_comment(task_id):
         db.session.add(history)
         db.session.commit()
 
+<<<<<<< Updated upstream
+=======
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
         notify_task_collaboration_event(
             'comment_created',
             task,
             current_user,
+<<<<<<< Updated upstream
             recipients=[
                 task.user_id,
                 task.assigned_to_id,
@@ -1431,6 +1979,232 @@ def post_task_comment(task_id):
                 ],
             ],
             metadata={'comment_id': comment.id, 'attachments_count': len(validated_files)}
+=======
+            recipients=[task.user_id, task.assigned_to_id],
+            metadata={'comment_id': comment.id, 'attachments_count': len(validated_files)}
+        )
+
+        return api_success(comment.to_dict(), message='Comment posted successfully', status_code=201)
+    except Exception as e:
+        db.session.rollback()
+        for p in saved_filepaths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        raise e
+
+
+@tasks_bp.route('/<int:task_id>/attachments', methods=['GET'])
+@login_required
+def get_task_attachments(task_id):
+    """Retrieve all attachments for a task, optionally filtered by type."""
+    task = db.session.get(Task, task_id)
+    if not task or not can_user_view_task(current_user, task):
+        return api_error('Task not found.', 404)
+
+    query = task.attachments
+    att_type = request.args.get('type')
+    if att_type:
+        query = query.filter_by(attachment_type=att_type.strip().lower())
+
+    attachments = query.all()
+    return api_success([a.to_dict() for a in attachments])
+
+
+@tasks_bp.route('/<int:task_id>/attachments', methods=['POST'])
+@login_required
+def upload_task_attachments(task_id):
+    """Upload task reference attachments (team leads and managers)."""
+    task = db.session.get(Task, task_id)
+    if not task or not can_user_view_task(current_user, task):
+        return api_error('Task not found.', 404)
+
+    if not can_user_manage_task(current_user, task):
+        return api_error('Only managers or team leads can upload task reference attachments.', 403)
+
+    files = request.files.getlist('files') or request.files.getlist('reference_files')
+    if not files:
+        return api_error('No files provided for upload.', 400)
+
+    max_size = current_app.config.get('MAX_ATTACHMENT_SIZE', DEFAULT_MAX_FILE_SIZE)
+    max_files = current_app.config.get('MAX_ATTACHMENTS_PER_MESSAGE', DEFAULT_MAX_FILES_PER_MESSAGE)
+
+    if len(files) > max_files:
+        return api_error(f"Cannot upload more than {max_files} files at once.", 400)
+
+    validated_files = []
+    for f in files:
+        if f and f.filename and f.filename.strip():
+            ok, err, meta = validate_uploaded_file(f, max_size)
+            if not ok:
+                return api_error(err, 400)
+            validated_files.append((f, meta))
+
+    if not validated_files:
+        return api_error('No valid files provided.', 400)
+
+    attachment_type = (request.form.get('attachment_type') or 'reference').strip().lower()
+    if attachment_type not in ('reference', 'comment', 'submission'):
+        attachment_type = 'reference'
+
+    saved_filepaths = []
+    created_attachments = []
+    try:
+        upload_root = current_app.config.get('UPLOAD_FOLDER')
+        for f, meta in validated_files:
+            storage_name, dest_path = save_attachment_file(f, task.id, upload_root, meta['extension'])
+            saved_filepaths.append(dest_path)
+            att = TaskAttachment(
+                task_id=task.id,
+                uploader_id=current_user.id,
+                attachment_type=attachment_type,
+                original_filename=meta['original_filename'],
+                storage_name=storage_name,
+                file_size=meta['file_size'],
+                file_type=meta['mime_type'],
+                file_extension=meta['extension'],
+            )
+            db.session.add(att)
+            created_attachments.append(att)
+
+        filenames = [m['original_filename'] for _, m in validated_files]
+        hist_comment = f"Uploaded reference attachment(s): {', '.join(filenames)}"
+        history = TaskStatusHistory(
+            task_id=task.id,
+            changed_by_id=current_user.id,
+            old_status=task.status,
+            new_status=task.status,
+            comment=hist_comment,
+        )
+        db.session.add(history)
+        db.session.commit()
+
+        notify_task_collaboration_event(
+            'reference_uploaded',
+            task,
+            current_user,
+            recipients=[task.assigned_to_id] if task.assigned_to_id else [],
+            metadata={'count': len(created_attachments)}
+        )
+
+        return api_success([a.to_dict() for a in created_attachments], message='Attachments uploaded successfully', status_code=201)
+    except Exception as e:
+        db.session.rollback()
+        for p in saved_filepaths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        raise e
+
+
+@tasks_bp.route('/<int:task_id>/attachments/<int:attachment_id>/download', methods=['GET'])
+@login_required
+def download_task_attachment(task_id, attachment_id):
+    """Authorized file download with safe content disposition and nosniff header."""
+    task = db.session.get(Task, task_id)
+    if not task or not can_user_view_task(current_user, task):
+        return api_error('Task not found.', 404)
+
+    attachment = db.session.get(TaskAttachment, attachment_id)
+    if not attachment or attachment.task_id != task.id:
+        return api_error('Attachment not found.', 404)
+
+    upload_root = current_app.config.get('UPLOAD_FOLDER')
+    filepath = get_attachment_filepath(task.id, attachment.storage_name, upload_root)
+    if not filepath or not os.path.isfile(filepath):
+        return api_error('File not found on storage.', 404)
+
+    response = make_response(send_file(
+        filepath,
+        as_attachment=True,
+        download_name=attachment.original_filename,
+        mimetype=attachment.file_type or 'application/octet-stream'
+    ))
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Cache-Control'] = 'private, no-cache, no-store, must-revalidate'
+    return response
+
+
+@tasks_bp.route('/<int:task_id>/attachments/<int:attachment_id>/preview', methods=['GET'])
+@login_required
+def preview_task_attachment(task_id, attachment_id):
+    """Authorized inline preview for safe file formats with sandboxing header."""
+    task = db.session.get(Task, task_id)
+    if not task or not can_user_view_task(current_user, task):
+        return api_error('Task not found.', 404)
+
+    attachment = db.session.get(TaskAttachment, attachment_id)
+    if not attachment or attachment.task_id != task.id:
+        return api_error('Attachment not found.', 404)
+
+    ext = (attachment.file_extension or '').lower()
+    if ext not in ('png', 'jpg', 'jpeg', 'pdf', 'txt'):
+        return api_error('Inline preview not supported for this file type. Please download the file.', 400)
+
+    upload_root = current_app.config.get('UPLOAD_FOLDER')
+    filepath = get_attachment_filepath(task.id, attachment.storage_name, upload_root)
+    if not filepath or not os.path.isfile(filepath):
+        return api_error('File not found on storage.', 404)
+
+    response = make_response(send_file(
+        filepath,
+        as_attachment=False,
+        download_name=attachment.original_filename,
+        mimetype=attachment.file_type
+    ))
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    response.headers['Cache-Control'] = 'private, no-cache, no-store, must-revalidate'
+    return response
+
+
+@tasks_bp.route('/<int:task_id>/attachments/<int:attachment_id>', methods=['DELETE'])
+@login_required
+def delete_task_attachment(task_id, attachment_id):
+    """Delete an attachment (uploader or manager only)."""
+    task = db.session.get(Task, task_id)
+    if not task or not can_user_view_task(current_user, task):
+        return api_error('Task not found.', 404)
+
+    attachment = db.session.get(TaskAttachment, attachment_id)
+    if not attachment or attachment.task_id != task.id:
+        return api_error('Attachment not found.', 404)
+
+    # Permission check: must be the uploader or a manager
+    is_uploader = (attachment.uploader_id == current_user.id)
+    is_manager = can_user_manage_task(current_user, task)
+    if not is_uploader and not is_manager:
+        return api_error('You do not have permission to delete this attachment.', 403)
+
+    upload_root = current_app.config.get('UPLOAD_FOLDER')
+    delete_attachment_file(task.id, attachment.storage_name, upload_root)
+
+    filename = attachment.original_filename
+    db.session.delete(attachment)
+
+    history = TaskStatusHistory(
+        task_id=task.id,
+        changed_by_id=current_user.id,
+        old_status=task.status,
+        new_status=task.status,
+        comment=f"Deleted attachment: {filename}",
+    )
+    db.session.add(history)
+>>>>>>> Stashed changes
+    db.session.commit()
+
+    if sub and sub.user_id != current_user.id:
+        send_notification(
+            sub.user_id,
+            f'Review decision on "{task.title}"',
+            f"Review: {action}. Notes: {notes[:80]}",
+            f"/tasks?task_id={task.id}",
+            'submission_review'
+>>>>>>> Stashed changes
         )
 
         return api_success(comment.to_dict(), message='Comment posted successfully', status_code=201)
@@ -1454,8 +2228,14 @@ def update_task_comment(task_id, comment_id):
     if not task or not can_user_view_task(current_user, task) or not comment or comment.task_id != task.id:
         return api_error('Comment not found.', 404)
 
+<<<<<<< Updated upstream
     if comment.user_id != current_user.id and not can_user_manage_task(current_user, task):
         return api_error('You do not have permission to edit this comment.', 403)
+=======
+<<<<<<< Updated upstream
+    subs = task.submissions.order_by(WorkSubmission.created_at.desc()).all()
+    return api_success([s.to_dict() for s in subs])
+>>>>>>> Stashed changes
 
     data = request.get_json(silent=True) or {}
     content = (data.get('content') or '').strip()
@@ -1708,5 +2488,47 @@ def get_task_submissions(task_id):
     if not task or not can_user_view_task(current_user, task):
         return api_error('Task not found.', 404)
 
+<<<<<<< Updated upstream
     submissions = task.submissions.all()
     return api_success([s.to_dict() for s in submissions])
+=======
+    created_count = 0
+    for t in recurring_tasks:
+        interval = t.recurrence_interval or 'weekly'
+        next_due = None
+        if t.due_date:
+            if interval == 'daily':
+                next_due = t.due_date + timedelta(days=1)
+            elif interval == 'monthly':
+                next_due = t.due_date + timedelta(days=30)
+            else:
+                next_due = t.due_date + timedelta(days=7)
+
+        next_task = Task(
+            title=f"{t.title}",
+            description=t.description,
+            priority=t.priority,
+            status='todo',
+            due_date=next_due,
+            start_date=today,
+            category_id=t.category_id,
+            user_id=t.user_id,
+            assignee_id=t.assignee_id,
+            creator_id=t.creator_id,
+            team_id=t.team_id,
+            organization_id=t.organization_id,
+            is_recurring=True,
+            recurrence_interval=t.recurrence_interval
+        )
+        t.is_recurring = False
+        db.session.add(next_task)
+        created_count += 1
+
+    db.session.commit()
+    return api_success({'spawned_count': created_count}, message=f'Spawned {created_count} recurring tasks.')
+=======
+    submissions = task.submissions.all()
+    return api_success([s.to_dict() for s in submissions])
+
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes

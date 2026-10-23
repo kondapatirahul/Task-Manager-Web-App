@@ -362,6 +362,7 @@ const TaskManager = {
         formattedDate = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
       }
 
+<<<<<<< Updated upstream
       const statusLabel = task.status_label || task.status.replace('_', ' ').toUpperCase();
       const statusClass = this.getStatusBadgeClass(task.status);
       const dependencyBlockers = task.dependency_blockers || [];
@@ -371,6 +372,14 @@ const TaskManager = {
           ? '<span class="badge badge-success dependency-listing-badge">Ready to start</span>'
           : '');
 
+=======
+<<<<<<< Updated upstream
+=======
+      const statusLabel = task.status_label || task.status.replace('_', ' ').toUpperCase();
+      const statusClass = this.getStatusBadgeClass(task.status);
+
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
       item.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} aria-label="Toggle task status" />
         <div class="task-body">
@@ -384,9 +393,22 @@ const TaskManager = {
             ${task.team_name ? `<span class="badge badge-neutral" title="Team"><svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>${this.escapeHtml(task.team_name)}</span>` : ''}
             ${task.assigned_to_name ? `<span class="badge badge-neutral" title="Assignee"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${this.escapeHtml(task.assigned_to_name)}</span>` : ''}
             ${task.category_name ? `<span class="badge badge-category"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>${this.escapeHtml(task.category_name)}</span>` : ''}
+<<<<<<< Updated upstream
             <span class="badge badge-${task.priority}">${task.priority.toUpperCase()}</span>
             <span class="badge ${statusClass}">${statusLabel}</span>
             ${dependencyIndicator}
+=======
+<<<<<<< Updated upstream
+            <span class="badge badge-${task.priority}">${task.priority}</span>
+            <span class="badge badge-${task.status}">${task.status.replace('_', ' ')}</span>
+            ${task.assignee_name ? `<span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name)}</span>` : ''}
+            ${task.creator_name ? `<span class="badge badge-category">Assigned by ${this.escapeHtml(task.creator_name)}</span>` : ''}
+            ${task.recurrence && task.recurrence !== 'none' ? `<span class="badge badge-category">🔁 ${task.recurrence}</span>` : ''}
+=======
+            <span class="badge badge-${task.priority}">${task.priority.toUpperCase()}</span>
+            <span class="badge ${statusClass}">${statusLabel}</span>
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
             ${task.due_date ? `
               <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -502,7 +524,19 @@ const TaskManager = {
     const criteriaField = document.getElementById('task-criteria-input');
     const priorityField = document.getElementById('task-priority-select');
     const statusField = document.getElementById('task-status-select');
+<<<<<<< Updated upstream
     const teamField = document.getElementById('task-team-select');
+=======
+<<<<<<< Updated upstream
+=======
+    const teamField = document.getElementById('task-team-select');
+    const assigneeField = document.getElementById('task-assignee-select');
+    const startDateField = document.getElementById('task-start-date-input');
+    const dueDateField = document.getElementById('task-due-date-input');
+>>>>>>> Stashed changes
+    const categoryField = document.getElementById('task-category-select');
+    const dueDateField = document.getElementById('task-due-date-input');
+>>>>>>> Stashed changes
     const assigneeField = document.getElementById('task-assignee-select');
     const startDateField = document.getElementById('task-start-date-input');
     const dueDateField = document.getElementById('task-due-date-input');
@@ -518,21 +552,40 @@ const TaskManager = {
       taskIdField.value = task.id;
       titleField.value = task.title;
       descField.value = task.description || '';
+<<<<<<< Updated upstream
       if (criteriaField) criteriaField.value = task.acceptance_criteria || '';
       priorityField.value = task.priority || 'medium';
+=======
+      priorityField.value = task.priority || 'medium';
+<<<<<<< Updated upstream
+      statusField.value = task.status || 'pending';
+      categoryField.value = task.category_id || '';
+      dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
+      if (assigneeField) assigneeField.value = task.assignee_id || '';
+      if (recurrenceField) recurrenceField.value = task.recurrence || 'none';
+      if (criteriaField) criteriaField.value = task.acceptance_criteria || '';
+=======
+>>>>>>> Stashed changes
       statusField.value = task.status || 'todo';
       if (teamField) teamField.value = task.team_id || '';
       if (assigneeField) assigneeField.value = task.assigned_to_id || '';
       if (startDateField) startDateField.value = task.start_date ? task.start_date.split('T')[0] : '';
       if (dueDateField) dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
+<<<<<<< Updated upstream
       if (effortField) effortField.value = task.estimated_effort_hours ?? '';
       if (categoryField) categoryField.value = task.category_id || '';
       if (recurringField) recurringField.value = task.recurrence_interval || '';
+=======
+      if (categoryField) categoryField.value = task.category_id || '';
+      if (recurringField) recurringField.value = task.recurrence_interval || '';
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     } else {
       modalTitle.textContent = 'Add New Task';
       taskIdField.value = '';
       titleField.value = '';
       descField.value = '';
+<<<<<<< Updated upstream
       if (criteriaField) criteriaField.value = '';
       priorityField.value = 'medium';
       statusField.value = 'todo';
@@ -543,6 +596,22 @@ const TaskManager = {
       if (effortField) effortField.value = '';
       if (categoryField) categoryField.value = '';
       if (recurringField) recurringField.value = '';
+=======
+      priorityField.value = 'medium';
+      statusField.value = 'pending';
+      categoryField.value = '';
+      dueDateField.value = '';
+      if (assigneeField) assigneeField.value = '';
+<<<<<<< Updated upstream
+      if (recurrenceField) recurrenceField.value = 'none';
+      if (criteriaField) criteriaField.value = '';
+=======
+      if (startDateField) startDateField.value = '';
+      if (dueDateField) dueDateField.value = '';
+      if (categoryField) categoryField.value = '';
+      if (recurringField) recurringField.value = '';
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     }
 
     modal.classList.add('is-active');

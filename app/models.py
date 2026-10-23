@@ -46,6 +46,7 @@ STATUS_LABELS = {
     STATUS_CHANGES_REQUESTED: 'Changes Requested',
 }
 
+<<<<<<< Updated upstream
 
 class TaskHandover(db.Model):
     __tablename__ = 'task_handovers'
@@ -62,6 +63,12 @@ class TaskHandover(db.Model):
     resolution_reason = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(20), nullable=False, default='pending', index=True)
     acknowledged_at = db.Column(db.DateTime, nullable=True)
+=======
+<<<<<<< Updated upstream
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(100), nullable=False)
+    slug       = db.Column(db.String(100), unique=True, nullable=True)
+>>>>>>> Stashed changes
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -91,6 +98,70 @@ db.UniqueConstraint('handover_id', 'attachment_id', name='uq_handover_attachment
     attachment = db.relationship('TaskAttachment')
 
 
+<<<<<<< Updated upstream
+=======
+class Team(db.Model):
+    __tablename__ = 'teams'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    name            = db.Column(db.String(100), nullable=False)
+    department_id   = db.Column(db.Integer, db.ForeignKey('departments.id'), nullable=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True)
+    lead_id         = db.Column(db.Integer, db.ForeignKey('users.id', use_alter=True, name='fk_teams_lead_id'), nullable=True)
+    created_at      = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    lead    = db.relationship('User', foreign_keys=[lead_id], backref='lead_teams')
+    members = db.relationship('TeamMember', backref='team', lazy='dynamic', cascade='all, delete-orphan')
+    tasks   = db.relationship('Task', backref='team', lazy='dynamic')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'department_id': self.department_id,
+            'department_name': self.department.name if self.department else None,
+            'organization_id': self.organization_id,
+            'lead_id': self.lead_id,
+            'lead_name': self.lead.full_name or self.lead.username if self.lead else None,
+            'member_count': self.members.count() if hasattr(self.members, 'count') else 0,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class TeamMember(db.Model):
+    __tablename__ = 'team_members'
+
+    id        = db.Column(db.Integer, primary_key=True)
+    team_id   = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
+    user_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    role      = db.Column(db.String(20), nullable=False, default='member')
+    joined_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    user = db.relationship('User', backref='team_memberships')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'team_id': self.team_id,
+            'user_id': self.user_id,
+            'role': self.role,
+            'user_name': self.user.full_name or self.user.username if self.user else None,
+            'user_email': self.user.email if self.user else None,
+            'user_role': self.user.role if self.user else None,
+            'designation': self.user.designation if self.user else None,
+            'joined_at': self.joined_at.isoformat() if self.joined_at else None,
+        }
+
+
+# Compatibility alias for code that performs association-table inserts.
+# This references the existing mapped table; it does not define a second table.
+team_members = TeamMember.__table__
+
+# ── User Model ─────────────────────────────────────────────────────────────────
+=======
+
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -112,10 +183,22 @@ class User(UserMixin, db.Model):
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', use_alter=True, name='fk_users_org', ondelete='SET NULL'), nullable=True)
     department_id   = db.Column(db.Integer, db.ForeignKey('departments.id', use_alter=True, name='fk_users_dept', ondelete='SET NULL'), nullable=True)
 
+<<<<<<< Updated upstream
     # Profile & Contact info
     job_title       = db.Column(db.String(100), nullable=True)
     phone           = db.Column(db.String(30), nullable=True)
     weekly_capacity_hours = db.Column(db.Float, nullable=False, default=40.0)
+=======
+<<<<<<< Updated upstream
+    @property
+    def job_title(self):
+        return self.designation
+=======
+    # Profile & Contact info
+    job_title       = db.Column(db.String(100), nullable=True)
+    phone           = db.Column(db.String(30), nullable=True)
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
     # Reporting relationship (Manager / Reports To hierarchy)
     reports_to_id   = db.Column(db.Integer, db.ForeignKey('users.id', use_alter=True, name='fk_users_reports_to', ondelete='SET NULL'), nullable=True)
@@ -196,6 +279,12 @@ class User(UserMixin, db.Model):
         }
 
 
+<<<<<<< Updated upstream
+=======
+<<<<<<< Updated upstream
+# ── Category Model ─────────────────────────────────────────────────────────────
+=======
+>>>>>>> Stashed changes
 # ── Team members association table ─────────────────────────────────────────────
 team_members = db.Table(
     'team_members',
@@ -205,12 +294,15 @@ team_members = db.Table(
     db.Column('joined_at', db.DateTime, default=utc_now, nullable=False),
 )
 
+<<<<<<< Updated upstream
 decision_tasks = db.Table(
     'decision_tasks',
     db.Column('decision_id', db.Integer, db.ForeignKey('project_decisions.id', ondelete='CASCADE'), primary_key=True),
     db.Column('task_id', db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True),
 )
 
+=======
+>>>>>>> Stashed changes
 
 class Organization(db.Model):
     __tablename__ = 'organizations'
@@ -291,10 +383,13 @@ class Team(db.Model):
     members      = db.relationship('User', secondary=team_members,
                                    backref=db.backref('teams', lazy='dynamic'), lazy='dynamic')
     tasks        = db.relationship('Task', back_populates='team', lazy='dynamic')
+<<<<<<< Updated upstream
     decisions    = db.relationship(
         'ProjectDecision', back_populates='team', lazy='dynamic',
         cascade='all, delete-orphan',
     )
+=======
+>>>>>>> Stashed changes
 
     def to_dict(self):
         return {
@@ -313,6 +408,10 @@ class Team(db.Model):
             'created_at':        self.created_at.isoformat() if self.created_at else None,
         }
 
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
 class Category(db.Model):
     __tablename__ = 'categories'
@@ -334,8 +433,13 @@ class Category(db.Model):
         }
 
 
+<<<<<<< Updated upstream
 class Goal(db.Model):
     __tablename__ = 'goals'
+=======
+<<<<<<< Updated upstream
+# ── Task & Lifecycle Models ────────────────────────────────────────────────────
+>>>>>>> Stashed changes
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -461,6 +565,8 @@ class AutomationExecution(db.Model):
     rule = db.relationship('AutomationRule', back_populates='executions')
 
 
+=======
+>>>>>>> Stashed changes
 class TaskStatusHistory(db.Model):
     __tablename__ = 'task_status_history'
 
@@ -489,6 +595,7 @@ class TaskStatusHistory(db.Model):
         }
 
 
+<<<<<<< Updated upstream
 class TaskDependency(db.Model):
     __tablename__ = 'task_dependencies'
 
@@ -531,6 +638,11 @@ class TaskDependency(db.Model):
 
 class Notification(db.Model):
     __tablename__ = 'notifications'
+=======
+<<<<<<< Updated upstream
+class SubTask(db.Model):
+    __tablename__ = 'subtasks'
+>>>>>>> Stashed changes
 
     id           = db.Column(db.Integer, primary_key=True)
     recipient_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
@@ -563,6 +675,7 @@ class Notification(db.Model):
 class Activity(db.Model):
     __tablename__ = 'activities'
 
+<<<<<<< Updated upstream
     id          = db.Column(db.Integer, primary_key=True)
     actor_id    = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
     task_id     = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=True, index=True)
@@ -588,6 +701,14 @@ class Activity(db.Model):
 
 class TaskComment(db.Model):
     __tablename__ = 'task_comments'
+=======
+class TaskMessage(db.Model):
+    __tablename__ = 'task_messages'
+=======
+class TaskComment(db.Model):
+    __tablename__ = 'task_comments'
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
     id         = db.Column(db.Integer, primary_key=True)
     task_id    = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
@@ -712,9 +833,17 @@ class Task(db.Model):
     start_date   = db.Column(db.Date, nullable=True)
     due_date     = db.Column(db.Date, nullable=True)
     created_at   = db.Column(db.DateTime, default=utc_now, nullable=False)
+<<<<<<< Updated upstream
     updated_at   = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=True)
     estimated_effort_hours = db.Column(db.Float, nullable=True)
+=======
+<<<<<<< Updated upstream
+=======
+    updated_at   = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
     # Workflow & company fields
     acceptance_criteria  = db.Column(db.Text, nullable=True)
@@ -723,6 +852,7 @@ class Task(db.Model):
     is_recurring         = db.Column(db.Boolean, default=False, nullable=False)
     recurrence_interval  = db.Column(db.String(20), nullable=True)
 
+<<<<<<< Updated upstream
     user_id        = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     category_id    = db.Column(db.Integer,
                                db.ForeignKey('categories.id', ondelete='SET NULL'),
@@ -802,6 +932,28 @@ class Task(db.Model):
             'assigned_to_name':    (self.assigned_to.full_name or self.assigned_to.username) if self.assigned_to else None,
             'assigned_to_email':   self.assigned_to.email if self.assigned_to else None,
             'assigned_to_role':    self.assigned_to.role if self.assigned_to else None,
+=======
+<<<<<<< Updated upstream
+    def to_dict(self):
+        submitter_name = (self.submitter.full_name or self.submitter.username) if self.submitter else None
+        reviewer_name = (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'user_id': self.user_id,
+            'submitter_name': submitter_name,
+            'notes': self.notes or '',
+            'summary': self.notes or '',
+            'status': self.status,
+            'review_notes': self.review_notes or '',
+            'review_feedback': self.review_notes or '',
+            'reviewed_by': self.reviewed_by,
+            'reviewer_name': reviewer_name,
+            'reviewed_by_name': reviewer_name,
+            'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'attachments': [a.to_dict() for a in self.attachments] if self.attachments else [],
+>>>>>>> Stashed changes
         }
 
         blocking = self.blocking_dependencies.all()
@@ -925,6 +1077,7 @@ class DecisionHistory(db.Model):
     changed_by = db.relationship('User', foreign_keys=[changed_by_id])
 
 
+<<<<<<< Updated upstream
 def dependency_to_dict(dependency, task):
     return {
         'id': dependency.id,
@@ -935,3 +1088,90 @@ def dependency_to_dict(dependency, task):
         'task_url': f'/tasks/{task.id}',
         'created_at': dependency.created_at.isoformat() if dependency.created_at else None,
     }
+=======
+=======
+    user_id        = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    category_id    = db.Column(db.Integer,
+                               db.ForeignKey('categories.id', ondelete='SET NULL'),
+                               nullable=True)
+    team_id        = db.Column(db.Integer,
+                               db.ForeignKey('teams.id', ondelete='SET NULL'),
+                               nullable=True)
+    assigned_to_id = db.Column(db.Integer,
+                               db.ForeignKey('users.id', ondelete='SET NULL'),
+                               nullable=True)
+
+    team        = db.relationship('Team', back_populates='tasks', foreign_keys=[team_id])
+    assigned_to = db.relationship('User', foreign_keys=[assigned_to_id],
+                                  backref=db.backref('assigned_tasks', lazy='dynamic'))
+
+    comments    = db.relationship('TaskComment', backref='task', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskComment.created_at.asc()')
+    attachments = db.relationship('TaskAttachment', backref='task', lazy='dynamic', cascade='all, delete-orphan')
+    submissions = db.relationship('TaskSubmission', backref='task', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskSubmission.created_at.desc()')
+
+    @property
+    def is_overdue(self):
+        if self.status != 'completed' and self.due_date:
+            return self.due_date < date.today()
+        return False
+
+    @property
+    def status_label(self):
+        return STATUS_LABELS.get(self.status, self.status.replace('_', ' ').title())
+
+    def to_dict(self, include_history=False, include_collaboration=False):
+        data = {
+            'id':                  self.id,
+            'title':               self.title,
+            'description':         self.description or '',
+            'status':              self.status,
+            'status_label':        self.status_label,
+            'priority':            self.priority,
+            'start_date':          self.start_date.isoformat() if self.start_date else None,
+            'due_date':            self.due_date.isoformat() if self.due_date else None,
+            'created_at':          self.created_at.isoformat() if self.created_at else None,
+            'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
+            'completed_at':        self.completed_at.isoformat() if self.completed_at else None,
+            'is_overdue':          self.is_overdue,
+            'acceptance_criteria': self.acceptance_criteria or '',
+            'submission_notes':    self.submission_notes or '',
+            'review_notes':        self.review_notes or '',
+            'is_recurring':        bool(self.is_recurring),
+            'recurrence_interval': self.recurrence_interval or '',
+            'user_id':             self.user_id,
+            'creator_id':          self.user_id,
+            'creator_name':        (self.user.full_name or self.user.username) if self.user else None,
+            'creator_role':        self.user.role if self.user else None,
+            'category_id':         self.category_id,
+            'category_name':       self.category.name if self.category else None,
+            'team_id':             self.team_id,
+            'team_name':           self.team.name if self.team else None,
+            'assigned_to_id':      self.assigned_to_id,
+            'assigned_to_name':    (self.assigned_to.full_name or self.assigned_to.username) if self.assigned_to else None,
+            'assigned_to_email':   self.assigned_to.email if self.assigned_to else None,
+            'assigned_to_role':    self.assigned_to.role if self.assigned_to else None,
+        }
+
+        # Collaboration counts & reference attachments
+        if hasattr(self, 'attachments'):
+            ref_attachments = self.attachments.filter_by(attachment_type='reference').all()
+            data['reference_attachments'] = [a.to_dict() for a in ref_attachments]
+            data['attachments_count'] = self.attachments.count()
+        else:
+            data['reference_attachments'] = []
+            data['attachments_count'] = 0
+
+        data['comments_count'] = self.comments.count() if hasattr(self, 'comments') else 0
+        data['submissions_count'] = self.submissions.count() if hasattr(self, 'submissions') else 0
+
+        if include_history and hasattr(self, 'status_history'):
+            data['status_history'] = [h.to_dict() for h in self.status_history.all()]
+
+        if include_collaboration:
+            data['comments'] = [c.to_dict() for c in self.comments.all()] if hasattr(self, 'comments') else []
+            data['submissions'] = [s.to_dict() for s in self.submissions.all()] if hasattr(self, 'submissions') else []
+            data['attachments'] = [a.to_dict() for a in self.attachments.all()] if hasattr(self, 'attachments') else []
+
+        return data
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes

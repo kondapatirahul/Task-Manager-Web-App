@@ -1,3 +1,10 @@
+<<<<<<< Updated upstream
+=======
+<<<<<<< Updated upstream
+"""
+In-App Notifications API routes.
+"""
+>>>>>>> Stashed changes
 from flask import Blueprint, request
 from flask_login import current_user, login_required
 from sqlalchemy import or_
@@ -59,6 +66,7 @@ def mark_notification_read(notification_id):
         return api_error('Notification not found.', 404)
     notification.is_read = True
     db.session.commit()
+<<<<<<< Updated upstream
     return api_success(notification.to_dict())
 
 
@@ -108,3 +116,8 @@ def list_activity():
         'pages': pagination.pages,
         'has_more': pagination.has_next,
     })
+=======
+    return api_success(message='All notifications marked as read.')
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes

@@ -15,10 +15,273 @@
     </div>
   </div>
 
+<<<<<<< Updated upstream
+=======
+<<<<<<< Updated upstream
+  <div style="display: flex; gap: 0.75rem;">
+    {% if current_user.is_management or current_user.id == task.assignee_id %}
+    <select id="quick-status-select" class="form-control" style="width: auto; margin-bottom: 0;">
+      <option value="pending" {% if task.status in ['pending', 'todo'] %}selected{% endif %}>To Do / Pending</option>
+      <option value="in_progress" {% if task.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+      <option value="blocked" {% if task.status == 'blocked' %}selected{% endif %}>Blocked</option>
+      <option value="in_review" {% if task.status == 'in_review' %}selected{% endif %}>In Review</option>
+      <option value="completed" {% if task.status == 'completed' %}selected{% endif %}>Completed</option>
+    </select>
+    {% endif %}
+    <a href="/tasks" class="btn btn-secondary btn-sm">Back to Tasks</a>
+=======
+>>>>>>> Stashed changes
   <!-- Loading State -->
   <div id="detail-loading" class="empty-state">
     <div class="loading-spinner"></div>
     <p>Loading task details...</p>
+<<<<<<< Updated upstream
+=======
+  </div>
+
+  <!-- Error State -->
+  <div id="detail-error" class="card" style="display: none; text-align: center; padding: 2.5rem;">
+    <svg class="icon icon-lg text-danger" viewBox="0 0 24 24" style="margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    <h3 id="detail-error-msg">Task not found or access denied.</h3>
+    <a href="{{ url_for('web.tasks') }}" class="btn btn-primary" style="margin-top: 1rem;">Return to Task List</a>
+  </div>
+
+  <!-- Main Detail Content -->
+  <div id="detail-content" style="display: none;">
+    <!-- Header Card -->
+    <div class="card detail-header-card">
+      <div class="detail-badges">
+        <span id="detail-status-badge" class="badge"></span>
+        <span id="detail-priority-badge" class="badge"></span>
+        <span id="detail-category-badge" class="badge badge-neutral" style="display: none;"></span>
+        <span id="detail-overdue-badge" class="badge badge-danger" style="display: none;">Overdue</span>
+      </div>
+      <h1 class="detail-title" id="detail-title"></h1>
+      <div class="detail-meta-line" id="detail-meta-line">
+        <!-- Creator and timestamp info -->
+      </div>
+    </div>
+
+    <!-- Two Column Grid -->
+    <div class="detail-grid">
+      <!-- Main Column -->
+      <div class="detail-main-col">
+        <!-- Description -->
+        <div class="card">
+          <h3 class="card-section-title">Description</h3>
+          <div id="detail-description" class="detail-body-text">
+            <span class="text-muted">No description provided.</span>
+          </div>
+        </div>
+
+        <!-- Acceptance Criteria -->
+        <div class="card">
+          <h3 class="card-section-title">Acceptance Criteria</h3>
+          <div id="detail-criteria" class="detail-body-text">
+            <span class="text-muted">No acceptance criteria specified.</span>
+          </div>
+        </div>
+
+        <!-- Task Reference Attachments -->
+        <div class="card" id="detail-references-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">
+              <span>Reference Attachments</span>
+              <span id="detail-references-count" class="badge badge-neutral" style="margin-left: 0.5rem; font-size: 0.75rem;">0</span>
+            </h3>
+            <button id="btn-open-upload-ref-modal" class="btn btn-secondary btn-sm" style="display: none;">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              <span>Add Reference Files</span>
+            </button>
+          </div>
+          <div id="detail-references-list" class="attachments-grid" style="margin-top: 1rem;">
+            <p class="text-muted" style="margin: 0.5rem 0;">No reference attachments provided yet.</p>
+          </div>
+        </div>
+
+        <!-- Task Discussion & Communication Thread -->
+        <div class="card" id="detail-discussion-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">
+              <span>Discussion & Questions</span>
+              <span id="detail-comments-count" class="badge badge-neutral" style="margin-left: 0.5rem; font-size: 0.75rem;">0</span>
+            </h3>
+          </div>
+
+          <!-- Discussion Stream -->
+          <div class="discussion-thread" id="detail-discussion-thread">
+            <div class="loading-state-sm">
+              <div class="loading-spinner"></div>
+              <span>Loading messages...</span>
+            </div>
+          </div>
+
+          <!-- Comment Composer -->
+          <form id="comment-composer-form" class="composer-container">
+            <div class="composer-body">
+              <textarea id="comment-content-input" class="form-control composer-textarea" rows="3" placeholder="Ask a question, share an update, or @mention a team member..."></textarea>
+              
+              <!-- Selected Files Tray -->
+              <div id="composer-files-tray" class="selected-files-tray" style="display: none;"></div>
+
+              <div class="composer-footer">
+                <div class="composer-tools">
+                  <input type="file" id="comment-files-input" multiple style="display: none;" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.txt">
+                  <button type="button" id="btn-trigger-comment-files" class="btn btn-ghost btn-sm" title="Attach approved files (PDF, PNG, JPEG, DOCX, XLSX, TXT)">
+                    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                    <span>Attach Files</span>
+                  </button>
+                  <span class="file-hint text-muted">PDF, PNG, JPG, DOCX, XLSX, TXT (up to 5MB per file)</span>
+                </div>
+                <button type="submit" id="btn-send-comment" class="btn btn-primary btn-sm">
+                  <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  <span>Send Message</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Work Submissions & Reviews History -->
+        <div class="card" id="detail-submissions-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">
+              <span>Submissions & Review History</span>
+              <span id="detail-submissions-count" class="badge badge-neutral" style="margin-left: 0.5rem; font-size: 0.75rem;">0</span>
+            </h3>
+          </div>
+          <div id="detail-submissions-list" class="submissions-history-container" style="margin-top: 1rem;">
+            <p class="text-muted" style="margin: 0.5rem 0;">No work submissions recorded yet.</p>
+          </div>
+        </div>
+
+        <!-- Status History & Audit Trail -->
+        <div class="card">
+          <h3 class="card-section-title">Status History & Audit Trail</h3>
+          <div class="timeline" id="detail-timeline">
+            <!-- Timeline items rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar Column -->
+      <div class="detail-side-col">
+        <!-- Assignment & People -->
+        <div class="card">
+          <h3 class="card-section-title">People</h3>
+          <div class="person-block">
+            <div class="person-label">Assignee</div>
+            <div class="person-info" id="detail-assignee-info">
+              <div class="user-avatar-sm" id="detail-assignee-avatar">?</div>
+              <div>
+                <div class="person-name" id="detail-assignee-name">Unassigned</div>
+                <div class="person-sub text-muted" id="detail-assignee-role">Open task</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="person-block" style="margin-top: 1rem;">
+            <div class="person-label">Created By</div>
+            <div class="person-info" id="detail-creator-info">
+              <div class="user-avatar-sm" id="detail-creator-avatar">?</div>
+              <div>
+                <div class="person-name" id="detail-creator-name">—</div>
+                <div class="person-sub text-muted" id="detail-creator-role">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Team & Dates -->
+        <div class="card">
+          <h3 class="card-section-title">Task Details</h3>
+          <dl class="detail-dl">
+            <dt>Team / Project</dt>
+            <dd id="detail-team-name">Personal Task</dd>
+
+            <dt>Start Date</dt>
+            <dd id="detail-start-date">—</dd>
+
+            <dt>Due Date</dt>
+            <dd id="detail-due-date">—</dd>
+
+            <dt>Completed At</dt>
+            <dd id="detail-completed-at">—</dd>
+
+            <dt>Recurrence</dt>
+            <dd id="detail-recurrence">None</dd>
+
+            <dt>Created</dt>
+            <dd id="detail-created-at">—</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+>>>>>>> Stashed changes
+  </div>
+</div>
+
+<!-- Two-Column Task Content Layout -->
+<div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 2rem;" class="task-detail-grid">
+  
+  <!-- LEFT: Overview, Acceptance Criteria, Subtasks, Deliverables -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    
+    <!-- Description -->
+    <div class="card" style="padding: 1.5rem;">
+      <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em;">Description</h3>
+      <p style="font-size: var(--font-size-sm); color: var(--color-text); line-height: 1.6; white-space: pre-wrap; margin: 0;">
+        {{ task.description or 'No detailed description provided for this task.' }}
+      </p>
+    </div>
+
+    <!-- Acceptance Criteria -->
+    {% if task.acceptance_criteria %}
+    <div class="card" style="padding: 1.5rem; border-left: 4px solid var(--color-primary); background-color: #FAF7F2;">
+      <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin-bottom: 0.5rem;">Acceptance Criteria</h3>
+      <p style="font-size: var(--font-size-xs); color: var(--color-text); line-height: 1.6; margin: 0;">
+        {{ task.acceptance_criteria }}
+      </p>
+    </div>
+    {% endif %}
+
+    <!-- Subtasks Checklist -->
+    <div class="card" style="padding: 1.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin: 0; text-transform: uppercase; letter-spacing: 0.04em;">Subtasks</h3>
+        <span class="badge badge-employee" id="subtask-counter">Checklist</span>
+      </div>
+      
+      <div id="subtasks-container" style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+        <!-- Subtask items rendered here -->
+      </div>
+
+      <form id="add-subtask-form" style="display: flex; gap: 0.5rem;">
+        <input type="text" id="subtask-input" class="form-control" placeholder="Add a new subtask..." style="margin-bottom: 0; font-size: var(--font-size-xs);" required>
+        <button type="submit" class="btn btn-secondary btn-sm">+ Add</button>
+      </form>
+    </div>
+
+    <!-- Work Deliverables & Reviews -->
+    <div class="card" style="padding: 1.5rem;">
+      <h3 style="font-size: var(--font-size-sm); font-weight: 700; color: var(--color-primary); margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.04em;">Deliverables & Reviews</h3>
+
+      <div id="submissions-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <span style="font-size: var(--font-size-xs); color: var(--color-muted);">Loading deliverables...</span>
+      </div>
+
+      <!-- Employee Submit Form -->
+      <form id="submission-form" style="background: var(--color-surface-subtle); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+        <div style="font-size: var(--font-size-xs); font-weight: 700; margin-bottom: 0.5rem; color: var(--color-primary);">Submit Work Deliverable for Review</div>
+        <textarea id="submission-notes" class="form-control" rows="2" placeholder="Summary of work completed, documentation links, or notes..." style="font-size: var(--font-size-xs);" required></textarea>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+          <input type="file" id="submission-file" style="font-size: var(--font-size-xs);">
+          <button type="submit" class="btn btn-primary btn-sm">Submit for Review</button>
+        </div>
+      </form>
+    </div>
+
+>>>>>>> Stashed changes
   </div>
 
   <!-- Error State -->

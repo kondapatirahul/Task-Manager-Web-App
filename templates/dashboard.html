@@ -80,6 +80,7 @@
     <div id="task-list-container"></div>
   </div>
 
+<<<<<<< Updated upstream
   <!-- Right: Upcoming Schedule & Productivity -->
   <div>
     <!-- Upcoming Schedule Card -->
@@ -108,4 +109,323 @@
     </div>
   </div>
 </div>
+=======
+  <!-- Right: Team Attendance & Upcoming Meetings -->
+  <div>
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <h3 class="card-title">Team Attendance Today</h3>
+        <a href="{{ url_for('web.attendance') }}" class="btn btn-link btn-xs">View Timesheets</a>
+      </div>
+      <div id="lead-team-attendance" style="display: flex; flex-direction: column; gap: 0.6rem;">
+        <p class="text-muted" style="font-size: var(--font-size-sm);">Checking team presence...</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Upcoming Meetings</h3>
+        <a href="{{ url_for('web.calendar') }}" class="btn btn-link btn-xs">Calendar</a>
+      </div>
+      <div id="dashboard-upcoming-list">
+        <p class="text-muted" style="font-size: var(--font-size-sm); padding: 1rem 0;">Checking meetings...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<!-- =========================================================================
+     EMPLOYEE DASHBOARD
+     ========================================================================= -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/employee_dashboard.css') }}">
+
+<div class="metrics-grid" id="dashboard-metrics" style="margin-bottom: 1.5rem;">
+  <div class="metric-card metric-total">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-total">0</div>
+      <div class="metric-label">Assigned Tasks</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-pending">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-pending">0</div>
+      <div class="metric-label">In Progress</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-completed">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-completed">0</div>
+      <div class="metric-label">Completed</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-overdue">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="stat-overdue">0</div>
+      <div class="metric-label">Overdue</div>
+    </div>
+  </div>
+</div>
+
+<!-- Employee Productivity & Work Experience Features -->
+<div class="employee-dashboard-wrapper">
+  {% include "employee_dashboard_extras.html" %}
+</div>
+
+<!-- Preserved compatibility containers for global task hooks -->
+<div class="dashboard-grid" style="display: none;" aria-hidden="true">
+  <div id="task-list-container"></div>
+  <div id="dashboard-upcoming-list"></div>
+  <div id="employee-meetings-list"></div>
+</div>
+
+<script src="{{ url_for('static', filename='js/employee_dashboard.js') }}" defer></script>
+{% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // 1. Attendance widget controller
+  const checkinBtn = document.getElementById('quick-checkin-btn');
+  const checkoutBtn = document.getElementById('quick-checkout-btn');
+  const statusBadge = document.getElementById('quick-att-status');
+  const shiftHours = document.getElementById('dashboard-shift-hours');
+  const shiftMeta = document.getElementById('dashboard-shift-meta');
+  let activeShiftStartedAt = null;
+  let shiftTicker = null;
+
+  function formatHMS(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function updateTicker() {
+    if (!activeShiftStartedAt || !shiftHours) return;
+    const elapsedSecs = Math.max(0, Math.floor((Date.now() - activeShiftStartedAt.getTime()) / 1000));
+    shiftHours.textContent = formatHMS(elapsedSecs);
+  }
+
+  async function loadAttendanceToday() {
+    try {
+      const res = await fetch('/api/attendance/today');
+      if (res.ok) {
+        const json = await res.json();
+        const d = json.data;
+
+        if (shiftTicker) {
+          clearInterval(shiftTicker);
+          shiftTicker = null;
+        }
+
+        if (d.is_checked_in && d.active_session && d.active_session.check_in) {
+          // Active shift in progress
+          activeShiftStartedAt = new Date(d.active_session.check_in);
+          updateTicker();
+          shiftTicker = setInterval(updateTicker, 1000);
+
+          const timeStr = activeShiftStartedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          if (shiftMeta) shiftMeta.textContent = `Started at ${timeStr}`;
+
+          if (checkinBtn) checkinBtn.style.display = 'none';
+          if (checkoutBtn) {
+            checkoutBtn.style.display = 'inline-flex';
+            checkoutBtn.disabled = false;
+            checkoutBtn.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg><span>Check Out</span>';
+          }
+          if (statusBadge) {
+            statusBadge.className = 'badge badge-completed';
+            statusBadge.textContent = 'Active Shift';
+          }
+        } else if (d.has_completed_shift && d.last_completed_session) {
+          // Shift completed today
+          activeShiftStartedAt = null;
+          const completedSecs = d.completed_duration_seconds || ((d.last_completed_session.duration_minutes || 0) * 60);
+          if (shiftHours) shiftHours.textContent = formatHMS(completedSecs);
+
+          const outTime = d.last_completed_session.check_out ? new Date(d.last_completed_session.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+          if (shiftMeta) shiftMeta.textContent = `Completed (${d.today_duration_hours}h recorded${outTime ? ` · Checked out ${outTime}` : ''})`;
+
+          if (checkinBtn) {
+            checkinBtn.style.display = 'inline-flex';
+            checkinBtn.disabled = false;
+            checkinBtn.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span>Check In Again</span>';
+          }
+          if (checkoutBtn) checkoutBtn.style.display = 'none';
+          if (statusBadge) {
+            statusBadge.className = 'badge badge-completed';
+            statusBadge.textContent = 'Shift Completed';
+          }
+        } else {
+          // Not checked in yet
+          activeShiftStartedAt = null;
+          if (shiftHours) shiftHours.textContent = '00:00:00';
+          if (shiftMeta) shiftMeta.textContent = 'No active shift';
+
+          if (checkinBtn) {
+            checkinBtn.style.display = 'inline-flex';
+            checkinBtn.disabled = false;
+            checkinBtn.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span>Check In</span>';
+          }
+          if (checkoutBtn) checkoutBtn.style.display = 'none';
+          if (statusBadge) {
+            statusBadge.className = 'badge badge-employee';
+            statusBadge.textContent = 'Not Checked In';
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
+  if (checkinBtn) {
+    checkinBtn.addEventListener('click', async () => {
+      checkinBtn.disabled = true;
+      checkinBtn.innerHTML = '<span>Checking In...</span>';
+      try {
+        const res = await fetch('/api/attendance/check-in', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({notes: 'Dashboard quick check-in'})
+        });
+        await loadAttendanceToday();
+      } catch (e) {
+        checkinBtn.disabled = false;
+      }
+    });
+  }
+
+  if (checkoutBtn) {
+    checkoutBtn.addEventListener('click', async () => {
+      checkoutBtn.disabled = true;
+      checkoutBtn.innerHTML = '<span>Checking Out...</span>';
+      try {
+        const res = await fetch('/api/attendance/check-out', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({notes: 'Dashboard quick check-out'})
+        });
+        await loadAttendanceToday();
+      } catch (e) {
+        checkoutBtn.disabled = false;
+      }
+    });
+  }
+
+  loadAttendanceToday();
+  setInterval(loadAttendanceToday, 60000);
+
+  // 2. Role-specific metric loaders
+  {% if current_user.has_role('super_admin', 'admin') %}
+  try {
+    const empRes = await fetch('/api/employees');
+    if (empRes.ok) {
+      const emps = (await empRes.json()).data;
+      document.getElementById('admin-stat-employees').textContent = emps.length;
+    }
+    const teamRes = await fetch('/api/organization/teams');
+    if (teamRes.ok) {
+      const teams = (await teamRes.json()).data;
+      document.getElementById('admin-stat-teams').textContent = teams.length;
+    }
+    const attRes = await fetch('/api/attendance/organization');
+    if (attRes.ok) {
+      const att = (await attRes.json()).data;
+      document.getElementById('admin-stat-active-att').textContent = att.checked_in_today_count !== undefined ? att.checked_in_today_count : att.currently_active_count;
+    }
+    const taskRes = await fetch('/api/tasks');
+    if (taskRes.ok) {
+      const tasks = (await taskRes.json()).data;
+      document.getElementById('admin-stat-tasks').textContent = tasks.length;
+    }
+    const deptRes = await fetch('/api/organization/departments');
+    if (deptRes.ok) {
+      const depts = (await deptRes.json()).data;
+      const list = document.getElementById('admin-depts-list');
+      if (list) {
+        list.innerHTML = depts.length ? depts.map(d => `
+          <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--color-border-subtle); font-size: var(--font-size-sm);">
+            <span style="font-weight: 600;">${d.name}</span>
+            <span class="badge badge-employee">${d.team_count} teams</span>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs);">No departments configured</p>';
+      }
+    }
+    const auditRes = await fetch('/api/organization/audit-logs');
+    if (auditRes.ok) {
+      const logs = (await auditRes.json()).data;
+      const tbody = document.getElementById('admin-audit-tbody');
+      if (tbody) {
+        tbody.innerHTML = logs.length ? logs.slice(0, 10).map(l => `
+          <tr>
+            <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(l.created_at).toLocaleString()}</td>
+            <td style="font-weight: 600;">${l.user_name || 'System'}</td>
+            <td><span class="badge badge-team_lead">${l.action}</span></td>
+            <td style="font-size: var(--font-size-xs);">${l.details || ''}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="4" class="text-muted" style="text-align: center; padding: 1.5rem;">No recent enterprise activity recorded.</td></tr>';
+      }
+    }
+  } catch (e) {}
+
+  {% elif current_user.is_team_lead %}
+  try {
+    const teamAttRes = await fetch('/api/attendance/team');
+    if (teamAttRes.ok) {
+      const teamAtt = (await teamAttRes.json()).data;
+      const attList = document.getElementById('lead-team-attendance');
+      if (attList) {
+        attList.innerHTML = teamAtt.length ? teamAtt.map(m => `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; border-bottom: 1px solid var(--color-border-subtle); font-size: var(--font-size-sm);">
+            <div>
+              <div style="font-weight: 600;">${m.name}</div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${m.designation || 'Member'}</div>
+            </div>
+            <span class="badge ${m.status === 'active' ? 'badge-completed' : 'badge-employee'}">
+              ${m.status === 'active' ? 'Checked In' : 'Away'}
+            </span>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs);">No team members</p>';
+      }
+    }
+  } catch (e) {}
+
+  {% else %}
+  // Employee upcoming meetings
+  try {
+    const meetRes = await fetch('/api/meetings?upcoming=1');
+    if (meetRes.ok) {
+      const meetings = (await meetRes.json()).data;
+      const mList = document.getElementById('employee-meetings-list');
+      if (mList) {
+        mList.innerHTML = meetings.length ? meetings.slice(0, 4).map(m => `
+          <div style="padding: 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary);">
+            <div style="font-weight: 600; font-size: var(--font-size-xs);">${m.title}</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(m.start_time).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}</div>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.5rem 0;">No upcoming meetings</p>';
+      }
+    }
+  } catch (e) {}
+  {% endif %}
+});
+</script>
+>>>>>>> Stashed changes
 {% endblock %}

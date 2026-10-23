@@ -28,7 +28,9 @@
         </a>
       </li>
       <li>
+<<<<<<< Updated upstream
         <a href="{{ url_for('web.calendar') }}" class="sidebar-link {% if active_page == 'calendar' %}active{% endif %}">
+<<<<<<< Updated upstream
           <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
           <span>Calendar</span>
         </a>
@@ -68,6 +70,15 @@
         <a href="{{ url_for('web.categories') }}" class="sidebar-link {% if active_page == 'categories' %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           <span>Categories</span>
+=======
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          <span>Calendar & Meetings</span>
+=======
+        <a href="{{ url_for('web.categories') }}" class="sidebar-link {% if active_page == 'categories' %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <span>Categories</span>
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
         </a>
       </li>
       <li>
@@ -76,7 +87,6 @@
           <span>Employees</span>
         </a>
       </li>
-      {% endif %}
       <li>
         <a href="{{ url_for('web.teams') }}" class="sidebar-link {% if active_page == 'teams' %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
@@ -124,11 +134,37 @@
         </div>
       </div>
 
+<<<<<<< Updated upstream
       <div class="header-right">
         <button class="btn btn-ghost btn-icon-only notification-bell" id="notification-bell" aria-label="Notifications" aria-expanded="false">
           <svg class="icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
           <span class="notification-badge" id="notification-unread-count" hidden>0</span>
         </button>
+=======
+<<<<<<< Updated upstream
+      <div class="header-right" style="display: flex; align-items: center; gap: 0.75rem;">
+        <!-- Notification Dropdown -->
+        <div class="dropdown-wrapper" style="position: relative;">
+          <button id="notif-toggle-btn" class="btn btn-ghost btn-sm btn-icon-only" aria-label="Notifications" style="position: relative;">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            <span id="notif-badge" class="badge badge-high" style="position: absolute; top: -4px; right: -4px; padding: 2px 5px; font-size: 0.65rem; border-radius: 10px; display: none;">0</span>
+          </button>
+          <div id="notif-menu" class="card" style="display: none; position: absolute; right: 0; top: 120%; width: 340px; max-height: 420px; overflow-y: auto; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.5rem;">
+              <span style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">Notifications</span>
+              <button id="mark-all-read-btn" class="btn btn-link btn-xs" style="font-size: var(--font-size-xs);">Mark all read</button>
+            </div>
+            <div id="notif-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+              <div class="text-muted" style="text-align: center; font-size: var(--font-size-xs); padding: 1rem;">No new notifications</div>
+            </div>
+          </div>
+        </div>
+
+        {% if current_user.has_role('super_admin', 'admin', 'team_lead') %}
+=======
+      <div class="header-right">
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
         <button class="btn btn-primary btn-sm open-add-task-btn">
           <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           <span>Add Task</span>

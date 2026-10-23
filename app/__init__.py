@@ -127,6 +127,7 @@ def create_app(test_config=None):
         )
 
         expected_token = session.get('csrf_token')
+<<<<<<< Updated upstream
         auth_bootstrap_paths = {'/api/auth/login', '/api/auth/signup', '/api/auth/register'}
         if (
             request.path in auth_bootstrap_paths
@@ -143,6 +144,59 @@ def create_app(test_config=None):
             if request.path.startswith('/api/'):
                 return {'ok': False, 'error': 'Invalid CSRF token'}, 403
             return 'Invalid CSRF token', 403
+=======
+        if expected_token and csrf_token:
+            if not secrets.compare_digest(csrf_token, expected_token):
+                if request.path.startswith('/api/'):
+                    return {'ok': False, 'error': 'Invalid CSRF token'}, 403
+                return 'Invalid CSRF token', 403
+<<<<<<< Updated upstream
+
+    # Error handlers
+    from flask import render_template
+    @app.errorhandler(400)
+    def handle_400(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': getattr(e, 'description', 'Bad Request')}, 400
+        return 'Bad Request', 400
+
+    @app.errorhandler(403)
+    def handle_403(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Forbidden'}, 403
+        return render_template('unauthorized.html'), 403
+
+    @app.errorhandler(404)
+    def handle_404(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Not Found'}, 404
+        return render_template('404.html'), 404
+
+    @app.errorhandler(405)
+    def handle_405(e):
+        if request.path.startswith('/api/'):
+            headers = {}
+            if hasattr(e, 'valid_methods') and e.valid_methods:
+                headers['Allow'] = ', '.join(e.valid_methods)
+            return {'ok': False, 'error': 'Method Not Allowed'}, 405, headers
+        return 'Method Not Allowed', 405
+
+    @app.errorhandler(415)
+    def handle_415(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Content-Type must be application/json'}, 415
+        return 'Unsupported Media Type', 415
+
+    @app.errorhandler(500)
+    @app.errorhandler(Exception)
+    def handle_500(e):
+        app.logger.error(f"Unhandled exception: {e}", exc_info=True)
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Internal server error'}, 500
+        return render_template('500.html'), 500
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
     # Register blueprints
     from app.routes.web import web_bp
@@ -150,6 +204,7 @@ def create_app(test_config=None):
     from app.routes.tasks import tasks_bp
     from app.routes.categories import categories_bp
     from app.routes.stats import stats_bp
+<<<<<<< Updated upstream
     from app.routes.organizations import organizations_bp
     from app.routes.departments import departments_bp
     from app.routes.teams import teams_bp
@@ -162,12 +217,28 @@ def create_app(test_config=None):
     from app.routes.focus_sessions import focus_bp
     from app.routes.workflow_templates import templates_bp
     from app.routes.automation import automation_bp
+=======
+    from app.routes.organization import org_bp
+    from app.routes.employees import employees_bp
+<<<<<<< Updated upstream
+    from app.routes.attendance import attendance_bp
+    from app.routes.meetings import meetings_bp
+    from app.routes.notifications import notifications_bp
+    from app.routes.discussions import discussions_bp
+    from app.routes.reports import reports_bp
+    from app.routes.teams import teams_bp
+    from app.routes.departments import departments_bp
+    from app.routes.organizations import organizations_bp
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(categories_bp)
     app.register_blueprint(stats_bp)
+<<<<<<< Updated upstream
     app.register_blueprint(organizations_bp)
     app.register_blueprint(departments_bp)
     app.register_blueprint(teams_bp)
@@ -180,6 +251,21 @@ def create_app(test_config=None):
     app.register_blueprint(focus_bp)
     app.register_blueprint(templates_bp)
     app.register_blueprint(automation_bp)
+=======
+    app.register_blueprint(org_bp)
+    app.register_blueprint(employees_bp)
+<<<<<<< Updated upstream
+    app.register_blueprint(attendance_bp)
+    app.register_blueprint(meetings_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(discussions_bp)
+    app.register_blueprint(reports_bp)
+    app.register_blueprint(teams_bp)
+    app.register_blueprint(departments_bp)
+    app.register_blueprint(organizations_bp)
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
     # CLI command to initialize database
     @app.cli.command('init-db')
@@ -189,6 +275,7 @@ def create_app(test_config=None):
             db.create_all()
         print("Database initialized successfully.")
 
+<<<<<<< Updated upstream
     @app.cli.command('send-deadline-reminders')
     def send_deadline_reminders_command():
         """Create deduplicated in-app reminders for tasks due tomorrow."""
@@ -202,12 +289,56 @@ def create_app(test_config=None):
         print(run_automation())
 
     # Create tables automatically on start if they don't exist
+=======
+<<<<<<< Updated upstream
+    @app.cli.command('process-recurring')
+    def process_recurring_command():
+        """CLI trigger to process recurring tasks on a schedule."""
+        from datetime import date, timedelta
+        from app.models import Task
+        with app.app_context():
+            today = date.today()
+            recurring = Task.query.filter(Task.is_recurring == True, Task.status == 'completed').all()
+            cnt = 0
+            for t in recurring:
+                interval = t.recurrence_interval or 'weekly'
+                next_due = (
+                    t.due_date + timedelta(days=1 if interval == 'daily' else 30 if interval == 'monthly' else 7)
+                ) if t.due_date else None
+                nxt = Task(
+                    title=t.title,
+                    description=t.description,
+                    priority=t.priority,
+                    status='todo',
+                    due_date=next_due,
+                    start_date=today,
+                    category_id=t.category_id,
+                    user_id=t.user_id,
+                    assignee_id=t.assignee_id,
+                    creator_id=t.creator_id,
+                    team_id=t.team_id,
+                    organization_id=t.organization_id,
+                    is_recurring=True,
+                    recurrence_interval=t.recurrence_interval
+                )
+                t.is_recurring = False
+                db.session.add(nxt)
+                cnt += 1
+            db.session.commit()
+            print(f"Spawned {cnt} recurring tasks.")
+
+    # Create tables automatically on start and perform safe SQLite migrations
+=======
+    # Create tables automatically on start if they don't exist
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
     with app.app_context():
         db.create_all()
         # Automatically migrate existing SQLite database tables if missing new columns
         from sqlalchemy import inspect as sa_inspect, text
         try:
             inspector = sa_inspect(db.engine)
+<<<<<<< Updated upstream
             if 'users' in inspector.get_table_names():
                 existing_user_cols = {c['name'] for c in inspector.get_columns('users')}
                 if 'role' not in existing_user_cols:
@@ -227,6 +358,47 @@ def create_app(test_config=None):
                 if 'reports_to_id' not in existing_user_cols:
                     db.session.execute(text("ALTER TABLE users ADD COLUMN reports_to_id INTEGER"))
 
+=======
+<<<<<<< Updated upstream
+            table_names = set(inspector.get_table_names())
+
+            # 1. Migrate `users` table
+            if 'users' in table_names:
+                user_cols = {c['name'] for c in inspector.get_columns('users')}
+                user_migrations = [
+                    ('role', "ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"),
+                    ('account_active', "ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"),
+                    ('organization_id', "ALTER TABLE users ADD COLUMN organization_id INTEGER"),
+                    ('department_id', "ALTER TABLE users ADD COLUMN department_id INTEGER"),
+                    ('team_id', "ALTER TABLE users ADD COLUMN team_id INTEGER"),
+                    ('manager_id', "ALTER TABLE users ADD COLUMN manager_id INTEGER"),
+                    ('designation', "ALTER TABLE users ADD COLUMN designation VARCHAR(100) DEFAULT 'Employee' NOT NULL"),
+                    ('employee_id_code', "ALTER TABLE users ADD COLUMN employee_id_code VARCHAR(30)"),
+                    ('phone', "ALTER TABLE users ADD COLUMN phone VARCHAR(30)"),
+                ]
+                for col_name, sql in user_migrations:
+                    if col_name not in user_cols:
+                        db.session.execute(text(sql))
+                db.session.commit()
+=======
+            if 'users' in inspector.get_table_names():
+                existing_user_cols = {c['name'] for c in inspector.get_columns('users')}
+                if 'role' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'employee' NOT NULL"))
+                if 'account_active' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN account_active BOOLEAN DEFAULT 1 NOT NULL"))
+                if 'organization_id' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN organization_id INTEGER"))
+                if 'department_id' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN department_id INTEGER"))
+                if 'job_title' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN job_title VARCHAR(100)"))
+                if 'phone' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
+                if 'reports_to_id' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN reports_to_id INTEGER"))
+
+>>>>>>> Stashed changes
             if 'tasks' in inspector.get_table_names():
                 existing_task_cols = {c['name'] for c in inspector.get_columns('tasks')}
                 if 'team_id' not in existing_task_cols:
@@ -247,8 +419,12 @@ def create_app(test_config=None):
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN recurrence_interval VARCHAR(20)"))
                 if 'updated_at' not in existing_task_cols:
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN updated_at DATETIME"))
+<<<<<<< Updated upstream
                 if 'estimated_effort_hours' not in existing_task_cols:
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN estimated_effort_hours FLOAT"))
+=======
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
             db.session.commit()
         except Exception:
