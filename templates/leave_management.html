@@ -1,0 +1,68 @@
+{% extends "_app_layout.html" %}
+{% block title %}Leave Management — TaskNest Enterprise{% endblock %}
+{% block app_content %}
+<section class="page-intro">
+  <h1 class="page-title">{% if review_mode %}Leave Requests{% else %}Leave Management{% endif %}</h1>
+  <p class="page-subtitle">{% if review_mode %}Review requests from employees assigned to your team.{% else %}Request time off and track balances, decisions, and reviewer comments.{% endif %}</p>
+</section>
+<div id="leave-error" class="alert alert-error" hidden></div>
+{% if not review_mode %}
+<div class="dashboard-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));" id="leave-balances"></div>
+<div class="card" style="margin-top:1rem;">
+  <div class="card-header"><h2 class="card-title">New Leave Request</h2></div>
+  <form id="leave-form" class="modal-body">
+    <div class="form-group"><label class="form-label" for="leave-type">Leave type</label><select class="form-control" id="leave-type" required><option value="casual">Casual</option><option value="sick">Sick</option><option value="personal">Personal</option></select></div>
+    <div class="dashboard-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+      <div class="form-group"><label class="form-label" for="leave-start">Start date</label><input class="form-control" type="date" id="leave-start" required></div>
+      <div class="form-group"><label class="form-label" for="leave-end">End date</label><input class="form-control" type="date" id="leave-end" required></div>
+    </div>
+    <div class="form-group"><label class="form-label" for="leave-reason">Reason</label><textarea class="form-control" id="leave-reason" rows="3" maxlength="1000" required></textarea></div>
+    <button class="btn btn-primary" type="submit">Submit Leave Request</button>
+  </form>
+</div>
+{% endif %}
+<div class="card" style="margin-top:1rem;">
+  <div class="card-header"><h2 class="card-title">{% if review_mode %}Team Leave History{% else %}My Leave History{% endif %}</h2><button class="btn btn-secondary btn-sm" id="leave-refresh">Refresh</button></div>
+  <div class="table-responsive"><table class="data-table"><thead><tr>{% if review_mode %}<th>Employee</th>{% endif %}<th>Leave</th><th>Dates</th><th>Days</th><th>Reason</th><th>Status</th><th>Reviewer comment</th><th>Submitted</th>{% if review_mode %}<th>Decision</th>{% endif %}</tr></thead><tbody id="leave-rows"><tr><td colspan="9">Loading requests…</td></tr></tbody></table></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const reviewMode = {{ 'true' if review_mode|default(false) else 'false' }};
+  const rows = document.getElementById('leave-rows');
+  const errorBox = document.getElementById('leave-error');
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  async function load() {
+    errorBox.hidden = true;
+    try {
+      const response = await fetch('/api/leaves');
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not load leave requests.');
+      const payload = result.data || {};
+      if (!reviewMode) {
+        document.getElementById('leave-balances').innerHTML = (payload.balances || []).map(b => `<div class="card"><div class="card-title">${esc(b.type[0].toUpperCase()+b.type.slice(1))} Leave</div><div style="font-size:1.7rem;font-weight:700">${b.remaining} / ${b.allowance}</div><div class="text-muted">${b.approved_days} approved · ${b.pending_days} pending</div></div>`).join('');
+      }
+      const requests = payload.requests || [];
+      if (!requests.length) { rows.innerHTML = `<tr><td colspan="9" class="text-muted">No leave requests found.</td></tr>`; return; }
+      rows.innerHTML = requests.map(r => `<tr>${reviewMode ? `<td>${esc(r.employee_name)}</td>` : ''}<td>${esc(r.leave_type)}</td><td>${esc(r.start_date)} – ${esc(r.end_date)}</td><td>${r.days}</td><td class="leave-reason">${esc(r.reason)}</td><td><span class="badge">${esc(r.status)}</span></td><td>${esc(r.reviewer_comment || '—')}</td><td>${esc(r.created_at ? new Date(r.created_at).toLocaleDateString() : '—')}</td>${reviewMode ? `<td>${r.status === 'pending' ? `<button class="btn btn-primary btn-xs" data-id="${r.id}" data-decision="approved">Approve</button> <button class="btn btn-secondary btn-xs" data-id="${r.id}" data-decision="rejected">Reject</button>` : '—'}</td>` : ''}</tr>`).join('');
+    } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+  }
+  document.getElementById('leave-form')?.addEventListener('submit', async e => {
+    e.preventDefault(); errorBox.hidden = true;
+    try {
+      const response = await fetch('/api/leaves', {method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({leave_type:document.getElementById('leave-type').value,start_date:document.getElementById('leave-start').value,end_date:document.getElementById('leave-end').value,reason:document.getElementById('leave-reason').value})});
+      const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Request failed.');
+      e.target.reset(); await load();
+    } catch(error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+  });
+  rows.addEventListener('click', async e => {
+    const button = e.target.closest('button[data-decision]'); if (!button) return;
+    const decision = button.dataset.decision; let comment = '';
+    if (decision === 'rejected') { comment = prompt('Required reason for rejection:') || ''; if (!comment.trim()) { alert('A rejection comment is required.'); return; } }
+    try { const response = await fetch(`/api/leaves/${button.dataset.id}/decision`, {method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({status:decision,comment})}); const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Decision failed.'); await load(); }
+    catch(error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+  });
+  document.getElementById('leave-refresh')?.addEventListener('click', load); load();
+});
+</script>
+{% endblock %}
