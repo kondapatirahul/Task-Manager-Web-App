@@ -1561,3 +1561,173 @@ textarea.form-control {
 .attendance-timesheet-table td { border-top: 1px solid var(--color-border-subtle); }
 .attendance-timesheet-table th:last-child,
 .attendance-timesheet-table td:last-child { min-width: 220px; white-space: normal; }
+
+/* Employee directory: stable columns with scroll on narrow screens. */
+.employee-filters-card {
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+.employee-filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 2fr) repeat(3, minmax(145px, 1fr)) auto;
+  align-items: center;
+  gap: 0.875rem;
+}
+.employee-filters .form-control {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.employee-search {
+  grid-column: span 1;
+}
+.employee-filter-reset {
+  white-space: nowrap;
+}
+.employee-table-card {
+  padding: 1.25rem;
+}
+.employee-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+.employee-table {
+  width: 100%;
+  min-width: 1060px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.employee-table:not(.employee-table-manage) {
+  min-width: 940px;
+}
+.employee-table .employee-col-person { width: 23%; }
+.employee-table .employee-col-contact { width: 23%; }
+.employee-table .employee-col-department { width: 20%; }
+.employee-table .employee-col-role { width: 12%; }
+.employee-table .employee-col-status { width: 12%; }
+.employee-table .employee-col-actions { width: 10%; }
+.employee-table:not(.employee-table-manage) .employee-col-person { width: 25%; }
+.employee-table:not(.employee-table-manage) .employee-col-contact { width: 24%; }
+.employee-table:not(.employee-table-manage) .employee-col-department { width: 22%; }
+.employee-table:not(.employee-table-manage) .employee-col-role { width: 14%; }
+.employee-table:not(.employee-table-manage) .employee-col-status { width: 15%; }
+.employee-table th,
+.employee-table td {
+  padding: 0.9rem 0.85rem;
+  text-align: left;
+  vertical-align: middle;
+}
+.employee-table th {
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: normal;
+}
+.employee-table td {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.employee-person-cell,
+.employee-contact-cell,
+.employee-department-cell {
+  min-width: 0;
+}
+.employee-person {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+.employee-avatar {
+  display: flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background-color: var(--color-primary);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+.employee-person-details {
+  min-width: 0;
+}
+.employee-name,
+.employee-username,
+.employee-email,
+.employee-phone,
+.employee-designation,
+.employee-department,
+.employee-team {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.employee-name {
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.employee-username,
+.employee-phone,
+.employee-department,
+.employee-team {
+  color: var(--color-muted);
+  font-size: var(--font-size-xs);
+}
+.employee-username,
+.employee-email {
+  white-space: nowrap;
+}
+.employee-email {
+  font-size: var(--font-size-sm);
+}
+.employee-designation {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.employee-role-cell,
+.employee-status-cell {
+  white-space: nowrap;
+}
+.employee-table .employee-actions-heading,
+.employee-table .employee-actions-cell {
+  text-align: right;
+}
+.employee-actions-cell .btn {
+  white-space: nowrap;
+}
+.employee-table-message {
+  padding: 2.5rem !important;
+  color: var(--color-muted);
+  text-align: center !important;
+}
+.employee-table-error {
+  color: var(--color-danger);
+}
+
+@media (max-width: 1100px) {
+  .employee-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .employee-search {
+    grid-column: 1 / -1;
+  }
+  .employee-filter-reset {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 560px) {
+  .employee-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .employee-search {
+    grid-column: auto;
+  }
+  .employee-table-card {
+    padding: 0.875rem;
+  }
+}

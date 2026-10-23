@@ -2,13 +2,15 @@
 
 {% block title %}Employee Directory — TaskNest Enterprise{% endblock %}
 
+{% set can_manage_employees = current_user.role in ['super_admin', 'admin_hr'] %}
+
 {% block app_content %}
 <div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
   <div>
     <h1 class="page-title">Employee Directory</h1>
     <p class="page-subtitle">View, search, provision, and manage company personnel, roles, and status.</p>
   </div>
-  {% if current_user.role in ['super_admin', 'admin_hr'] %}
+  {% if can_manage_employees %}
   <button id="open-provision-btn" class="btn btn-primary">
     <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
     <span>Provision Employee</span>
@@ -17,33 +19,25 @@
 </div>
 
 <!-- Filters Bar -->
-<div class="card" style="padding: 1rem; margin-bottom: 1.5rem;">
-  <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
-    <div style="flex: 2; min-width: 220px; position: relative;">
-      <input type="search" id="emp-search" class="form-control" placeholder="Search by name, email, designation..." style="margin-bottom: 0;">
-    </div>
-    <div style="flex: 1; min-width: 140px;">
-      <select id="emp-filter-role" class="form-control" style="margin-bottom: 0;">
-        <option value="">All Roles</option>
-        <option value="super_admin">Super Admin</option>
-        <option value="admin_hr">Admin / HR</option>
-        <option value="team_lead">Team Lead</option>
-        <option value="employee">Employee</option>
-      </select>
-    </div>
-    <div style="flex: 1; min-width: 140px;">
-      <select id="emp-filter-status" class="form-control" style="margin-bottom: 0;">
-        <option value="">All Statuses</option>
-        <option value="active">Active Only</option>
-        <option value="inactive">Deactivated Only</option>
-      </select>
-    </div>
-    <div style="flex: 1; min-width: 150px;">
-      <select id="emp-filter-dept" class="form-control" style="margin-bottom: 0;">
-        <option value="">All Departments</option>
-      </select>
-    </div>
-    <button id="emp-filter-reset" class="btn btn-secondary btn-sm" title="Reset Filters">
+<div class="card employee-filters-card">
+  <div class="employee-filters">
+    <input type="search" id="emp-search" class="form-control employee-search" placeholder="Search by name, email, designation..." aria-label="Search employees">
+    <select id="emp-filter-role" class="form-control" aria-label="Filter by role">
+      <option value="">All Roles</option>
+      <option value="super_admin">Super Admin</option>
+      <option value="admin_hr">Admin / HR</option>
+      <option value="team_lead">Team Lead</option>
+      <option value="employee">Employee</option>
+    </select>
+    <select id="emp-filter-status" class="form-control" aria-label="Filter by account status">
+      <option value="">All Statuses</option>
+      <option value="active">Active Only</option>
+      <option value="inactive">Deactivated Only</option>
+    </select>
+    <select id="emp-filter-dept" class="form-control" aria-label="Filter by department">
+      <option value="">All Departments</option>
+    </select>
+    <button id="emp-filter-reset" class="btn btn-secondary btn-sm employee-filter-reset" title="Reset Filters">
       <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       <span>Reset</span>
     </button>
@@ -51,26 +45,42 @@
 </div>
 
 <!-- Employee List Card / Table -->
-<div class="card" style="padding: 1.25rem;">
-  <div style="overflow-x: auto;">
-    <table class="table" id="emp-table">
-      <thead>
-        <tr>
-          <th>Employee</th>
-          <th>Contact</th>
-          <th>Department & Team</th>
-          <th>Role</th>
-          <th>Account Status</th>
-          {% if current_user.role in ['super_admin', 'admin_hr'] %}
-          <th style="text-align: right;">Actions</th>
-          {% endif %}
-        </tr>
-      </thead>
-      <tbody id="emp-tbody">
-        <tr>
-          <td colspan="6" style="text-align: center; padding: 2.5rem; color: var(--color-muted);">
-            Loading directory...
-          </td>
+<div class="card employee-table-card">
+  <div class="employee-table-scroll">
+    <table class="table employee-table {% if can_manage_employees %}employee-table-manage{% endif %}" id="emp-table">
+    <colgroup>
+      {% if can_manage_employees %}
+      <col class="employee-col-person">
+      <col class="employee-col-contact">
+      <col class="employee-col-department">
+      <col class="employee-col-role">
+      <col class="employee-col-status">
+      <col class="employee-col-actions">
+      {% else %}
+      <col class="employee-col-person">
+      <col class="employee-col-contact">
+      <col class="employee-col-department">
+      <col class="employee-col-role">
+      <col class="employee-col-status">
+      {% endif %}
+    </colgroup>
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th>Contact</th>
+        <th>Department & Team</th>
+        <th>Role</th>
+        <th>Account Status</th>
+        {% if can_manage_employees %}
+        <th class="employee-actions-heading">Actions</th>
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody id="emp-tbody">
+      <tr>
+        <td colspan="{{ 6 if can_manage_employees else 5 }}" class="employee-table-message">
+          Loading directory...
+        </td>
         </tr>
       </tbody>
     </table>
@@ -78,7 +88,7 @@
 </div>
 
 <!-- Provision Employee Modal -->
-{% if current_user.role in ['super_admin', 'admin_hr'] %}
+{% if can_manage_employees %}
 <div class="modal-overlay" id="provision-modal" role="dialog" aria-modal="true" aria-labelledby="provision-title">
   <div class="modal-card" style="max-width: 600px;">
     <div class="modal-header">
@@ -177,6 +187,13 @@ document.addEventListener('DOMContentLoaded', () => {
   let teams = [];
 
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
 
   // Modal helpers
   function openModal(modal) {
@@ -200,8 +217,8 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadOrgMetadata() {
     try {
       const [deptRes, teamRes] = await Promise.all([
-        fetch('/api/departments'),
-        fetch('/api/teams')
+        fetch('/api/organization/departments'),
+        fetch('/api/organization/teams')
       ]);
       if (deptRes.ok) {
         const json = await deptRes.json();
@@ -254,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (employees.length === 0) {
         empTable.innerHTML = `
           <tr>
-            <td colspan="6" style="text-align: center; padding: 2.5rem; color: var(--color-muted);">
+            <td colspan="{{ 6 if can_manage_employees else 5 }}" class="employee-table-message">
               No employees matched the current filters.
             </td>
           </tr>
@@ -263,7 +280,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       empTable.innerHTML = employees.map(emp => {
-        const initials = (emp.full_name || emp.username).substring(0, 2).toUpperCase();
+        const name = emp.full_name || emp.username;
+        const initials = escapeHtml(name.substring(0, 2).toUpperCase());
         const roleLabels = {
           'super_admin': 'Super Admin',
           'admin_hr': 'Admin / HR',
@@ -271,38 +289,42 @@ document.addEventListener('DOMContentLoaded', () => {
           'employee': 'Employee'
         };
         const roleLabel = roleLabels[emp.role] || emp.role;
+        const teamName = (emp.team_id && teams.find(team => Number(team.id) === Number(emp.team_id))?.name)
+          || emp.team_name
+          || 'Unassigned';
         const statusBadge = emp.account_active
           ? '<span class="badge badge-completed">Active</span>'
           : '<span class="badge badge-overdue">Deactivated</span>';
 
         return `
           <tr>
-            <td>
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <div style="width: 38px; height: 38px; border-radius: 50%; background-color: var(--color-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: var(--font-size-sm);">
+            <td class="employee-person-cell">
+              <div class="employee-person">
+                <div class="employee-avatar">
                   ${initials}
                 </div>
-                <div>
-                  <div style="font-weight: 600; color: var(--color-text);">${emp.full_name || emp.username}</div>
-                  <div style="font-size: var(--font-size-xs); color: var(--color-muted);">@${emp.username}</div>
+                <div class="employee-person-details">
+                  <div class="employee-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                  <div class="employee-username" title="@${escapeHtml(emp.username)}">@${escapeHtml(emp.username)}</div>
                 </div>
               </div>
             </td>
-            <td>
-              <div style="font-size: var(--font-size-sm);">${emp.email}</div>
-              ${emp.phone ? `<div style="font-size: var(--font-size-xs); color: var(--color-muted);">${emp.phone}</div>` : ''}
+            <td class="employee-contact-cell">
+              <div class="employee-email" title="${escapeHtml(emp.email)}" aria-label="${escapeHtml(emp.email)}">${escapeHtml(emp.email)}</div>
+              ${emp.phone ? `<div class="employee-phone" title="${escapeHtml(emp.phone)}">${escapeHtml(emp.phone)}</div>` : ''}
             </td>
-            <td>
-              <div style="font-weight: 500; font-size: var(--font-size-sm);">${emp.designation || 'Staff'}</div>
-              <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${emp.department_name || 'General Org'} · ${emp.team_name || 'Unassigned'}</div>
+            <td class="employee-department-cell">
+              <div class="employee-designation" title="${escapeHtml(emp.designation || 'Staff')}">${escapeHtml(emp.designation || 'Staff')}</div>
+              <div class="employee-department" title="${escapeHtml(emp.department_name || 'General Org')}">${escapeHtml(emp.department_name || 'General Org')}</div>
+              <div class="employee-team" title="${escapeHtml(teamName)}">${escapeHtml(teamName)}</div>
             </td>
-            <td>
-              <span class="badge badge-${emp.role}">${roleLabel}</span>
+            <td class="employee-role-cell">
+              <span class="badge badge-${escapeHtml(emp.role)}">${escapeHtml(roleLabel)}</span>
             </td>
-            <td>${statusBadge}</td>
-            {% if current_user.role in ['super_admin', 'admin_hr'] %}
-            <td style="text-align: right;">
-              <button class="btn btn-ghost btn-sm toggle-status-btn" data-id="${emp.id}" data-active="${emp.account_active}">
+            <td class="employee-status-cell">${statusBadge}</td>
+            {% if can_manage_employees %}
+            <td class="employee-actions-cell">
+              <button class="btn btn-ghost btn-sm toggle-status-btn" data-id="${escapeHtml(emp.id)}" data-active="${emp.account_active}">
                 ${emp.account_active ? 'Deactivate' : 'Activate'}
               </button>
             </td>
@@ -343,8 +365,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       empTable.innerHTML = `
         <tr>
-          <td colspan="6" style="text-align: center; padding: 2.5rem; color: var(--color-danger);">
-            ${err.message}
+          <td colspan="{{ 6 if can_manage_employees else 5 }}" class="employee-table-message employee-table-error">
+            ${escapeHtml(err.message)}
           </td>
         </tr>
       `;
