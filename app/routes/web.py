@@ -60,7 +60,10 @@ def web_roles_required(*roles):
 
 @web_bp.route('/')
 def index():
-    # The public homepage must remain visible even for signed-in users.
+    # Authenticated users should not be able to navigate back to the public
+    # landing page as if their session were anonymous.
+    if current_user.is_authenticated:
+        return redirect(_role_home(current_user.role))
     return render_template('index.html')
 
 

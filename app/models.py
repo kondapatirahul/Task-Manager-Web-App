@@ -98,6 +98,7 @@ class TeamMember(db.Model):
     id        = db.Column(db.Integer, primary_key=True)
     team_id   = db.Column(db.Integer, db.ForeignKey('teams.id'), nullable=False)
     user_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    role      = db.Column(db.String(20), nullable=False, default='member')
     joined_at = db.Column(db.DateTime, default=utc_now, nullable=False)
 
     user = db.relationship('User', backref='team_memberships')
@@ -107,6 +108,7 @@ class TeamMember(db.Model):
             'id': self.id,
             'team_id': self.team_id,
             'user_id': self.user_id,
+            'role': self.role,
             'user_name': self.user.full_name or self.user.username if self.user else None,
             'user_email': self.user.email if self.user else None,
             'user_role': self.user.role if self.user else None,
@@ -114,6 +116,10 @@ class TeamMember(db.Model):
             'joined_at': self.joined_at.isoformat() if self.joined_at else None,
         }
 
+
+# Compatibility alias for code that performs association-table inserts.
+# This references the existing mapped table; it does not define a second table.
+team_members = TeamMember.__table__
 
 # ── User Model ─────────────────────────────────────────────────────────────────
 

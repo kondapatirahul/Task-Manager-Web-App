@@ -72,7 +72,7 @@ def create_app(test_config=None):
     def set_csrf_cookie(response):
         # Never let authenticated application pages reappear from browser cache
         # after logout. Public homepage and public authentication pages remain cacheable.
-        if request.path not in ('/', '/login', '/admin/login', '/lead/login', '/employee/login', '/signup', '/forgot-password') and not request.path.startswith('/static/'):
+        if not request.path.startswith('/static/'):
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
@@ -226,7 +226,17 @@ def create_app(test_config=None):
                         db.session.execute(text(sql))
                 db.session.commit()
 
-            # 2. Migrate `tasks` table
+            # 2. Migrate `team_members` table. Older local databases predate
+            # the membership role column; add it in place without dropping data.
+            if 'team_members' in table_names:
+                member_cols = {c['name'] for c in inspector.get_columns('team_members')}
+                if 'role' not in member_cols:
+                    db.session.execute(text(
+                        "ALTER TABLE team_members ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'member'"
+                    ))
+                    db.session.commit()
+
+            # 3. Migrate `tasks` table
             if 'tasks' in table_names:
                 task_cols = {c['name'] for c in inspector.get_columns('tasks')}
                 task_migrations = [
@@ -247,7 +257,7 @@ def create_app(test_config=None):
                         db.session.execute(text(sql))
                 db.session.commit()
 
-            # 3. Ensure Default Organization exists and backfill
+            # 4. Ensure Default Organization exists and backfill
             from app.models import Organization
             default_org = Organization.query.first()
             if not default_org:

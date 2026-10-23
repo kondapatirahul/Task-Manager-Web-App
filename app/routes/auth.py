@@ -13,7 +13,7 @@ PUT  /api/auth/profile         Update own display name
 POST /api/auth/change-password Securely change own password
 """
 import re
-from flask import Blueprint, request, session
+from flask import Blueprint, request, session, current_app
 from flask_login import login_user, logout_user, current_user, login_required
 from app import db
 from app.models import User, Category, ROLE_EMPLOYEE
@@ -110,15 +110,45 @@ def login():
             'Please contact your administrator.', 403
         )
 
-    login_user(user, remember=remember)
+    # Rotate the session identifier/state at authentication to reduce session-fixation risk.
+    session.clear()
+    login_user(user, remember=remember, fresh=True)
     return api_success(user.to_dict(), message='Logged in successfully')
 
 
 @auth_bp.route('/logout', methods=['POST'])
 @login_required
 def logout():
+    # Clear Flask-Login and every other session value (including remember/session
+    # metadata and CSRF token) so stale authenticated state cannot survive logout.
     logout_user()
-    return api_success(message='Logged out successfully')
+    session.clear()
+    response = api_success(message='Logged out successfully')
+    flask_response = response[0] if isinstance(response, tuple) else response
+    # Explicitly expire both Flask's session cookie and Flask-Login's remember
+    # cookie. This is defensive for browsers that retain a remember cookie.
+    cookie_path = current_app.config.get('SESSION_COOKIE_PATH') or '/'
+    cookie_domain = current_app.config.get('SESSION_COOKIE_DOMAIN')
+    flask_response.delete_cookie(
+        current_app.config.get('SESSION_COOKIE_NAME', 'session'),
+        path=cookie_path,
+        domain=cookie_domain,
+        secure=current_app.config.get('SESSION_COOKIE_SECURE', False),
+        httponly=current_app.config.get('SESSION_COOKIE_HTTPONLY', True),
+        samesite=current_app.config.get('SESSION_COOKIE_SAMESITE', 'Lax'),
+    )
+    flask_response.delete_cookie(
+        current_app.config.get('REMEMBER_COOKIE_NAME', 'remember_token'),
+        path=current_app.config.get('REMEMBER_COOKIE_PATH') or '/',
+        domain=current_app.config.get('REMEMBER_COOKIE_DOMAIN'),
+        secure=current_app.config.get('REMEMBER_COOKIE_SECURE', False),
+        httponly=current_app.config.get('REMEMBER_COOKIE_HTTPONLY', True),
+        samesite=current_app.config.get('REMEMBER_COOKIE_SAMESITE', 'Lax'),
+    )
+    flask_response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
+    flask_response.headers['Pragma'] = 'no-cache'
+    flask_response.headers['Expires'] = '0'
+    return response
 
 
 # ── Current user info ──────────────────────────────────────────────────────────
