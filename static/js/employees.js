@@ -149,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     employeeGrid.innerHTML = filtered.map(emp => {
-      const initial = (emp.full_name || emp.username || '?')[:1].toUpperCase();
+      const initial = (emp.full_name || emp.username || '?').charAt(0).toUpperCase();
       const statusBadge = emp.account_active
         ? '<span class="badge badge-success" style="font-size: 11px;">Active</span>'
         : '<span class="badge badge-danger" style="font-size: 11px;">Deactivated</span>';
@@ -325,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('detail-email').textContent = emp.email;
 
       const avatar = document.getElementById('detail-avatar');
-      if (avatar) avatar.textContent = (emp.full_name || emp.username || '?')[:1].toUpperCase();
+      if (avatar) avatar.textContent = (emp.full_name || emp.username || '?').charAt(0).toUpperCase();
 
       const roleBadge = document.getElementById('detail-role-badge');
       if (roleBadge) {
