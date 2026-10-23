@@ -21,14 +21,23 @@ reports_bp = Blueprint('reports', __name__, url_prefix='/api/reports')
 @login_required
 @active_account_required
 def productivity_metrics():
-    """Return report data in the contract consumed by templates/reports.html."""
-    try:
-        days = int(request.args.get('range_days', request.args.get('days', 30)))
-    except (TypeError, ValueError):
+    """Return report data in the contract consumed by templates/reports.html and tests."""
+    raw_days = request.args.get('range_days', request.args.get('days'))
+    if raw_days is not None:
+        try:
+            days = int(raw_days)
+            if days <= 0:
+                return api_error('Invalid range_days parameter.', 400)
+        except (TypeError, ValueError):
+            return api_error('Invalid range_days parameter.', 400)
+    else:
         days = 30
-    days = min(90, max(7, days))
-    start_date = date.today() - timedelta(days=days - 1)
+
+    today = date.today()
+    start_date = today - timedelta(days=days - 1)
     start_dt = datetime.combine(start_date, datetime.min.time())
+    end_date = today
+    end_dt = datetime.combine(end_date, datetime.max.time())
 
     query = Task.query
     if current_user.role == ROLE_TEAM_LEAD:
@@ -40,15 +49,29 @@ def productivity_metrics():
         query = query.filter((Task.assignee_id == current_user.id) | (Task.user_id == current_user.id))
 
     tasks = query.all()
-    in_range = [t for t in tasks if t.created_at and t.created_at >= start_dt]
-    completed = [t for t in in_range if t.status == 'completed']
-    overdue = [t for t in in_range if t.is_overdue]
-    blocked = [t for t in in_range if t.status == 'blocked']
-    on_time = sum(1 for t in completed if not t.due_date or (t.completed_at and t.completed_at.date() <= t.due_date))
-    on_time_rate = round(on_time * 100 / len(completed), 1) if completed else 0.0
+    total_tasks_count = len(tasks)
+
+    # In-range completed tasks (completed_at within range)
+    completed_in_range = [
+        t for t in tasks
+        if t.status == 'completed' and t.completed_at and t.completed_at >= start_dt and t.completed_at <= end_dt
+    ]
+
+    # Overdue incomplete tasks
+    overdue_incomplete = [
+        t for t in tasks
+        if t.status != 'completed' and t.due_date and t.due_date < today
+    ]
+
+    # Blocked tasks
+    blocked_tasks = [t for t in tasks if t.status == 'blocked']
+
+    # On time rate for completed tasks within range
+    on_time = sum(1 for t in completed_in_range if not t.due_date or (t.completed_at and t.completed_at.date() <= t.due_date))
+    on_time_rate = round(on_time * 100.0 / len(completed_in_range), 1) if completed_in_range else 0.0
 
     trend = { (start_date + timedelta(days=i)).isoformat(): 0 for i in range(days) }
-    for task in completed:
+    for task in completed_in_range:
         if task.completed_at:
             key = task.completed_at.date().isoformat()
             if key in trend:
@@ -56,7 +79,7 @@ def productivity_metrics():
 
     status_distribution = {}
     priority_distribution = {}
-    for task in in_range:
+    for task in tasks:
         status_distribution[task.status] = status_distribution.get(task.status, 0) + 1
         priority = task.priority or 'medium'
         priority_distribution[priority] = priority_distribution.get(priority, 0) + 1
@@ -69,7 +92,7 @@ def productivity_metrics():
         for user in users_query.order_by(User.full_name, User.username).all():
             assigned = [t for t in tasks if (t.assignee_id or t.user_id) == user.id]
             active_count = sum(1 for t in assigned if t.status != 'completed')
-            completed_count = sum(1 for t in assigned if t in completed)
+            completed_count = sum(1 for t in assigned if t.status == 'completed' and t.completed_at and t.completed_at >= start_dt and t.completed_at <= end_dt)
             if assigned:
                 workload_distribution.append({
                     'user_id': user.id,
@@ -78,13 +101,16 @@ def productivity_metrics():
                     'completed_tasks': completed_count,
                 })
 
-    total_tasks = task_query.count()
     return api_success({
+        'range_days': days,
+        'start_date': start_date.isoformat(),
+        'end_date': end_date.isoformat(),
+        'total_tasks': total_tasks_count,
         'metrics': {
-            'total_tasks': len(in_range),
-            'completed_tasks': len(completed),
-            'overdue_incomplete_tasks': len(overdue),
-            'blocked_tasks': len(blocked),
+            'total_tasks': total_tasks_count,
+            'completed_tasks': len(completed_in_range),
+            'overdue_incomplete_tasks': len(overdue_incomplete),
+            'blocked_tasks': len(blocked_tasks),
             'on_time_rate': on_time_rate,
         },
         'completion_trends': [{'date': day, 'completed_count': count} for day, count in trend.items()],

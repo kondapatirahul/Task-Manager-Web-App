@@ -39,6 +39,7 @@ def create_app(test_config=None):
 
     if test_config:
         app.config.update(test_config)
+    app.config.setdefault('PROPAGATE_EXCEPTIONS', False)
 
     # Initialize extensions
     db.init_app(app)
@@ -50,7 +51,10 @@ def create_app(test_config=None):
 
     @login_manager.user_loader
     def load_user(user_id):
-        return db.session.get(User, int(user_id))
+        user = db.session.get(User, int(user_id))
+        if user and not user.account_active:
+            return None
+        return user
 
     @login_manager.unauthorized_handler
     def unauthorized():
@@ -110,6 +114,12 @@ def create_app(test_config=None):
 
     # Error handlers
     from flask import render_template
+    @app.errorhandler(400)
+    def handle_400(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': getattr(e, 'description', 'Bad Request')}, 400
+        return 'Bad Request', 400
+
     @app.errorhandler(403)
     def handle_403(e):
         if request.path.startswith('/api/'):
@@ -122,8 +132,25 @@ def create_app(test_config=None):
             return {'ok': False, 'error': 'Not Found'}, 404
         return render_template('404.html'), 404
 
+    @app.errorhandler(405)
+    def handle_405(e):
+        if request.path.startswith('/api/'):
+            headers = {}
+            if hasattr(e, 'valid_methods') and e.valid_methods:
+                headers['Allow'] = ', '.join(e.valid_methods)
+            return {'ok': False, 'error': 'Method Not Allowed'}, 405, headers
+        return 'Method Not Allowed', 405
+
+    @app.errorhandler(415)
+    def handle_415(e):
+        if request.path.startswith('/api/'):
+            return {'ok': False, 'error': 'Content-Type must be application/json'}, 415
+        return 'Unsupported Media Type', 415
+
     @app.errorhandler(500)
+    @app.errorhandler(Exception)
     def handle_500(e):
+        app.logger.error(f"Unhandled exception: {e}", exc_info=True)
         if request.path.startswith('/api/'):
             return {'ok': False, 'error': 'Internal server error'}, 500
         return render_template('500.html'), 500
@@ -141,6 +168,9 @@ def create_app(test_config=None):
     from app.routes.notifications import notifications_bp
     from app.routes.discussions import discussions_bp
     from app.routes.reports import reports_bp
+    from app.routes.teams import teams_bp
+    from app.routes.departments import departments_bp
+    from app.routes.organizations import organizations_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
@@ -154,6 +184,9 @@ def create_app(test_config=None):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(discussions_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(teams_bp)
+    app.register_blueprint(departments_bp)
+    app.register_blueprint(organizations_bp)
 
     # CLI commands
     @app.cli.command('init-db')

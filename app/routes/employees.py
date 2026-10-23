@@ -2,13 +2,14 @@
 Employee Directory and Account Administration API routes.
 """
 import re
+import secrets
 from flask import Blueprint, request
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 from app import db
 from app.models import (
     User, Department, Team, TeamMember, Task, Attendance,
-    ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD, ROLE_EMPLOYEE, ALL_ROLES
+    ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR, ROLE_TEAM_LEAD, ROLE_EMPLOYEE, ALL_ROLES
 )
 from app.routes.utils import api_success, api_error, roles_required, active_account_required, log_audit, send_notification
 
@@ -30,7 +31,7 @@ def list_employees():
 
     # Directory visibility: admins/HR see the organization; team leads see
     # only members of teams they lead; employees see only their own profile.
-    if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+    if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR):
         pass
     elif current_user.is_team_lead:
         led_team_ids = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
@@ -74,7 +75,9 @@ def list_employees():
     team_id = request.args.get('team_id')
     if team_id:
         try:
-            query = query.filter(User.team_id == int(team_id))
+            tid = int(team_id)
+            member_user_ids = [row[0] for row in db.session.query(TeamMember.user_id).filter_by(team_id=tid).all()]
+            query = query.filter(or_(User.team_id == tid, User.id.in_(member_user_ids)))
         except ValueError:
             pass
 
@@ -132,15 +135,15 @@ def get_employee(user_id):
 @employees_bp.route('', methods=['POST'])
 @login_required
 @active_account_required
-@roles_required(ROLE_SUPER_ADMIN, ROLE_ADMIN)
+@roles_required(ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR)
 def create_employee():
     data      = request.get_json(silent=True) or {}
     email     = (data.get('email') or '').strip().lower()
     full_name = (data.get('full_name') or '').strip()
     username  = (data.get('username') or '').strip()
-    password  = data.get('password') or 'Welcome123!'
+    raw_pass  = data.get('password')
     role      = (data.get('role') or ROLE_EMPLOYEE).strip().lower()
-    designation = (data.get('designation') or 'Employee').strip()
+    designation = (data.get('designation') or data.get('job_title') or 'Employee').strip()
     dept_id   = data.get('department_id')
     team_id   = data.get('team_id')
     manager_id = data.get('manager_id')
@@ -157,6 +160,10 @@ def create_employee():
     if role == ROLE_SUPER_ADMIN and not current_user.is_super_admin:
         return api_error('Only super administrators can assign the Super Admin role.', 403)
 
+    # HR role escalation prevention
+    if role in (ROLE_SUPER_ADMIN, ROLE_ADMIN) and current_user.role == ROLE_HR:
+        return api_error('HR users do not have permission to create administrator accounts.', 403)
+
     if User.query.filter_by(email=email).first():
         return api_error('An account with this email already exists.', 409)
 
@@ -166,6 +173,13 @@ def create_employee():
 
     if User.query.filter_by(username=username).first():
         username = f'{username}_{User.query.count() + 1}'
+
+    activation_token = None
+    if not raw_pass:
+        activation_token = secrets.token_urlsafe(12)
+        password = activation_token
+    else:
+        password = raw_pass
 
     emp = User(
         full_name=full_name,
@@ -203,7 +217,10 @@ def create_employee():
         'system'
     )
 
-    return api_success(emp.to_dict(), message='Employee account created successfully.', status_code=201)
+    emp_dict = emp.to_dict()
+    if activation_token:
+        emp_dict['activation_token'] = activation_token
+    return api_success(emp_dict, message='Employee account created successfully.', status_code=201)
 
 
 # ── Update Employee (Admin / HR) ───────────────────────────────────────────────
@@ -211,7 +228,7 @@ def create_employee():
 @employees_bp.route('/<int:user_id>', methods=['PUT'])
 @login_required
 @active_account_required
-@roles_required(ROLE_SUPER_ADMIN, ROLE_ADMIN)
+@roles_required(ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR)
 def update_employee(user_id):
     user = User.query.get_or_404(user_id)
     data = request.get_json(silent=True) or {}
@@ -221,8 +238,8 @@ def update_employee(user_id):
         if name:
             user.full_name = name
 
-    if 'designation' in data:
-        user.designation = (data['designation'] or '').strip()
+    if 'designation' in data or 'job_title' in data:
+        user.designation = (data.get('designation') or data.get('job_title') or '').strip()
 
     if 'phone' in data:
         user.phone = (data['phone'] or '').strip()
@@ -263,17 +280,17 @@ def update_employee(user_id):
 @employees_bp.route('/<int:user_id>/status', methods=['PATCH'])
 @login_required
 @active_account_required
-@roles_required(ROLE_SUPER_ADMIN, ROLE_ADMIN)
+@roles_required(ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR)
 def set_employee_status(user_id):
     user = User.query.get_or_404(user_id)
     if user.id == current_user.id:
         return api_error('You cannot deactivate your own account.', 400)
 
     data = request.get_json(silent=True) or {}
-    if 'active' not in data:
+    if 'active' not in data and 'account_active' not in data:
         return api_error('Active state (true/false) is required.', 400)
 
-    new_active = bool(data['active'])
+    new_active = bool(data['active'] if 'active' in data else data['account_active'])
     user.account_active = new_active
     db.session.commit()
 

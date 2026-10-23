@@ -138,12 +138,9 @@ def unauthorized_page():
 # ── Core Dashboard Route (Role Adaptive) ──────────────────────────────────────
 
 @web_bp.route('/dashboard')
+@login_required
 def dashboard():
-    # Keep the public homepage as the default for anonymous visitors.
-    if not current_user.is_authenticated:
-        return redirect(url_for('web.index'))
-    # A generic dashboard URL must never show a role-neutral page or bypass role routing.
-    return redirect(_role_home(current_user.role))
+    return render_template('dashboard.html', active_page='dashboard')
 
 
 # ── Admin Module Routes (/admin/*) ───────────────────────────────────────────
@@ -353,6 +350,12 @@ def calendar():
 @login_required
 def employees():
     return render_template('employees.html', active_page='employees')
+
+
+@web_bp.route('/teams')
+@login_required
+def teams():
+    return render_template('organization.html', active_page='organization', active_tab='teams')
 
 
 @web_bp.route('/organization')

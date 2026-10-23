@@ -12,10 +12,12 @@ ROLE_SUPER_ADMIN = 'super_admin'
 ROLE_ADMIN       = 'admin'
 ROLE_TEAM_LEAD   = 'team_lead'
 ROLE_EMPLOYEE    = 'employee'
+ROLE_HR          = 'hr'
 
 ALL_ROLES        = (ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD, ROLE_EMPLOYEE)
-MANAGEMENT_ROLES = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD}
 ADMIN_ROLES      = {ROLE_SUPER_ADMIN, ROLE_ADMIN}
+ADMIN_HR_ROLES   = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR, 'admin_hr'}
+MANAGEMENT_ROLES = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR, 'admin_hr', ROLE_TEAM_LEAD}
 
 # ── Organization & Structure ──────────────────────────────────────────────────
 
@@ -24,12 +26,18 @@ class Organization(db.Model):
 
     id         = db.Column(db.Integer, primary_key=True)
     name       = db.Column(db.String(100), nullable=False)
-    slug       = db.Column(db.String(100), unique=True, nullable=False)
+    slug       = db.Column(db.String(100), unique=True, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
 
     departments = db.relationship('Department', backref='organization', lazy='dynamic', cascade='all, delete-orphan')
     teams       = db.relationship('Team', backref='organization', lazy='dynamic', cascade='all, delete-orphan')
     users       = db.relationship('User', backref='organization', lazy='dynamic')
+
+    def __init__(self, **kwargs):
+        if 'slug' not in kwargs and 'name' in kwargs and kwargs['name']:
+            import re
+            kwargs['slug'] = re.sub(r'[^a-zA-Z0-9_-]', '-', kwargs['name'].lower())
+        super().__init__(**kwargs)
 
     def to_dict(self):
         return {
@@ -148,6 +156,22 @@ class User(UserMixin, db.Model):
     employee_id_code = db.Column(db.String(30), nullable=True)
     phone            = db.Column(db.String(30), nullable=True)
 
+    @property
+    def job_title(self):
+        return self.designation
+
+    @job_title.setter
+    def job_title(self, val):
+        self.designation = val
+
+    @property
+    def name(self):
+        return self.full_name or self.username
+
+    @name.setter
+    def name(self, val):
+        self.full_name = val
+
     # Relationships
     manager = db.relationship('User', remote_side=[id], backref='direct_reports')
 
@@ -171,7 +195,7 @@ class User(UserMixin, db.Model):
 
     @property
     def is_admin(self):
-        return self.role in ADMIN_ROLES or self.role == 'admin_hr'
+        return self.role in ADMIN_ROLES or self.role in ('admin_hr', 'hr')
 
     @property
     def is_team_lead(self):
@@ -179,15 +203,16 @@ class User(UserMixin, db.Model):
 
     @property
     def is_management(self):
-        """True for super_admin, admin, admin_hr, and team_lead."""
-        return self.role in MANAGEMENT_ROLES or self.role == 'admin_hr'
+        """True for super_admin, admin, hr, admin_hr, and team_lead."""
+        return self.role in MANAGEMENT_ROLES or self.role in ('admin_hr', 'hr')
 
     def has_role(self, *roles):
         """Return True if this user's role is among the given roles."""
         expanded = set(roles)
-        if 'admin' in expanded or 'admin_hr' in expanded:
+        if 'admin' in expanded or 'admin_hr' in expanded or 'hr' in expanded:
             expanded.add('admin')
             expanded.add('admin_hr')
+            expanded.add('hr')
         return self.role in expanded
 
     # ── Credentials ───────────────────────────────────────────────────────────
@@ -260,6 +285,25 @@ ENTERPRISE_STATUSES = {
     STATUS_PENDING
 }
 
+COMPANY_TASK_STATUSES = (
+    STATUS_TODO,
+    STATUS_IN_PROGRESS,
+    STATUS_BLOCKED,
+    STATUS_IN_REVIEW,
+    STATUS_COMPLETED,
+    STATUS_CHANGES_REQUESTED,
+)
+
+STATUS_LABELS = {
+    STATUS_TODO:              'To Do',
+    STATUS_PENDING:           'To Do',
+    STATUS_IN_PROGRESS:       'In Progress',
+    STATUS_BLOCKED:           'Blocked',
+    STATUS_IN_REVIEW:         'In Review',
+    STATUS_COMPLETED:         'Completed',
+    STATUS_CHANGES_REQUESTED: 'Changes Requested',
+}
+
 class Task(db.Model):
     __tablename__ = 'tasks'
 
@@ -298,10 +342,59 @@ class Task(db.Model):
     submissions = db.relationship('WorkSubmission', backref='task', lazy='dynamic', cascade='all, delete-orphan')
 
     @property
+    def assigned_to_id(self):
+        return self.assignee_id or self.user_id
+
+    @assigned_to_id.setter
+    def assigned_to_id(self, val):
+        self.assignee_id = val
+
+    @property
+    def assigned_to(self):
+        return self.assignee or self.user
+
+    @assigned_to.setter
+    def assigned_to(self, val):
+        self.assignee = val
+
+    @property
+    def comments(self):
+        return self.messages
+
+    @property
+    def status_label(self):
+        return STATUS_LABELS.get(self.status, self.status.replace('_', ' ').title())
+
+    @property
+    def submission_notes(self):
+        sub = self.submissions.order_by(WorkSubmission.created_at.desc()).first() if hasattr(self, 'submissions') else None
+        return sub.notes if sub else ''
+
+    @submission_notes.setter
+    def submission_notes(self, val):
+        pass
+
+    @property
+    def review_notes(self):
+        sub = self.submissions.order_by(WorkSubmission.created_at.desc()).first() if hasattr(self, 'submissions') else None
+        return sub.review_notes if sub else ''
+
+    @review_notes.setter
+    def review_notes(self, val):
+        pass
+
+    @property
     def is_overdue(self):
         if self.status != STATUS_COMPLETED and self.due_date:
             return self.due_date < date.today()
         return False
+
+    @property
+    def reference_attachments(self):
+        if not hasattr(self, 'attachments'):
+            return []
+        refs = [a for a in self.attachments if getattr(a, 'attachment_type', None) == 'reference']
+        return [r.to_dict() for r in refs]
 
     def to_dict(self):
         # Effective assignee is assignee or user
@@ -314,6 +407,7 @@ class Task(db.Model):
             'title':                self.title,
             'description':          self.description or '',
             'status':               self.status,
+            'status_label':         self.status_label,
             'priority':             self.priority,
             'due_date':             self.due_date.isoformat() if self.due_date else None,
             'start_date':           self.start_date.isoformat() if self.start_date else None,
@@ -324,14 +418,21 @@ class Task(db.Model):
             'user_id':              self.user_id,
             'creator_id':           self.creator_id or self.user_id,
             'creator_name':         creator_name,
+            'creator_role':         self.creator.role if self.creator else None,
             'assignee_id':          self.assignee_id or self.user_id,
+            'assigned_to_id':       self.assignee_id or self.user_id,
             'assignee_name':        eff_assignee_name,
+            'assigned_to_name':     eff_assignee_name,
+            'assigned_to_email':    eff_assignee.email if eff_assignee else None,
+            'assigned_to_role':     eff_assignee.role if eff_assignee else None,
             'category_id':          self.category_id,
             'category_name':        self.category.name if self.category else None,
             'team_id':              self.team_id,
             'team_name':            self.team.name if self.team else None,
             'organization_id':      self.organization_id,
             'acceptance_criteria':  self.acceptance_criteria or '',
+            'submission_notes':     self.submission_notes,
+            'review_notes':         self.review_notes,
             'progress':             self.progress,
             'is_recurring':         bool(self.is_recurring),
             'recurrence_interval':  self.recurrence_interval,
@@ -340,6 +441,36 @@ class Task(db.Model):
             'message_count':        self.messages.count() if hasattr(self.messages, 'count') else 0,
             'attachment_count':     self.attachments.count() if hasattr(self.attachments, 'count') else 0,
             'submission_count':     self.submissions.count() if hasattr(self.submissions, 'count') else 0,
+            'status_history':       [h.to_dict() for h in self.status_history.all()] if hasattr(self, 'status_history') else [],
+            'reference_attachments': self.reference_attachments,
+        }
+
+
+class TaskStatusHistory(db.Model):
+    __tablename__ = 'task_status_history'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    task_id       = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False)
+    changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    old_status    = db.Column(db.String(30), nullable=True)
+    new_status    = db.Column(db.String(30), nullable=False)
+    comment       = db.Column(db.Text, nullable=True)
+    created_at    = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    task       = db.relationship('Task', backref=db.backref('status_history', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskStatusHistory.created_at.desc()'))
+    changed_by = db.relationship('User', foreign_keys=[changed_by_id])
+
+    def to_dict(self):
+        return {
+            'id':              self.id,
+            'task_id':         self.task_id,
+            'changed_by_id':   self.changed_by_id,
+            'changed_by_name': (self.changed_by.full_name or self.changed_by.username) if self.changed_by else 'System',
+            'changed_by_role': self.changed_by.role if self.changed_by else None,
+            'old_status':      self.old_status,
+            'new_status':      self.new_status,
+            'comment':         self.comment or '',
+            'created_at':      self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -375,6 +506,18 @@ class TaskMessage(db.Model):
     updated_at = db.Column(db.DateTime, nullable=True)
 
     author = db.relationship('User', backref='task_messages')
+    attachments = db.relationship('TaskAttachment', backref='message', lazy='dynamic')
+
+    @property
+    def mentions(self):
+        import re
+        if not self.content:
+            return []
+        usernames = set(re.findall(r'@([a-zA-Z0-9_\-\.]+)', self.content))
+        if not usernames:
+            return []
+        users = User.query.filter(User.username.in_(usernames)).all()
+        return [{'id': u.id, 'username': u.username, 'full_name': u.full_name or u.username} for u in users]
 
     def to_dict(self):
         author_name = (self.author.full_name or self.author.username) if self.author else 'Unknown'
@@ -385,6 +528,8 @@ class TaskMessage(db.Model):
             'author_name': author_name,
             'author_role': self.author.role if self.author else None,
             'content': self.content,
+            'mentions': self.mentions,
+            'attachments': [a.to_dict() for a in self.attachments.all()] if self.attachments else [],
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -402,9 +547,41 @@ class TaskAttachment(db.Model):
     file_path     = db.Column(db.String(500), nullable=False)
     file_size     = db.Column(db.Integer, nullable=False)
     content_type  = db.Column(db.String(100), nullable=True)
+    attachment_type = db.Column(db.String(50), default='general', nullable=True)
     created_at    = db.Column(db.DateTime, default=utc_now, nullable=False)
 
     uploader = db.relationship('User', backref='task_attachments')
+
+    @property
+    def file_extension(self):
+        if '.' in self.filename:
+            return self.filename.rsplit('.', 1)[1].lower()
+        return ''
+
+    @property
+    def file_type(self):
+        ext_types = {
+            'pdf': 'application/pdf',
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'txt': 'text/plain',
+        }
+        return self.content_type or ext_types.get(self.file_extension, 'application/octet-stream')
+
+    @property
+    def is_image(self):
+        return self.file_extension in {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+    @property
+    def is_previewable(self):
+        return self.file_extension in {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'txt'}
+
+    @property
+    def download_url(self):
+        return f'/api/tasks/{self.task_id}/attachments/{self.id}/download'
 
     def to_dict(self):
         uploader_name = (self.uploader.full_name or self.uploader.username) if self.uploader else None
@@ -416,8 +593,15 @@ class TaskAttachment(db.Model):
             'user_id': self.user_id,
             'uploader_name': uploader_name,
             'filename': self.filename,
+            'original_filename': self.filename,
             'file_size': self.file_size,
-            'content_type': self.content_type,
+            'content_type': self.file_type,
+            'file_type': self.file_type,
+            'file_extension': self.file_extension,
+            'is_image': self.is_image,
+            'is_previewable': self.is_previewable,
+            'download_url': self.download_url,
+            'attachment_type': self.attachment_type or 'general',
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -448,14 +632,22 @@ class WorkSubmission(db.Model):
             'user_id': self.user_id,
             'submitter_name': submitter_name,
             'notes': self.notes or '',
+            'summary': self.notes or '',
             'status': self.status,
             'review_notes': self.review_notes or '',
+            'review_feedback': self.review_notes or '',
             'reviewed_by': self.reviewed_by,
             'reviewer_name': reviewer_name,
+            'reviewed_by_name': reviewer_name,
             'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'attachments': [a.to_dict() for a in self.attachments] if self.attachments else [],
         }
+
+
+# Compatibility aliases
+TaskComment = TaskMessage
+TaskSubmission = WorkSubmission
 
 
 # ── Attendance & Timesheets ───────────────────────────────────────────────────
