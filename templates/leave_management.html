@@ -5,7 +5,7 @@
   <h1 class="page-title">{% if review_mode %}Leave Requests{% else %}Leave Management{% endif %}</h1>
   <p class="page-subtitle">{% if review_mode %}Review requests from employees assigned to your team.{% else %}Request time off and track balances, decisions, and reviewer comments.{% endif %}</p>
 </section>
-<div id="leave-error" class="alert alert-error" hidden></div>
+<!-- <div id="leave-error" class="alert alert-error" hidden></div> -->
 {% if not review_mode %}
 <div class="dashboard-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));" id="leave-balances"></div>
 <div class="card" style="margin-top:1rem;">
