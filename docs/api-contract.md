@@ -91,3 +91,13 @@ All API endpoints return JSON in a standardized envelope format:
 }
 ```
 *Note: Overdue tasks are strictly defined as pending tasks whose `due_date` is earlier than today's local date.*
+
+## 5. Reports (`/api/reports`)
+
+| Method | Endpoint | Description | Query Parameters | Success Response | Error Codes |
+|--------|----------|-------------|------------------|------------------|-------------|
+| `GET` | `/api/reports/productivity` | Productivity metrics, daily completion counts, status/priority distributions, and management workload | `range_days` (7–90; defaults to 30; legacy alias: `days`) | `200 { "ok": true, "data": ProductivityReport }` | `400`, `401`, `403` |
+| `GET` | `/api/reports/export/tasks` | Download task data as CSV | — | `200 text/csv` | `401`, `403` |
+| `GET` | `/api/reports/export/attendance` | Download attendance data as CSV | — | `200 text/csv` | `401`, `403` |
+
+The productivity report includes `metrics` (`completed_tasks`, `on_time_rate`, `overdue_incomplete_tasks`, and `blocked_tasks`), `completion_trends` (one `completed_count` for each date in the selected inclusive range), `status_distribution`, `priority_distribution`, and `workload_distribution`. Completion metrics and workload completions use the selected date range. Overdue and blocked counts, active workload, and status/priority distributions describe the user's currently visible task set. Task visibility follows the same role-based scoping as the task list. Legacy top-level `total_tasks`, `completed_count`, `overdue_count`, and `on_time_rate` fields, plus the trend `completed` count, remain available for existing API consumers.

@@ -2,6 +2,60 @@
 
 {% block title %}Productivity Analytics & Reports — TaskNest Enterprise{% endblock %}
 
+{% block extra_head %}
+<style>
+  .workload-table-scroll {
+    overflow-x: auto;
+  }
+
+  .workload-table {
+    width: 100%;
+    min-width: 720px;
+    table-layout: fixed;
+    border-collapse: collapse;
+  }
+
+  .workload-table th,
+  .workload-table td {
+    padding: 0.85rem 1rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+
+  .workload-table th {
+    line-height: 1.4;
+    white-space: normal;
+  }
+
+  .workload-table td {
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  .workload-table .workload-count {
+    text-align: center;
+  }
+
+  .workload-table .workload-name {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .workload-bar-track {
+    width: 100%;
+    height: 8px;
+    overflow: hidden;
+    background-color: var(--color-surface-subtle);
+    border-radius: 999px;
+  }
+
+  .workload-bar {
+    height: 100%;
+    background-color: var(--color-accent);
+    border-radius: inherit;
+  }
+</style>
+{% endblock %}
+
 {% block app_content %}
 <div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
   <div>
@@ -15,7 +69,7 @@
       <option value="30" selected>Last 30 Days</option>
       <option value="90">Last 90 Days</option>
     </select>
-    {% if current_user.role in ['super_admin', 'admin_hr', 'team_lead'] %}
+    {% if current_user.is_management %}
     <a href="/api/reports/export/tasks" id="export-tasks-btn" class="btn btn-secondary btn-sm" download>
       <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
       <span>Tasks CSV</span>
@@ -27,6 +81,8 @@
     {% endif %}
   </div>
 </div>
+
+<div id="report-error" role="alert" style="display: none; margin-bottom: 1rem; color: var(--color-danger);"></div>
 
 <!-- Metrics Cards -->
 <div class="metrics-grid" style="margin-bottom: 2rem;">
@@ -115,13 +171,19 @@
       <p style="font-size: var(--font-size-xs); color: var(--color-muted);">Active and completed assignments per employee.</p>
     </div>
   </div>
-  <div style="overflow-x: auto;">
-    <table class="table" id="workload-table">
+  <div class="workload-table-scroll">
+    <table class="table workload-table" id="workload-table">
+      <colgroup>
+        <col style="width: 30%;">
+        <col style="width: 20%;">
+        <col style="width: 27%;">
+        <col style="width: 23%;">
+      </colgroup>
       <thead>
         <tr>
           <th>Team Member</th>
-          <th>Active Assignments</th>
-          <th>Completed in Range</th>
+          <th class="workload-count">Active Assignments</th>
+          <th class="workload-count">Completed in Range</th>
           <th>Relative Workload</th>
         </tr>
       </thead>
@@ -137,38 +199,83 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const rangeSelect = document.getElementById('report-range');
+  const reportError = document.getElementById('report-error');
+  const trendContainer = document.getElementById('trend-chart-container');
+  const statusBox = document.getElementById('status-breakdown');
+  const priorityBox = document.getElementById('priority-breakdown');
+  const workloadTbody = document.getElementById('workload-tbody');
+  let requestNumber = 0;
+
+  const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[character]);
+  const formatCount = value => new Intl.NumberFormat().format(Number(value) || 0);
+
+  function setLoadingState() {
+    reportError.style.display = 'none';
+    reportError.textContent = '';
+    document.getElementById('kpi-ontime-rate').textContent = '—';
+    document.getElementById('kpi-completed-tasks').textContent = '—';
+    document.getElementById('kpi-overdue-tasks').textContent = '—';
+    document.getElementById('kpi-blocked-tasks').textContent = '—';
+    trendContainer.innerHTML = '<div style="width: 100%; text-align: center; color: var(--color-muted); align-self: center;">Loading trend data...</div>';
+    statusBox.innerHTML = '<div style="color: var(--color-muted); font-size: var(--font-size-xs);">Loading status data...</div>';
+    priorityBox.innerHTML = '<div style="color: var(--color-muted); font-size: var(--font-size-xs);">Loading priority data...</div>';
+    workloadTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-muted); padding: 2rem;">Loading team workload...</td></tr>';
+  }
 
   async function loadReport() {
+    const requestId = ++requestNumber;
     const days = rangeSelect.value;
+    setLoadingState();
+
     try {
-      const res = await fetch(`/api/reports/productivity?range_days=${days}`);
-      if (!res.ok) throw new Error('Failed to load productivity analytics');
-      const json = await res.json();
+      const response = await fetch(`/api/reports/productivity?range_days=${encodeURIComponent(days)}`, {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      let json;
+      try {
+        json = await response.json();
+      } catch {
+        throw new Error(`The reports API returned an invalid response (HTTP ${response.status}).`);
+      }
+      if (!response.ok || json.ok !== true) {
+        throw new Error(json.error || `Failed to load report data (HTTP ${response.status}).`);
+      }
       const data = json.data;
+      if (!data || !data.metrics) {
+        throw new Error('The reports API returned incomplete report data.');
+      }
+      if (requestId !== requestNumber) return;
 
       // KPIs
-      const onTime = data.metrics.on_time_rate;
-      document.getElementById('kpi-ontime-rate').textContent = (onTime !== null && onTime !== undefined) ? `${onTime}%` : 'N/A';
-      document.getElementById('kpi-completed-tasks').textContent = data.metrics.completed_tasks;
-      document.getElementById('kpi-overdue-tasks').textContent = data.metrics.overdue_incomplete_tasks;
-      document.getElementById('kpi-blocked-tasks').textContent = data.metrics.blocked_tasks;
+      const metrics = data.metrics;
+      document.getElementById('kpi-ontime-rate').textContent = `${Number(metrics.on_time_rate || 0)}%`;
+      document.getElementById('kpi-completed-tasks').textContent = formatCount(metrics.completed_tasks);
+      document.getElementById('kpi-overdue-tasks').textContent = formatCount(metrics.overdue_incomplete_tasks);
+      document.getElementById('kpi-blocked-tasks').textContent = formatCount(metrics.blocked_tasks);
 
       // Completion trend bar chart
-      const trendContainer = document.getElementById('trend-chart-container');
       const trends = data.completion_trends || [];
-      const maxCount = Math.max(...trends.map(t => t.completed_count), 1);
+      const maxCount = Math.max(...trends.map(trend => Number(trend.completed_count) || 0), 1);
 
-      if (trends.length === 0) {
-        trendContainer.innerHTML = '<div style="width: 100%; text-align: center; color: var(--color-muted); align-self: center;">No activity in this period.</div>';
+      if (!trends.some(trend => Number(trend.completed_count) > 0)) {
+        trendContainer.innerHTML = '<div style="width: 100%; text-align: center; color: var(--color-muted); align-self: center;">No completed tasks in this period.</div>';
       } else {
-        trendContainer.innerHTML = trends.map(t => {
-          const heightPct = Math.round((t.completed_count / maxCount) * 100);
+        trendContainer.innerHTML = trends.map(trend => {
+          const count = Number(trend.completed_count) || 0;
+          const heightPct = Math.round((count / maxCount) * 100);
           const barHeight = Math.max(heightPct, 4);
-          const dateLabel = t.date.slice(5); // MM-DD
+          const dateLabel = escapeHtml(String(trend.date).slice(5));
           return `
             <div style="flex: 1; min-width: 20px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%;">
-              <span style="font-size: 0.65rem; color: var(--color-muted); margin-bottom: 2px;">${t.completed_count > 0 ? t.completed_count : ''}</span>
-              <div style="width: 100%; max-width: 24px; height: ${barHeight}%; background-color: ${t.completed_count > 0 ? 'var(--color-primary)' : 'var(--color-border)'}; border-radius: 4px 4px 0 0; transition: height 0.3s ease;" title="${t.date}: ${t.completed_count} completed"></div>
+              <span style="font-size: 0.65rem; color: var(--color-muted); margin-bottom: 2px;">${count > 0 ? formatCount(count) : ''}</span>
+              <div style="width: 100%; max-width: 24px; height: ${barHeight}%; background-color: ${count > 0 ? 'var(--color-primary)' : 'var(--color-border)'}; border-radius: 4px 4px 0 0; transition: height 0.3s ease;" title="${escapeHtml(trend.date)}: ${formatCount(count)} completed"></div>
               <span style="font-size: 0.65rem; color: var(--color-muted); margin-top: 6px; white-space: nowrap;">${dateLabel}</span>
             </div>
           `;
@@ -176,53 +283,51 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Status distribution
-      const statusBox = document.getElementById('status-breakdown');
       const statuses = data.status_distribution || {};
       const statusEntries = Object.entries(statuses);
       if (statusEntries.length === 0) {
         statusBox.innerHTML = '<div style="color: var(--color-muted); font-size: var(--font-size-xs);">No status records.</div>';
       } else {
-        statusBox.innerHTML = statusEntries.map(([st, cnt]) => `
+        statusBox.innerHTML = statusEntries.map(([status, count]) => `
           <div style="display: flex; justify-content: space-between; align-items: center; font-size: var(--font-size-xs);">
-            <span class="badge badge-${st}">${st.replace('_', ' ')}</span>
-            <strong style="color: var(--color-text);">${cnt}</strong>
+            <span class="badge badge-${escapeHtml(status)}">${escapeHtml(status.replace('_', ' '))}</span>
+            <strong style="color: var(--color-text);">${formatCount(count)}</strong>
           </div>
         `).join('');
       }
 
       // Priority distribution
-      const priorityBox = document.getElementById('priority-breakdown');
       const priorities = data.priority_distribution || {};
       const priorityEntries = Object.entries(priorities);
       if (priorityEntries.length === 0) {
         priorityBox.innerHTML = '<div style="color: var(--color-muted); font-size: var(--font-size-xs);">No priority records.</div>';
       } else {
-        priorityBox.innerHTML = priorityEntries.map(([pr, cnt]) => `
+        priorityBox.innerHTML = priorityEntries.map(([priority, count]) => `
           <div style="display: flex; justify-content: space-between; align-items: center; font-size: var(--font-size-xs);">
-            <span class="badge badge-${pr}">${pr}</span>
-            <strong style="color: var(--color-text);">${cnt}</strong>
+            <span class="badge badge-${escapeHtml(priority)}">${escapeHtml(priority)}</span>
+            <strong style="color: var(--color-text);">${formatCount(count)}</strong>
           </div>
         `).join('');
       }
 
       // Workload table
-      const workloadTbody = document.getElementById('workload-tbody');
       const workloads = data.workload_distribution || [];
-      const maxActive = Math.max(...workloads.map(w => w.active_tasks), 1);
+      const maxActive = Math.max(...workloads.map(workload => Number(workload.active_tasks) || 0), 1);
 
       if (workloads.length === 0) {
         workloadTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-muted); padding: 2rem;">No workload records.</td></tr>';
       } else {
-        workloadTbody.innerHTML = workloads.map(w => {
-          const barPct = Math.round((w.active_tasks / maxActive) * 100);
+        workloadTbody.innerHTML = workloads.map(workload => {
+          const activeTasks = Number(workload.active_tasks) || 0;
+          const barPct = Math.round((activeTasks / maxActive) * 100);
           return `
             <tr>
-              <td style="font-weight: 600;">${w.name}</td>
-              <td><strong>${w.active_tasks}</strong></td>
-              <td>${w.completed_tasks}</td>
-              <td style="width: 40%;">
-                <div style="background-color: var(--color-surface-subtle); border-radius: 999px; height: 8px; width: 100%; overflow: hidden;">
-                  <div style="width: ${barPct}%; height: 100%; background-color: var(--color-accent); border-radius: 999px;"></div>
+              <td class="workload-name">${escapeHtml(workload.name)}</td>
+              <td class="workload-count"><strong>${formatCount(activeTasks)}</strong></td>
+              <td class="workload-count">${formatCount(workload.completed_tasks)}</td>
+              <td>
+                <div class="workload-bar-track">
+                  <div class="workload-bar" style="width: ${barPct}%;"></div>
                 </div>
               </td>
             </tr>
@@ -231,8 +336,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
     } catch (err) {
-      console.error(err);
-      showToast(err.message, 'error');
+      if (requestId !== requestNumber) return;
+      console.error('Unable to load productivity reports:', err);
+      const message = err instanceof Error ? err.message : 'Unable to load report data.';
+      reportError.textContent = message;
+      reportError.style.display = 'block';
+      trendContainer.innerHTML = '<div style="width: 100%; text-align: center; color: var(--color-danger); align-self: center;">Unable to load trend data.</div>';
+      statusBox.innerHTML = '<div style="color: var(--color-danger); font-size: var(--font-size-xs);">Unable to load status data.</div>';
+      priorityBox.innerHTML = '<div style="color: var(--color-danger); font-size: var(--font-size-xs);">Unable to load priority data.</div>';
+      workloadTbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-danger); padding: 2rem;">Unable to load team workload.</td></tr>';
     }
   }
 

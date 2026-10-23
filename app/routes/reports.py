@@ -3,10 +3,10 @@ Productivity Analytics and CSV Export API routes.
 """
 import io
 import csv
-from datetime import datetime, date, timedelta, timezone
+from datetime import datetime, date, timedelta
 from flask import Blueprint, request, Response
 from flask_login import current_user, login_required
-from sqlalchemy import func
+from sqlalchemy import case, func, or_
 from app import db
 from app.models import (
     Task, Attendance, User, Team,
@@ -24,82 +24,143 @@ def productivity_metrics():
     """
     Real productivity analytics calculated from actual database records.
     """
-    days = 14
+    raw_days = request.args.get('range_days', request.args.get('days', '30'))
     try:
-        if request.args.get('days'):
-            days = min(90, max(7, int(request.args.get('days'))))
+        days = min(90, max(7, int(raw_days)))
     except ValueError:
-        pass
+        return api_error('range_days must be a whole number between 7 and 90.', 400)
 
-    start_date = date.today() - timedelta(days=days)
+    today = date.today()
+    start_date = today - timedelta(days=days - 1)
+    start_datetime = datetime.combine(start_date, datetime.min.time())
+    end_datetime = datetime.combine(today + timedelta(days=1), datetime.min.time())
 
-    # Scoping: if admin, organization-wide; if lead, team tasks; if employee, self tasks
     task_query = Task.query
     if not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
-        if current_user.is_team_lead and current_user.team_id:
-            task_query = task_query.filter(
-                (Task.team_id == current_user.team_id) | (Task.assignee_id == current_user.id)
-            )
+        if current_user.is_team_lead:
+            led_team_ids = [
+                team_id for (team_id,) in
+                db.session.query(Team.id).filter_by(lead_id=current_user.id).all()
+            ]
+            visibility_filters = [
+                Task.user_id == current_user.id,
+                Task.assignee_id == current_user.id,
+                Task.creator_id == current_user.id,
+            ]
+            if led_team_ids:
+                visibility_filters.append(Task.team_id.in_(led_team_ids))
+            task_query = task_query.filter(or_(*visibility_filters))
         else:
             task_query = task_query.filter(
-                (Task.assignee_id == current_user.id) | (Task.user_id == current_user.id)
+                or_(
+                    Task.user_id == current_user.id,
+                    Task.assignee_id == current_user.id,
+                    Task.creator_id == current_user.id,
+                )
             )
 
-    tasks_in_period = task_query.filter(Task.created_at >= datetime.combine(start_date, datetime.min.time())).all()
-
-    total_tasks = len(tasks_in_period)
-    completed_tasks = [t for t in tasks_in_period if t.status == 'completed']
+    completed_tasks = task_query.filter(
+        Task.status == 'completed',
+        Task.completed_at >= start_datetime,
+        Task.completed_at < end_datetime,
+    ).with_entities(Task.due_date, Task.completed_at).all()
+    on_time_count = sum(
+        1 for due_date, completed_at in completed_tasks
+        if due_date is None or completed_at.date() <= due_date
+    )
     completed_count = len(completed_tasks)
-    overdue_count = len([t for t in tasks_in_period if t.is_overdue])
+    on_time_rate = round((on_time_count / completed_count) * 100, 1) if completed_count else 0.0
 
-    # Calculate real on-time rate
-    on_time_count = 0
-    for t in completed_tasks:
-        if t.due_date and t.completed_at:
-            if t.completed_at.date() <= t.due_date:
-                on_time_count += 1
-        elif not t.due_date:
-            on_time_count += 1
+    daily_trends = {
+        (start_date + timedelta(days=offset)).isoformat(): 0
+        for offset in range(days)
+    }
+    daily_counts = (
+        task_query.filter(
+            Task.status == 'completed',
+            Task.completed_at >= start_datetime,
+            Task.completed_at < end_datetime,
+        )
+        .with_entities(func.date(Task.completed_at), func.count(Task.id))
+        .group_by(func.date(Task.completed_at))
+        .all()
+    )
+    for completed_date, count in daily_counts:
+        daily_trends[str(completed_date)] = count
 
-    on_time_rate = round((on_time_count / completed_count) * 100, 1) if completed_count > 0 else 0.0
+    status_distribution = dict(
+        task_query.with_entities(Task.status, func.count(Task.id))
+        .group_by(Task.status)
+        .order_by(Task.status)
+        .all()
+    )
+    priority_distribution = dict(
+        task_query.with_entities(Task.priority, func.count(Task.id))
+        .group_by(Task.priority)
+        .order_by(Task.priority)
+        .all()
+    )
+    overdue_count = task_query.filter(
+        Task.status != 'completed',
+        Task.due_date < today,
+    ).count()
+    blocked_count = task_query.filter(Task.status == 'blocked').count()
 
-    # Trend by date: count completed per day
-    daily_trends = {}
-    for i in range(days + 1):
-        day_str = (start_date + timedelta(days=i)).isoformat()
-        daily_trends[day_str] = 0
-
-    for t in completed_tasks:
-        if t.completed_at:
-            d_str = t.completed_at.date().isoformat()
-            if d_str in daily_trends:
-                daily_trends[d_str] += 1
-
-    # Team workload distribution (for management)
     workload = []
     if current_user.is_management:
-        assignee_counts = (
-            db.session.query(Task.assignee_id, func.count(Task.id))
-            .filter(Task.status != 'completed')
-            .group_by(Task.assignee_id)
+        effective_assignee_id = func.coalesce(Task.assignee_id, Task.user_id)
+        workload_counts = (
+            task_query.with_entities(
+                effective_assignee_id,
+                func.sum(case((Task.status != 'completed', 1), else_=0)),
+                func.sum(case((
+                    (Task.status == 'completed')
+                    & (Task.completed_at >= start_datetime)
+                    & (Task.completed_at < end_datetime),
+                    1,
+                ), else_=0)),
+            )
+            .group_by(effective_assignee_id)
             .all()
         )
-        for uid, cnt in assignee_counts:
-            if uid:
-                u = User.query.get(uid)
-                if u:
-                    workload.append({
-                        'user_id': u.id,
-                        'name': u.full_name or u.username,
-                        'active_tasks': cnt
-                    })
+        workload_user_ids = [user_id for user_id, _, _ in workload_counts if user_id]
+        users_by_id = {
+            user.id: user
+            for user in User.query.filter(User.id.in_(workload_user_ids)).all()
+        } if workload_user_ids else {}
+        for user_id, active_count, completed_count_for_user in workload_counts:
+            user = users_by_id.get(user_id)
+            if user:
+                workload.append({
+                    'user_id': user.id,
+                    'name': user.full_name or user.username,
+                    'active_tasks': int(active_count or 0),
+                    'completed_tasks': int(completed_count_for_user or 0),
+                })
+        workload.sort(key=lambda item: item['name'].casefold())
 
+    total_tasks = task_query.count()
     return api_success({
+        'range_days': days,
+        'start_date': start_date.isoformat(),
+        'end_date': today.isoformat(),
         'total_tasks': total_tasks,
         'completed_count': completed_count,
         'overdue_count': overdue_count,
         'on_time_rate': on_time_rate,
-        'completion_trends': [{'date': d, 'completed': c} for d, c in daily_trends.items()],
+        'metrics': {
+            'total_tasks': total_tasks,
+            'completed_tasks': completed_count,
+            'overdue_incomplete_tasks': overdue_count,
+            'blocked_tasks': blocked_count,
+            'on_time_rate': on_time_rate,
+        },
+        'completion_trends': [
+            {'date': trend_date, 'completed_count': count, 'completed': count}
+            for trend_date, count in daily_trends.items()
+        ],
+        'status_distribution': status_distribution,
+        'priority_distribution': priority_distribution,
         'workload_distribution': workload,
     })
 
