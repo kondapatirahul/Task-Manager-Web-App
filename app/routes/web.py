@@ -237,6 +237,12 @@ def lead_meetings():
     return render_template('calendar.html', active_page='calendar', auto_open_meeting=True)
 
 
+@web_bp.route('/lead/attendance')
+@web_roles_required('super_admin', 'admin_hr', 'team_lead')
+def lead_attendance():
+    return render_template('attendance.html', active_page='attendance')
+
+
 # ── Employee Module Routes (/employee/*) ──────────────────────────────────────
 
 @web_bp.route('/employee/dashboard')
@@ -336,6 +342,7 @@ def categories():
 
 @web_bp.route('/attendance')
 @login_required
+@web_roles_required('super_admin', 'admin', 'team_lead')
 def attendance():
     return render_template('attendance.html', active_page='attendance')
 
@@ -360,12 +367,14 @@ def teams():
 
 @web_bp.route('/organization')
 @login_required
+@web_roles_required('super_admin', 'admin')
 def organization():
     return render_template('organization.html', active_page='organization')
 
 
 @web_bp.route('/reports')
 @login_required
+@web_roles_required('super_admin', 'admin')
 def reports():
     return render_template('reports.html', active_page='reports')
 

@@ -284,6 +284,7 @@ def create_app(test_config=None):
                     ('recurrence_interval', "ALTER TABLE tasks ADD COLUMN recurrence_interval VARCHAR(20)"),
                     ('next_recurrence_date', "ALTER TABLE tasks ADD COLUMN next_recurrence_date DATE"),
                     ('updated_at', "ALTER TABLE tasks ADD COLUMN updated_at DATETIME"),
+                    ('is_personal', "ALTER TABLE tasks ADD COLUMN is_personal BOOLEAN DEFAULT 0"),
                 ]
                 for col_name, sql in task_migrations:
                     if col_name not in task_cols:

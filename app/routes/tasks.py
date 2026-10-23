@@ -54,6 +54,9 @@ def can_manage_task(task, user):
     """Check if user has permission to modify/assign/delete task."""
     if not user or not user.is_authenticated:
         return False
+    # Personal tasks are managed exclusively by their owner
+    if getattr(task, 'is_personal', False):
+        return task.creator_id == user.id or task.assignee_id == user.id or task.user_id == user.id
     if user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
         return True
     if task.creator_id == user.id:
@@ -74,6 +77,9 @@ def can_view_task(task, user):
     """Check if user has permission to view task."""
     if not user or not user.is_authenticated:
         return False
+    # Personal tasks are strictly private to their owner
+    if getattr(task, 'is_personal', False):
+        return task.creator_id == user.id or task.assignee_id == user.id or task.user_id == user.id
     if user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
         return True
     if task.user_id == user.id or task.creator_id == user.id or task.assignee_id == user.id:
@@ -162,20 +168,23 @@ def get_tasks():
     elif scope == 'created_by_me':
         query = Task.query.filter(Task.creator_id == current_user.id)
     elif current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
-        query = Task.query
+        query = Task.query.filter(or_(Task.is_personal.is_(False), Task.is_personal.is_(None), Task.creator_id == current_user.id))
     elif current_user.is_team_lead:
         led_teams = Team.query.filter_by(lead_id=current_user.id).all()
         led_team_ids = [t.id for t in led_teams]
         team_member_ids = [m.user_id for m in TeamMember.query.filter(TeamMember.team_id.in_(led_team_ids)).all()] if led_team_ids else []
         team_scope = [Task.team_id.in_(led_team_ids)] if led_team_ids else []
         member_scope = [Task.assignee_id.in_(team_member_ids), Task.user_id.in_(team_member_ids)] if team_member_ids else []
-        query = Task.query.filter(or_(
-            Task.user_id == current_user.id,
-            Task.assignee_id == current_user.id,
-            Task.creator_id == current_user.id,
-            *team_scope,
-            *member_scope
-        ))
+        query = Task.query.filter(
+            or_(
+                Task.user_id == current_user.id,
+                Task.assignee_id == current_user.id,
+                Task.creator_id == current_user.id,
+                *team_scope,
+                *member_scope
+            ),
+            or_(Task.is_personal.is_(False), Task.is_personal.is_(None), Task.creator_id == current_user.id)
+        )
     else:
         query = Task.query.filter(
             or_(
@@ -184,6 +193,14 @@ def get_tasks():
                 Task.creator_id == current_user.id
             )
         )
+
+    # Filter by personal vs assigned
+    is_personal_param = request.args.get('is_personal')
+    if is_personal_param is not None and is_personal_param != '':
+        if is_personal_param.lower() in ('true', '1'):
+            query = query.filter(Task.is_personal.is_(True))
+        elif is_personal_param.lower() in ('false', '0'):
+            query = query.filter(or_(Task.is_personal.is_(False), Task.is_personal.is_(None)))
 
     # Search query
     q = (request.args.get('q') or '').strip()
@@ -332,59 +349,69 @@ def create_task():
     team_id = data.get('team_id')
 
     # Role-based assignment verification
+    is_personal = bool(data.get('is_personal', False))
     if not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD):
         if team_id:
             return api_error('Employees cannot assign tasks to teams', 403)
         if assigned_to_id and int(assigned_to_id) != current_user.id:
             return api_error('Employees cannot assign tasks to other employees', 403)
         assignee_id = current_user.id
-        team_id = current_user.team_id
+        team_id = None
+        is_personal = True
     elif current_user.is_team_lead:
-        led_teams = Team.query.filter_by(lead_id=current_user.id).all()
-        led_team_ids = {team.id for team in led_teams}
-        if not led_team_ids:
-            return api_error('Cannot assign outside authorized scope', 403)
-
-        if team_id:
-            try:
-                team_id = int(team_id)
-            except (ValueError, TypeError):
-                return api_error('Cannot assign outside authorized scope', 403)
-            if team_id not in led_team_ids:
-                return api_error('Cannot assign outside authorized scope', 403)
-        else:
-            team_id = next(iter(led_team_ids))
-
-        if assigned_to_id:
-            try:
-                assignee_id = int(assigned_to_id)
-            except (ValueError, TypeError):
-                return api_error('Cannot assign outside authorized scope', 403)
-            is_member = (TeamMember.query.filter_by(team_id=team_id, user_id=assignee_id).first()
-                         or Team.query.filter_by(id=team_id, lead_id=assignee_id).first()
-                         or User.query.filter_by(id=assignee_id, team_id=team_id).first())
-            if not is_member:
-                return api_error('Cannot assign outside authorized scope', 403)
-        else:
+        if is_personal:
+            team_id = None
             assignee_id = current_user.id
+        else:
+            led_teams = Team.query.filter_by(lead_id=current_user.id).all()
+            led_team_ids = {team.id for team in led_teams}
+            if not led_team_ids:
+                return api_error('Cannot assign outside authorized scope', 403)
+
+            if team_id:
+                try:
+                    team_id = int(team_id)
+                except (ValueError, TypeError):
+                    return api_error('Cannot assign outside authorized scope', 403)
+                if team_id not in led_team_ids:
+                    return api_error('Cannot assign outside authorized scope', 403)
+            else:
+                team_id = next(iter(led_team_ids))
+
+            if assigned_to_id:
+                try:
+                    assignee_id = int(assigned_to_id)
+                except (ValueError, TypeError):
+                    return api_error('Cannot assign outside authorized scope', 403)
+                is_member = (TeamMember.query.filter_by(team_id=team_id, user_id=assignee_id).first()
+                             or Team.query.filter_by(id=team_id, lead_id=assignee_id).first()
+                             or User.query.filter_by(id=assignee_id, team_id=team_id).first())
+                if not is_member:
+                    return api_error('Cannot assign outside authorized scope', 403)
+            else:
+                assignee_id = current_user.id
     else:  # Admin / Super Admin
-        if assigned_to_id:
-            try:
-                assignee_id = int(assigned_to_id)
-            except (ValueError, TypeError):
-                return api_error('Select a valid assignee.', 400)
-            assignee_user = User.query.filter_by(id=assignee_id, account_active=True).first()
-            if not assignee_user:
-                return api_error('The selected assignee is not an active account.', 400)
-            if not team_id:
-                team_id = assignee_user.team_id
-        else:
+        if is_personal:
+            team_id = None
             assignee_id = current_user.id
-        if team_id:
-            try:
-                team_id = int(team_id)
-            except (ValueError, TypeError):
-                team_id = None
+        else:
+            if assigned_to_id:
+                try:
+                    assignee_id = int(assigned_to_id)
+                except (ValueError, TypeError):
+                    return api_error('Select a valid assignee.', 400)
+                assignee_user = User.query.filter_by(id=assignee_id, account_active=True).first()
+                if not assignee_user:
+                    return api_error('The selected assignee is not an active account.', 400)
+                if not team_id:
+                    team_id = assignee_user.team_id
+            else:
+                assignee_id = current_user.id
+            if team_id:
+                try:
+                    team_id = int(team_id)
+                except (ValueError, TypeError):
+                    team_id = None
 
     acceptance_criteria = (data.get('acceptance_criteria') or '').strip()
     progress = min(100, max(0, int(data.get('progress') or 0)))
@@ -422,11 +449,27 @@ def create_task():
         acceptance_criteria=acceptance_criteria,
         progress=progress,
         is_recurring=is_recurring,
+        is_personal=is_personal,
         recurrence_interval=recurrence_interval
     )
 
     db.session.add(task)
     db.session.flush()
+
+    # Create subtasks if provided
+    subtasks_data = data.get('subtasks')
+    if subtasks_data:
+        if isinstance(subtasks_data, str):
+            import json
+            try:
+                subtasks_data = json.loads(subtasks_data)
+            except Exception:
+                subtasks_data = [s.strip() for s in subtasks_data.split('\n') if s.strip()]
+        if isinstance(subtasks_data, list):
+            for st_item in subtasks_data:
+                st_title = st_item.get('title') if isinstance(st_item, dict) else str(st_item).strip()
+                if st_title:
+                    db.session.add(SubTask(task_id=task.id, title=st_title))
 
     # Save uploaded reference files
     if files:
@@ -451,14 +494,6 @@ def create_task():
         new_status=task.status,
         comment='Task created'
     ))
-
-    # Initial subtasks
-    subtask_titles = data.get('subtasks') or []
-    if isinstance(subtask_titles, list):
-        for st_title in subtask_titles:
-            st_text = str(st_title).strip()
-            if st_text:
-                db.session.add(SubTask(task_id=task.id, title=st_text))
 
     db.session.commit()
 
@@ -492,7 +527,7 @@ def get_task(task_id):
 
 # ── Update Task ────────────────────────────────────────────────────────────────
 
-@tasks_bp.route('/<int:task_id>', methods=['PUT'])
+@tasks_bp.route('/<int:task_id>', methods=['PUT', 'PATCH'])
 @login_required
 @active_account_required
 def update_task(task_id):
@@ -520,6 +555,14 @@ def update_task(task_id):
             return api_error('Employees cannot modify protected task details', 403)
         if data.get('status') == 'completed':
             return api_error('Employees cannot mark tasks as completed directly; submit work for review.', 403)
+
+    if current_user.role == 'employee':
+        if 'assignee_id' in data and data['assignee_id'] and int(data['assignee_id']) != current_user.id:
+            return api_error('Employees cannot assign tasks to other employees', 403)
+        if 'assigned_to_id' in data and data['assigned_to_id'] and int(data['assigned_to_id']) != current_user.id:
+            return api_error('Employees cannot assign tasks to other employees', 403)
+        if 'team_id' in data and data['team_id']:
+            return api_error('Employees cannot assign tasks to teams', 403)
 
     old_status = task.status
     if 'status' in data:
@@ -602,13 +645,30 @@ def update_task(task_id):
                 pass
 
     if task.status != old_status:
+        comment_text = data.get('comment') or data.get('reason') or data.get('block_reason') or ('Blocked' if task.status == 'blocked' else 'Status updated')
         db.session.add(TaskStatusHistory(
             task_id=task.id,
             changed_by_id=current_user.id,
             old_status=old_status,
             new_status=task.status,
-            comment=data.get('comment') or 'Status updated'
+            comment=comment_text
         ))
+
+        if task.status == 'blocked':
+            block_msg = data.get('comment') or data.get('reason') or data.get('block_reason') or 'Task marked as blocked'
+            db.session.add(TaskMessage(
+                task_id=task.id,
+                user_id=current_user.id,
+                content=f"[Blocked] {block_msg}"
+            ))
+            if task.creator_id and task.creator_id != current_user.id:
+                send_notification(
+                    task.creator_id,
+                    f'Task Blocked: "{task.title}"',
+                    f"{current_user.full_name or current_user.username} marked '{task.title}' as blocked: {block_msg}",
+                    f"/tasks?task_id={task.id}",
+                    'task_blocked'
+                )
 
     task.updated_at = utc_now()
     db.session.commit()

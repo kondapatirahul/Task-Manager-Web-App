@@ -19,7 +19,7 @@
 
     <ul class="sidebar-nav">
       <li>
-        <a href="{{ url_for('web.dashboard') }}" class="sidebar-link {% if active_page == 'dashboard' %}active{% endif %}">
+        <a href="{{ url_for('web.dashboard') }}" class="sidebar-link {% if active_page in ('dashboard', 'admin_dashboard', 'lead_dashboard', 'employee_dashboard') %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
           <span>Dashboard</span>
         </a>
@@ -30,6 +30,7 @@
           <span>Tasks & Board</span>
         </a>
       </li>
+      {% if current_user.has_role('super_admin', 'admin', 'admin_hr', 'team_lead') %}
       <li>
         <a href="{{ url_for('web.attendance') }}" class="sidebar-link {% if active_page == 'attendance' %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -48,6 +49,7 @@
           <span>Directory</span>
         </a>
       </li>
+      {% endif %}
       {% if current_user.is_management %}
       <li>
         <a href="{{ url_for('web.organization') }}" class="sidebar-link {% if active_page == 'organization' %}active{% endif %}">
@@ -61,13 +63,27 @@
           <span>Reports & Analytics</span>
         </a>
       </li>
-      {% endif %}
       <li>
         <a href="{{ url_for('web.categories') }}" class="sidebar-link {% if active_page == 'categories' %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
           <span>Categories</span>
         </a>
       </li>
+      {% endif %}
+      {% if current_user.role == 'employee' %}
+      <li>
+        <a href="{{ url_for('web.employee_dashboard') }}#quick-attendance-widget" class="sidebar-link">
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Attendance</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('web.employee_notifications') }}" id="sidebar-notif-btn" class="sidebar-link {% if active_page == 'notifications' or open_notifications %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          <span>Notifications</span>
+        </a>
+      </li>
+      {% endif %}
       <li>
         <a href="{{ url_for('web.profile') }}" class="sidebar-link {% if active_page == 'profile' %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
