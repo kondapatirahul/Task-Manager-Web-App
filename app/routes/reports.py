@@ -21,125 +21,6 @@ reports_bp = Blueprint('reports', __name__, url_prefix='/api/reports')
 @login_required
 @active_account_required
 def productivity_metrics():
-<<<<<<< HEAD
-    """
-    Real productivity analytics calculated from actual database records.
-    """
-    raw_days = request.args.get('range_days', request.args.get('days', '30'))
-    try:
-        days = min(90, max(7, int(raw_days)))
-    except ValueError:
-        return api_error('range_days must be a whole number between 7 and 90.', 400)
-
-    today = date.today()
-    start_date = today - timedelta(days=days - 1)
-    start_datetime = datetime.combine(start_date, datetime.min.time())
-    end_datetime = datetime.combine(today + timedelta(days=1), datetime.min.time())
-
-    task_query = Task.query
-    if not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
-        if current_user.is_team_lead:
-            led_team_ids = [
-                team_id for (team_id,) in
-                db.session.query(Team.id).filter_by(lead_id=current_user.id).all()
-            ]
-            visibility_filters = [
-                Task.user_id == current_user.id,
-                Task.assignee_id == current_user.id,
-                Task.creator_id == current_user.id,
-            ]
-            if led_team_ids:
-                visibility_filters.append(Task.team_id.in_(led_team_ids))
-            task_query = task_query.filter(or_(*visibility_filters))
-        else:
-            task_query = task_query.filter(
-                or_(
-                    Task.user_id == current_user.id,
-                    Task.assignee_id == current_user.id,
-                    Task.creator_id == current_user.id,
-                )
-            )
-
-    completed_tasks = task_query.filter(
-        Task.status == 'completed',
-        Task.completed_at >= start_datetime,
-        Task.completed_at < end_datetime,
-    ).with_entities(Task.due_date, Task.completed_at).all()
-    on_time_count = sum(
-        1 for due_date, completed_at in completed_tasks
-        if due_date is None or completed_at.date() <= due_date
-    )
-    completed_count = len(completed_tasks)
-    on_time_rate = round((on_time_count / completed_count) * 100, 1) if completed_count else 0.0
-
-    daily_trends = {
-        (start_date + timedelta(days=offset)).isoformat(): 0
-        for offset in range(days)
-    }
-    daily_counts = (
-        task_query.filter(
-            Task.status == 'completed',
-            Task.completed_at >= start_datetime,
-            Task.completed_at < end_datetime,
-        )
-        .with_entities(func.date(Task.completed_at), func.count(Task.id))
-        .group_by(func.date(Task.completed_at))
-        .all()
-    )
-    for completed_date, count in daily_counts:
-        daily_trends[str(completed_date)] = count
-
-    status_distribution = dict(
-        task_query.with_entities(Task.status, func.count(Task.id))
-        .group_by(Task.status)
-        .order_by(Task.status)
-        .all()
-    )
-    priority_distribution = dict(
-        task_query.with_entities(Task.priority, func.count(Task.id))
-        .group_by(Task.priority)
-        .order_by(Task.priority)
-        .all()
-    )
-    overdue_count = task_query.filter(
-        Task.status != 'completed',
-        Task.due_date < today,
-    ).count()
-    blocked_count = task_query.filter(Task.status == 'blocked').count()
-
-    workload = []
-    if current_user.is_management:
-        effective_assignee_id = func.coalesce(Task.assignee_id, Task.user_id)
-        workload_counts = (
-            task_query.with_entities(
-                effective_assignee_id,
-                func.sum(case((Task.status != 'completed', 1), else_=0)),
-                func.sum(case((
-                    (Task.status == 'completed')
-                    & (Task.completed_at >= start_datetime)
-                    & (Task.completed_at < end_datetime),
-                    1,
-                ), else_=0)),
-            )
-            .group_by(effective_assignee_id)
-            .all()
-        )
-        workload_user_ids = [user_id for user_id, _, _ in workload_counts if user_id]
-        users_by_id = {
-            user.id: user
-            for user in User.query.filter(User.id.in_(workload_user_ids)).all()
-        } if workload_user_ids else {}
-        for user_id, active_count, completed_count_for_user in workload_counts:
-            user = users_by_id.get(user_id)
-            if user:
-                workload.append({
-                    'user_id': user.id,
-                    'name': user.full_name or user.username,
-                    'active_tasks': int(active_count or 0),
-                    'completed_tasks': int(completed_count_for_user or 0),
-                })
-        workload.sort(key=lambda item: item['name'].casefold())
-=======
     """Return report data in the contract consumed by templates/reports.html."""
     try:
         days = int(request.args.get('range_days', request.args.get('days', 30)))
@@ -196,33 +77,9 @@ def productivity_metrics():
                     'active_tasks': active_count,
                     'completed_tasks': completed_count,
                 })
->>>>>>> fd02222 (reports and analysis section fixed)
 
     total_tasks = task_query.count()
     return api_success({
-<<<<<<< HEAD
-        'range_days': days,
-        'start_date': start_date.isoformat(),
-        'end_date': today.isoformat(),
-        'total_tasks': total_tasks,
-        'completed_count': completed_count,
-        'overdue_count': overdue_count,
-        'on_time_rate': on_time_rate,
-        'metrics': {
-            'total_tasks': total_tasks,
-            'completed_tasks': completed_count,
-            'overdue_incomplete_tasks': overdue_count,
-            'blocked_tasks': blocked_count,
-            'on_time_rate': on_time_rate,
-        },
-        'completion_trends': [
-            {'date': trend_date, 'completed_count': count, 'completed': count}
-            for trend_date, count in daily_trends.items()
-        ],
-        'status_distribution': status_distribution,
-        'priority_distribution': priority_distribution,
-        'workload_distribution': workload,
-=======
         'metrics': {
             'total_tasks': len(in_range),
             'completed_tasks': len(completed),
@@ -234,7 +91,6 @@ def productivity_metrics():
         'status_distribution': status_distribution,
         'priority_distribution': priority_distribution,
         'workload_distribution': workload_distribution,
->>>>>>> fd02222 (reports and analysis section fixed)
     })
 
 
