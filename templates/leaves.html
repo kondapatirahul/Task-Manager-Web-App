@@ -1,0 +1,222 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Leaves & Time-Off — TaskNest Enterprise{% endblock %}
+
+{% block app_content %}
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title">Leaves & Time-Off</h1>
+    <p class="page-subtitle">Submit leave applications, track balance allowances, and manage team out-of-office schedules.</p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
+    {% if current_user.is_management %}
+    <a href="/api/leaves/export" class="btn btn-secondary btn-sm" id="export-leaves-btn" title="Download CSV report">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>Export CSV</span>
+    </a>
+    {% endif %}
+    <button id="open-apply-modal-btn" class="btn btn-primary btn-sm">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>Apply for Leave</span>
+    </button>
+  </div>
+</div>
+
+<!-- Leave Balance Summary Cards -->
+<div class="metrics-grid" style="margin-bottom: 2rem;">
+  <!-- Annual / Vacation Balance -->
+  <div class="metric-card metric-completed">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="bal-annual-avail">0.0</div>
+      <div class="metric-label">Annual / Vacation Available</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.25rem;">
+        Used: <strong id="bal-annual-used">0.0</strong> / Total: <span id="bal-annual-total">20.0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sick Leave Balance -->
+  <div class="metric-card metric-pending">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="bal-sick-avail">0.0</div>
+      <div class="metric-label">Sick Leave Available</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.25rem;">
+        Used: <strong id="bal-sick-used">0.0</strong> / Total: <span id="bal-sick-total">10.0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Casual Leave Balance -->
+  <div class="metric-card" style="border-left: 4px solid var(--color-accent); background-color: var(--color-surface);">
+    <div class="metric-icon-box" style="background-color: #FDF6EC; color: var(--color-accent);">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="bal-casual-avail">0.0</div>
+      <div class="metric-label">Casual Leave Available</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.25rem;">
+        Used: <strong id="bal-casual-used">0.0</strong> / Total: <span id="bal-casual-total">10.0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pending Approvals Indicator -->
+  <div class="metric-card metric-in-progress">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="leaves-pending-count">0</div>
+      <div class="metric-label">Pending Requests</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.25rem;">
+        {% if current_user.is_management %}Team awaiting review{% else %}Awaiting supervisor decision{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs Navigation -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-header" style="border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.25rem;">
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <button class="btn btn-ghost btn-sm leave-tab-btn active" data-tab="my-requests" style="font-weight: 700; color: var(--color-primary);">My Leave Applications</button>
+      {% if current_user.is_management %}
+      <button class="btn btn-ghost btn-sm leave-tab-btn" data-tab="pending-reviews" style="font-weight: 600;">
+        Pending Approvals <span class="badge badge-pending" id="tab-pending-badge" style="display: none; margin-left: 0.35rem;">0</span>
+      </button>
+      <button class="btn btn-ghost btn-sm leave-tab-btn" data-tab="all-history" style="font-weight: 600;">All Leave History</button>
+      {% endif %}
+      <button class="btn btn-ghost btn-sm leave-tab-btn" data-tab="team-calendar" style="font-weight: 600;">Who's Away / Calendar</button>
+    </div>
+  </div>
+
+  <!-- Tab 1: My Leave Requests -->
+  <div id="tab-my-requests" class="leave-tab-pane" style="padding: 1.5rem;">
+    <div id="my-requests-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <p class="text-muted" style="text-align: center; padding: 2rem;">Loading your leave requests...</p>
+    </div>
+  </div>
+
+  <!-- Tab 2: Pending Approvals (Management Only) -->
+  {% if current_user.is_management %}
+  <div id="tab-pending-reviews" class="leave-tab-pane" style="padding: 1.5rem; display: none;">
+    <div id="pending-reviews-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <p class="text-muted" style="text-align: center; padding: 2rem;">Checking for pending leave applications...</p>
+    </div>
+  </div>
+
+  <!-- Tab 3: All Leave History (Management Only) -->
+  <div id="tab-all-history" class="leave-tab-pane" style="padding: 1.5rem; display: none;">
+    <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
+      <select id="filter-all-status" class="filter-select" style="max-width: 180px;">
+        <option value="">All Statuses</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+      <select id="filter-all-type" class="filter-select" style="max-width: 180px;">
+        <option value="">All Types</option>
+        <option value="vacation">Vacation / Annual</option>
+        <option value="sick">Sick Leave</option>
+        <option value="casual">Casual Leave</option>
+        <option value="unpaid">Unpaid Leave</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div id="all-history-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <p class="text-muted" style="text-align: center; padding: 2rem;">Loading company leave history...</p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Tab 4: Team Calendar / Who's Away -->
+  <div id="tab-team-calendar" class="leave-tab-pane" style="padding: 1.5rem; display: none;">
+    <div id="calendar-leaves-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <p class="text-muted" style="text-align: center; padding: 2rem;">Loading upcoming approved team absences...</p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Apply for Leave -->
+<div class="modal-backdrop" id="apply-leave-modal" style="display: none;">
+  <div class="modal" style="max-width: 520px;">
+    <div class="modal-header">
+      <h2 class="modal-title">Apply for Time Off</h2>
+      <button type="button" class="modal-close close-apply-modal-btn">&times;</button>
+    </div>
+    <form id="apply-leave-form">
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div class="form-group">
+          <label class="form-label" for="leave-type-select">Leave Type</label>
+          <select id="leave-type-select" class="form-control" required>
+            <option value="vacation">Vacation / Annual Leave</option>
+            <option value="sick">Sick Leave</option>
+            <option value="casual">Casual Leave</option>
+            <option value="unpaid">Unpaid Leave</option>
+            <option value="other">Other / Special</option>
+          </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label class="form-label" for="leave-start-date">Start Date</label>
+            <input type="date" id="leave-start-date" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="leave-end-date">End Date</label>
+            <input type="date" id="leave-end-date" class="form-control" required>
+          </div>
+        </div>
+
+        <div style="background: var(--color-surface-subtle); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: var(--font-size-xs); color: var(--color-muted);">Calculated Leave Duration:</span>
+          <span class="badge badge-in_progress" id="calc-days-badge" style="font-size: var(--font-size-xs);">1 day(s)</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="leave-reason">Reason / Notes</label>
+          <textarea id="leave-reason" class="form-control" rows="3" placeholder="Brief reason for your absence (e.g., family commitment, flu, doctor appointment)..." required></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem; padding: 1rem 1.5rem;">
+        <button type="button" class="btn btn-secondary btn-sm close-apply-modal-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="submit-leave-btn">Submit Application</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Review / Decision Notes -->
+<div class="modal-backdrop" id="review-leave-modal" style="display: none;">
+  <div class="modal" style="max-width: 480px;">
+    <div class="modal-header">
+      <h2 class="modal-title" id="review-modal-title">Review Leave Request</h2>
+      <button type="button" class="modal-close close-review-modal-btn">&times;</button>
+    </div>
+    <form id="review-leave-form">
+      <input type="hidden" id="review-leave-id">
+      <input type="hidden" id="review-decision-action">
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div id="review-applicant-summary" style="font-size: var(--font-size-sm); color: var(--color-text);"></div>
+        <div class="form-group">
+          <label class="form-label" for="review-notes-input">Supervisor / HR Notes (Optional)</label>
+          <textarea id="review-notes-input" class="form-control" rows="3" placeholder="Optional comments, instructions, or handover notes for the employee..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem; padding: 1rem 1.5rem;">
+        <button type="button" class="btn btn-secondary btn-sm close-review-modal-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="confirm-review-btn">Confirm Decision</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/leaves.js') }}"></script>
+{% endblock %}

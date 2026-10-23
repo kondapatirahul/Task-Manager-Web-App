@@ -343,10 +343,22 @@ def attendance():
     return render_template('attendance.html', active_page='attendance')
 
 
+@web_bp.route('/leaves')
+@login_required
+def leaves():
+    return render_template('leaves.html', active_page='leaves')
+
+
 @web_bp.route('/calendar')
 @login_required
 def calendar():
     return render_template('calendar.html', active_page='calendar')
+
+
+@web_bp.route('/teams')
+@login_required
+def teams():
+    return render_template('organization.html', active_page='teams')
 
 
 @web_bp.route('/employees')

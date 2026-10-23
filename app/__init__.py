@@ -141,6 +141,7 @@ def create_app(test_config=None):
     from app.routes.notifications import notifications_bp
     from app.routes.discussions import discussions_bp
     from app.routes.reports import reports_bp
+    from app.routes.leaves import leaves_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
@@ -154,6 +155,7 @@ def create_app(test_config=None):
     app.register_blueprint(notifications_bp)
     app.register_blueprint(discussions_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(leaves_bp)
 
     # CLI commands
     @app.cli.command('init-db')

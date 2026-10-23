@@ -12,10 +12,11 @@ ROLE_SUPER_ADMIN = 'super_admin'
 ROLE_ADMIN       = 'admin'
 ROLE_TEAM_LEAD   = 'team_lead'
 ROLE_EMPLOYEE    = 'employee'
+ROLE_HR          = 'admin_hr'
 
-ALL_ROLES        = (ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD, ROLE_EMPLOYEE)
-MANAGEMENT_ROLES = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD}
-ADMIN_ROLES      = {ROLE_SUPER_ADMIN, ROLE_ADMIN}
+ALL_ROLES        = (ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR, ROLE_TEAM_LEAD, ROLE_EMPLOYEE)
+MANAGEMENT_ROLES = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR, ROLE_TEAM_LEAD}
+ADMIN_ROLES      = {ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_HR}
 
 # ── Organization & Structure ──────────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ class Organization(db.Model):
 
     id         = db.Column(db.Integer, primary_key=True)
     name       = db.Column(db.String(100), nullable=False)
-    slug       = db.Column(db.String(100), unique=True, nullable=False)
+    slug       = db.Column(db.String(100), unique=True, nullable=True)
     created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
 
     departments = db.relationship('Department', backref='organization', lazy='dynamic', cascade='all, delete-orphan')
@@ -148,8 +149,17 @@ class User(UserMixin, db.Model):
     employee_id_code = db.Column(db.String(30), nullable=True)
     phone            = db.Column(db.String(30), nullable=True)
 
+    @property
+    def job_title(self):
+        return self.designation
+
+    @job_title.setter
+    def job_title(self, val):
+        self.designation = val
+
     # Relationships
     manager = db.relationship('User', remote_side=[id], backref='direct_reports')
+    team    = db.relationship('Team', foreign_keys=[team_id])
 
     # Tasks: explicitly bind user_id to prevent ambiguity with creator_id/assignee_id
     tasks      = db.relationship('Task', foreign_keys='Task.user_id', backref='user', lazy='dynamic',
@@ -157,6 +167,7 @@ class User(UserMixin, db.Model):
     categories = db.relationship('Category', backref='user', lazy='dynamic',
                                  cascade='all, delete-orphan')
     attendances = db.relationship('Attendance', backref='user', lazy='dynamic', cascade='all, delete-orphan')
+    leave_balances = db.relationship('LeaveBalance', backref='user', lazy='dynamic', cascade='all, delete-orphan')
     notifications = db.relationship('Notification', backref='user', lazy='dynamic', cascade='all, delete-orphan')
 
     # ── Flask-Login requirement ────────────────────────────────────────────────
@@ -196,6 +207,20 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def get_or_create_leave_balance(self, year=None):
+        if year is None:
+            year = date.today().year
+        bal = LeaveBalance.query.filter_by(user_id=self.id, year=year).first()
+        if not bal:
+            bal = LeaveBalance(user_id=self.id, year=year)
+            db.session.add(bal)
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                bal = LeaveBalance.query.filter_by(user_id=self.id, year=year).first()
+        return bal
 
     # ── Serialisation ─────────────────────────────────────────────────────────
     def to_dict(self):
@@ -679,4 +704,114 @@ class PasswordResetToken(db.Model):
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
         return not self.is_used and exp > now
+
+
+# ── Leave / Time-Off Management ───────────────────────────────────────────────
+
+LEAVE_STATUS_PENDING   = 'pending'
+LEAVE_STATUS_APPROVED  = 'approved'
+LEAVE_STATUS_REJECTED  = 'rejected'
+LEAVE_STATUS_CANCELLED = 'cancelled'
+
+LEAVE_TYPE_VACATION  = 'vacation'
+LEAVE_TYPE_SICK      = 'sick'
+LEAVE_TYPE_CASUAL    = 'casual'
+LEAVE_TYPE_UNPAID    = 'unpaid'
+LEAVE_TYPE_OTHER     = 'other'
+
+ALL_LEAVE_TYPES = (
+    LEAVE_TYPE_VACATION,
+    LEAVE_TYPE_SICK,
+    LEAVE_TYPE_CASUAL,
+    LEAVE_TYPE_UNPAID,
+    LEAVE_TYPE_OTHER,
+)
+
+
+class LeaveBalance(db.Model):
+    __tablename__ = 'leave_balances'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    year         = db.Column(db.Integer, nullable=False, default=lambda: date.today().year)
+    annual_total = db.Column(db.Float, default=20.0, nullable=False)
+    sick_total   = db.Column(db.Float, default=10.0, nullable=False)
+    casual_total = db.Column(db.Float, default=10.0, nullable=False)
+    annual_used  = db.Column(db.Float, default=0.0, nullable=False)
+    sick_used    = db.Column(db.Float, default=0.0, nullable=False)
+    casual_used  = db.Column(db.Float, default=0.0, nullable=False)
+    created_at   = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'year', name='uq_user_leave_year'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'year': self.year,
+            'annual_total': self.annual_total,
+            'sick_total': self.sick_total,
+            'casual_total': self.casual_total,
+            'annual_used': self.annual_used,
+            'sick_used': self.sick_used,
+            'casual_used': self.casual_used,
+            'annual_available': max(0.0, round(self.annual_total - self.annual_used, 1)),
+            'sick_available': max(0.0, round(self.sick_total - self.sick_used, 1)),
+            'casual_available': max(0.0, round(self.casual_total - self.casual_used, 1)),
+        }
+
+
+class LeaveRequest(db.Model):
+    __tablename__ = 'leave_requests'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    user_id      = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    leave_type   = db.Column(db.String(30), nullable=False, default=LEAVE_TYPE_VACATION)
+    start_date   = db.Column(db.Date, nullable=False)
+    end_date     = db.Column(db.Date, nullable=False)
+    days_count   = db.Column(db.Float, nullable=False, default=1.0)
+    reason       = db.Column(db.Text, nullable=False)
+    status       = db.Column(db.String(20), default=LEAVE_STATUS_PENDING, nullable=False)
+    reviewer_id  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    review_notes = db.Column(db.Text, nullable=True)
+    reviewed_at  = db.Column(db.DateTime, nullable=True)
+    created_at   = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at   = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    user     = db.relationship('User', foreign_keys=[user_id], backref='leave_requests')
+    reviewer = db.relationship('User', foreign_keys=[reviewer_id], backref='reviewed_leave_requests')
+
+    def to_dict(self):
+        user_name = (self.user.full_name or self.user.username) if self.user else None
+        reviewer_name = (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None
+        dept_name = self.user.department.name if self.user and self.user.department else None
+        team_name = self.user.team.name if self.user and self.user.team else None
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'user_name': user_name,
+            'user_role': self.user.role if self.user else None,
+            'designation': self.user.designation if self.user else None,
+            'department_name': dept_name,
+            'team_name': team_name,
+            'leave_type': self.leave_type,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'days_count': self.days_count,
+            'reason': self.reason,
+            'status': self.status,
+            'reviewer_id': self.reviewer_id,
+            'reviewer_name': reviewer_name,
+            'review_notes': self.review_notes or '',
+            'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+# Compatibility aliases for cross-branch test compatibility
+TaskComment = TaskMessage
+TaskSubmission = WorkSubmission
+TaskStatusHistory = None
 
