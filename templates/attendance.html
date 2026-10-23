@@ -8,10 +8,20 @@
     <h1 class="page-title">Attendance & Timesheets</h1>
     <p class="page-subtitle">Server-recorded work hours, daily sessions, and correction management.</p>
   </div>
-  <button id="open-correction-modal-btn" class="btn btn-secondary btn-sm">
-    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-    <span>Request Correction</span>
-  </button>
+  <div style="display: flex; gap: 0.75rem;">
+    <a href="/api/attendance/export" class="btn btn-secondary btn-sm" download>
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+      <span>Export CSV</span>
+    </a>
+    <button id="open-correction-modal-btn" class="btn btn-secondary btn-sm">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+      <span>Request Correction</span>
+    </button>
+  </div>
+</div>
+
+<div id="missing-checkout-alert" class="alert alert-warning" style="display: none; margin-bottom: 1.5rem; border-left: 4px solid var(--color-danger);">
+  <strong>Action Required:</strong> You have an uncompleted shift from a previous day. Please submit an attendance correction request to record your actual check-out time.
 </div>
 
 <!-- Shift Control & Metrics Grid -->
@@ -65,7 +75,7 @@
       <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
     </div>
     <div class="metric-info">
-      <div class="metric-value" id="att-today-hours">0.0</div>
+      <div class="metric-value" id="att-today-hours">0h 0m</div>
       <div class="metric-label">Today's Hours</div>
     </div>
   </div>
@@ -208,7 +218,10 @@ document.addEventListener('DOMContentLoaded', () => {
       attTimer.textContent = `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
     }
     const liveTodayHours = document.getElementById('att-today-hours');
-    if (liveTodayHours) liveTodayHours.textContent = (diffMs / 3600000).toFixed(2);
+    if (liveTodayHours) {
+      const totalMinutes = (window.attendanceCompletedTodayMinutes || 0) + Math.floor(diffMs / 60000);
+      liveTodayHours.textContent = `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+    }
   }
 
   async function loadMyAttendance() {
@@ -217,7 +230,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.ok) {
         const json = await res.json();
         const d = json.data;
-        if (todayHours) todayHours.textContent = d.today_duration_hours;
+        if (todayHours) {
+          const totalMinutes = d.today_duration_minutes || 0;
+          window.attendanceCompletedTodayMinutes = Math.max(0, totalMinutes - (d.is_checked_in ? Math.floor((Date.now() - new Date(d.active_session.check_in).getTime()) / 60000) : 0));
+          todayHours.textContent = `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
+        }
 
         if (d.is_checked_in) {
           checkinBtn.style.display = 'none';
@@ -246,6 +263,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const hd = hJson.data;
         if (weeklyHours) weeklyHours.textContent = hd.weekly_hours;
         if (missingCount) missingCount.textContent = hd.missing_checkouts_count;
+        const missingAlert = document.getElementById('missing-checkout-alert');
+        if (missingAlert) {
+          missingAlert.style.display = hd.missing_checkouts_count > 0 ? 'block' : 'none';
+        }
 
         if (myTbody) {
           myTbody.innerHTML = hd.records.length ? hd.records.map(r => `
@@ -253,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <td style="font-weight: 600;">${new Date(r.check_in).toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric'})}</td>
               <td>${new Date(r.check_in).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</td>
               <td>${r.check_out ? new Date(r.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '<span class="badge badge-high">Active</span>'}</td>
-              <td style="font-weight: 700;">${r.duration_hours} hrs</td>
+              <td style="font-weight: 700;">${r.status === 'active' ? 'In progress' : `${Math.floor(r.duration_minutes / 60)}h ${r.duration_minutes % 60}m`}</td>
               <td><span class="badge ${r.status === 'completed' ? 'badge-completed' : r.status === 'active' ? 'badge-high' : 'badge-team_lead'}">${r.status}</span></td>
               <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${r.notes || '-'}</td>
             </tr>
@@ -265,27 +286,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (checkinBtn) {
     checkinBtn.addEventListener('click', async () => {
+      checkinBtn.disabled = true;
+      checkinBtn.innerHTML = '<span>Checking in...</span>';
       try {
         const res = await fetch('/api/attendance/check-in', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
           body: JSON.stringify({notes: 'Work shift started'})
         });
-        if (res.ok) loadMyAttendance();
-      } catch (e) {}
+        await loadMyAttendance();
+      } catch (e) {
+        checkinBtn.disabled = false;
+      }
     });
   }
 
   if (checkoutBtn) {
     checkoutBtn.addEventListener('click', async () => {
+      checkoutBtn.disabled = true;
+      checkoutBtn.innerHTML = '<span>Checking out...</span>';
       try {
         const res = await fetch('/api/attendance/check-out', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
           body: JSON.stringify({notes: 'Work shift ended'})
         });
-        if (res.ok) loadMyAttendance();
-      } catch (e) {}
+        await loadMyAttendance();
+      } catch (e) {
+        checkoutBtn.disabled = false;
+      }
     });
   }
 
@@ -365,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <td><span class="badge ${m.status === 'active' ? 'badge-completed' : 'badge-employee'}">${m.status === 'active' ? 'Checked In' : 'Away'}</span></td>
               <td>${m.check_in ? new Date(m.check_in).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
               <td>${m.check_out ? new Date(m.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
-              <td style="font-weight: 700;">${m.duration_hours} hrs</td>
+              <td style="font-weight: 700;">${m.status === 'active' ? 'In progress' : `${Math.floor(m.duration_minutes / 60)}h ${m.duration_minutes % 60}m`}</td>
             </tr>
           `).join('') : '<tr><td colspan="6" class="text-muted" style="text-align:center; padding: 2rem;">No team members found.</td></tr>';
         }

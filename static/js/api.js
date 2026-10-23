@@ -47,7 +47,17 @@ async function api(method, path, body = null) {
     try {
       data = await res.json();
     } catch (e) {
-      data = { ok: false, error: 'Server response could not be parsed.' };
+      if (res.status === 401) {
+        data = { ok: false, error: 'Authentication required. Please log in.' };
+      } else if (res.status === 403) {
+        data = { ok: false, error: 'Access denied: You do not have permission to view this resource.' };
+      } else if (res.status === 404) {
+        data = { ok: false, error: 'Resource not found.' };
+      } else if (res.status >= 500) {
+        data = { ok: false, error: 'A server error occurred. Please try again later.' };
+      } else {
+        data = { ok: false, error: `Request failed with HTTP status ${res.status}` };
+      }
     }
 
     if (!res.ok || data.ok === false) {

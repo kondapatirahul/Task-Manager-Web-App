@@ -127,10 +127,12 @@
           </div>
         </div>
 
+        {% if current_user.has_role('super_admin', 'admin', 'team_lead') %}
         <button class="btn btn-primary btn-sm open-add-task-btn">
           <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           <span>Add Task</span>
         </button>
+        {% endif %}
 
         <!-- Role badge -->
         <span class="badge badge-{{ current_user.role }}">

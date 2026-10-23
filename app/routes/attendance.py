@@ -28,32 +28,44 @@ def utc_now():
 @login_required
 @active_account_required
 def get_today_status():
-    """Return user's check-in state today and active session."""
+    """Return user's check-in state today, active session, and completed shifts."""
     active_session = Attendance.query.filter_by(
         user_id=current_user.id,
         status='active'
     ).first()
 
     today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = today_start + timedelta(days=1)
     completed_today = Attendance.query.filter(
         Attendance.user_id == current_user.id,
         Attendance.check_in >= today_start,
+        Attendance.check_in < today_end,
         Attendance.status.in_(['completed', 'corrected'])
-    ).all()
+    ).order_by(Attendance.check_out.asc()).all()
 
     total_minutes = sum(a.duration_minutes for a in completed_today)
+    last_completed = completed_today[-1] if completed_today else None
 
     active_duration_minutes = 0
     if active_session:
         delta = utc_now() - active_session.check_in.replace(tzinfo=timezone.utc if active_session.check_in.tzinfo is None else active_session.check_in.tzinfo)
-        active_duration_minutes = max(0, int(delta.total_seconds() / 60))
+        active_duration_seconds = max(0, int(delta.total_seconds()))
+        session_today_start = max(today_start, active_session.check_in.replace(tzinfo=None) if active_session.check_in.tzinfo else active_session.check_in)
+        active_today_seconds = max(0, int((utc_now().replace(tzinfo=None) - session_today_start).total_seconds()))
+        active_duration_minutes = active_today_seconds // 60
         total_minutes += active_duration_minutes
+    else:
+        active_duration_seconds = 0
 
     return api_success({
         'is_checked_in': active_session is not None,
+        'has_completed_shift': last_completed is not None and active_session is None,
         'active_session': active_session.to_dict() if active_session else None,
+        'last_completed_session': last_completed.to_dict() if last_completed else None,
         'today_duration_minutes': total_minutes,
         'today_duration_hours': round(total_minutes / 60.0, 2),
+        'active_duration_seconds': active_duration_seconds,
+        'completed_duration_seconds': sum(a.duration_minutes * 60 for a in completed_today),
     })
 
 
@@ -135,7 +147,7 @@ def my_attendance():
     ).order_by(Attendance.check_in.desc()).limit(60).all()
 
     # Total recorded minutes across last 7 days
-    seven_days_ago = date.today() - timedelta(days=7)
+    seven_days_ago = date.today() - timedelta(days=6)
     weekly_records = [
         r for r in records
         if r.check_in and r.check_in.date() >= seven_days_ago and r.status in ('completed', 'corrected')
@@ -176,12 +188,20 @@ def team_attendance():
         members = User.query.filter(User.team_id.in_(team_ids), User.account_active == True).all()
 
     today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = today_start + timedelta(days=1)
     results = []
     for m in members:
         today_att = Attendance.query.filter(
             Attendance.user_id == m.id,
-            Attendance.check_in >= today_start
+            Attendance.check_in >= today_start,
+            Attendance.check_in < today_end
         ).order_by(Attendance.check_in.desc()).first()
+
+        current_duration_minutes = today_att.duration_minutes if today_att else 0
+        if today_att and today_att.status == 'active':
+            checkin_dt = today_att.check_in.replace(tzinfo=timezone.utc) if today_att.check_in.tzinfo is None else today_att.check_in
+            session_today_start = max(today_start.replace(tzinfo=timezone.utc), checkin_dt)
+            current_duration_minutes = max(0, int((utc_now() - session_today_start).total_seconds() / 60))
 
         results.append({
             'user_id': m.id,
@@ -192,7 +212,8 @@ def team_attendance():
             'status': today_att.status if today_att else 'not_checked_in',
             'check_in': today_att.check_in.isoformat() if today_att else None,
             'check_out': today_att.check_out.isoformat() if today_att and today_att.check_out else None,
-            'duration_hours': round(today_att.duration_minutes / 60.0, 2) if today_att else 0.0,
+            'duration_hours': round(current_duration_minutes / 60.0, 2),
+            'duration_minutes': current_duration_minutes,
         })
 
     return api_success(results)
@@ -215,8 +236,17 @@ def org_attendance():
         (User.organization_id == org_id) | (User.organization_id.is_(None))
     ).count()
 
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    today_end = today_start + timedelta(days=1)
+    checked_in_today = db.session.query(func.count(func.distinct(Attendance.user_id))).join(User).filter(
+        Attendance.check_in >= today_start,
+        Attendance.check_in < today_end,
+        (User.organization_id == org_id) | (User.organization_id.is_(None))
+    ).scalar() or 0
+
     return api_success({
         'currently_active_count': currently_active,
+        'checked_in_today_count': checked_in_today,
         'records': [r.to_dict() for r in recent],
     })
 
@@ -321,3 +351,49 @@ def review_correction(corr_id):
 
     log_audit(f'correction_{decision}d', 'AttendanceCorrection', corr.id, f'Correction {decision}d')
     return api_success(corr.to_dict(), message=f'Correction {decision}d.')
+
+
+# ── Authorized Attendance CSV Export ──────────────────────────────────────────
+
+@attendance_bp.route('/export', methods=['GET'])
+@login_required
+@active_account_required
+def export_attendance_csv():
+    import io, csv
+    from flask import Response
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'ID', 'Employee Name', 'Email',
+        'Check-In', 'Check-Out', 'Duration (Hours)', 'Status', 'Notes'
+    ])
+    if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+        records = Attendance.query.join(User).order_by(Attendance.check_in.desc()).all()
+    elif current_user.is_team_lead:
+        led_teams = Team.query.filter_by(lead_id=current_user.id).all()
+        tids = [t.id for t in led_teams]
+        if current_user.team_id and current_user.team_id not in tids:
+            tids.append(current_user.team_id)
+        records = Attendance.query.join(User).filter(User.team_id.in_(tids)).order_by(Attendance.check_in.desc()).all()
+    else:
+        records = Attendance.query.filter_by(user_id=current_user.id).order_by(Attendance.check_in.desc()).all()
+
+    for r in records:
+        emp = r.user
+        emp_name = (emp.full_name or emp.username) if emp else 'Unknown'
+        writer.writerow([
+            r.id,
+            emp_name,
+            emp.email if emp else '',
+            r.check_in.strftime('%Y-%m-%d %H:%M') if r.check_in else '',
+            r.check_out.strftime('%Y-%m-%d %H:%M') if r.check_out else '',
+            round(r.duration_minutes / 60.0, 2),
+            r.status,
+            r.notes or ''
+        ])
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=attendance_export.csv'}
+    )
