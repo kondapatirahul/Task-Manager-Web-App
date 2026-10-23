@@ -11,7 +11,7 @@ from werkzeug.datastructures import FileStorage
 
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'xlsx', 'txt'}
 
-DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB per file
+DEFAULT_MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB per file
 DEFAULT_MAX_FILES_PER_MESSAGE = 5
 
 MIME_TYPE_MAPPING = {

@@ -97,6 +97,10 @@
               <label class="form-label" for="task-due-date-input">Due Date</label>
               <input type="date" id="task-due-date-input" class="form-control">
             </div>
+            <div class="form-group">
+              <label class="form-label" for="task-effort-input">Estimated Effort (hours)</label>
+              <input type="number" id="task-effort-input" class="form-control" min="0" max="10000" step="0.25" placeholder="Optional">
+            </div>
           </div>
 
           <div class="form-row">
@@ -134,6 +138,7 @@
 
   <!-- Core Scripts -->
   <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
   <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
   <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
   {% block scripts %}{% endblock %}

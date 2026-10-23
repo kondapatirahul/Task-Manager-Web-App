@@ -156,6 +156,45 @@ def test_chronological_discussion_thread(client, collab_fixture):
     assert comments[1]['content'] == 'Yes, PKCE is mandatory for all clients.'
 
 
+def test_comment_validation_edit_delete_and_permissions(client, collab_fixture):
+    task_id = collab_fixture['task_id']
+    login_user(client, 'emp1@example.com', 'Emp1Pass123!')
+
+    empty = client.post(f'/api/tasks/{task_id}/comments', json={'content': '   '})
+    assert empty.status_code == 400
+
+    oversized = client.post(f'/api/tasks/{task_id}/comments', json={'content': 'x' * 5001})
+    assert oversized.status_code == 400
+
+    created = client.post(f'/api/tasks/{task_id}/comments', json={'content': 'Initial message'})
+    assert created.status_code == 201
+    comment_id = created.get_json()['data']['id']
+
+    updated = client.put(
+        f'/api/tasks/{task_id}/comments/{comment_id}',
+        json={'content': 'Updated message'},
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()['data']['content'] == 'Updated message'
+
+    login_user(client, 'lead1@example.com', 'LeadPass123!')
+    moderated = client.delete(f'/api/tasks/{task_id}/comments/{comment_id}')
+    assert moderated.status_code == 200
+
+def test_comment_authorization_prevents_other_user_edit_or_delete(client, collab_fixture):
+    task_id = collab_fixture['task_id']
+    login_user(client, 'emp1@example.com', 'Emp1Pass123!')
+    created = client.post(f'/api/tasks/{task_id}/comments', json={'content': 'Private update'})
+    comment_id = created.get_json()['data']['id']
+
+    login_user(client, 'emp2@example.com', 'Emp2Pass123!')
+    assert client.put(
+        f'/api/tasks/{task_id}/comments/{comment_id}',
+        json={'content': 'Tampered'},
+    ).status_code == 404
+    assert client.delete(f'/api/tasks/{task_id}/comments/{comment_id}').status_code == 404
+
+
 def test_comment_with_multiple_approved_attachments(client, collab_fixture):
     """Message can include multiple approved file attachments with metadata."""
     task_id = collab_fixture['task_id']

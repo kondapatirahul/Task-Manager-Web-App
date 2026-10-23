@@ -364,6 +364,12 @@ const TaskManager = {
 
       const statusLabel = task.status_label || task.status.replace('_', ' ').toUpperCase();
       const statusClass = this.getStatusBadgeClass(task.status);
+      const dependencyBlockers = task.dependency_blockers || [];
+      const dependencyIndicator = task.is_blocked_by_dependencies
+        ? `<span class="badge badge-danger dependency-listing-badge" title="Blocked by: ${dependencyBlockers.map((blocker) => this.escapeHtml(blocker.title)).join(', ')}">Blocked by: <span class="dependency-listing-text">${dependencyBlockers.map((blocker) => this.escapeHtml(blocker.title)).join(', ')}</span></span>`
+        : (task.dependency_ready
+          ? '<span class="badge badge-success dependency-listing-badge">Ready to start</span>'
+          : '');
 
       item.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} aria-label="Toggle task status" />
@@ -380,6 +386,7 @@ const TaskManager = {
             ${task.category_name ? `<span class="badge badge-category"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>${this.escapeHtml(task.category_name)}</span>` : ''}
             <span class="badge badge-${task.priority}">${task.priority.toUpperCase()}</span>
             <span class="badge ${statusClass}">${statusLabel}</span>
+            ${dependencyIndicator}
             ${task.due_date ? `
               <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
                 <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
@@ -499,6 +506,7 @@ const TaskManager = {
     const assigneeField = document.getElementById('task-assignee-select');
     const startDateField = document.getElementById('task-start-date-input');
     const dueDateField = document.getElementById('task-due-date-input');
+    const effortField = document.getElementById('task-effort-input');
     const categoryField = document.getElementById('task-category-select');
     const recurringField = document.getElementById('task-recurring-select');
 
@@ -517,6 +525,7 @@ const TaskManager = {
       if (assigneeField) assigneeField.value = task.assigned_to_id || '';
       if (startDateField) startDateField.value = task.start_date ? task.start_date.split('T')[0] : '';
       if (dueDateField) dueDateField.value = task.due_date ? task.due_date.split('T')[0] : '';
+      if (effortField) effortField.value = task.estimated_effort_hours ?? '';
       if (categoryField) categoryField.value = task.category_id || '';
       if (recurringField) recurringField.value = task.recurrence_interval || '';
     } else {
@@ -531,6 +540,7 @@ const TaskManager = {
       if (assigneeField) assigneeField.value = '';
       if (startDateField) startDateField.value = '';
       if (dueDateField) dueDateField.value = '';
+      if (effortField) effortField.value = '';
       if (categoryField) categoryField.value = '';
       if (recurringField) recurringField.value = '';
     }
@@ -556,6 +566,7 @@ const TaskManager = {
     const status = document.getElementById('task-status-select').value;
     const categoryId = document.getElementById('task-category-select')?.value;
     const dueDate = document.getElementById('task-due-date-input')?.value;
+    const effort = document.getElementById('task-effort-input')?.value;
 
     const criteria = document.getElementById('task-criteria-input')?.value.trim() || '';
     const teamId = document.getElementById('task-team-select')?.value;
@@ -578,6 +589,7 @@ const TaskManager = {
       assigned_to_id: assigneeId ? parseInt(assigneeId, 10) : null,
       start_date: startDate || null,
       due_date: dueDate || null,
+      estimated_effort_hours: effort === '' ? null : Number(effort),
       acceptance_criteria: criteria,
       is_recurring: Boolean(recurring),
       recurrence_interval: recurring || null

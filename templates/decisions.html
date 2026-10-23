@@ -1,0 +1,55 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Project Decisions — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">Project Decisions</h1>
+    <p class="page-subtitle">Search and review decisions within projects you are authorized to access.</p>
+  </div>
+  <button class="btn btn-primary" id="decision-create-toggle">New decision</button>
+</div>
+
+<section class="card decision-toolbar">
+  <input id="decision-search" class="form-control" type="search" placeholder="Search decisions...">
+  <select id="decision-status" class="form-control" aria-label="Filter decisions by status">
+    <option value="">All statuses</option>
+    <option value="proposed">Proposed</option>
+    <option value="accepted">Accepted</option>
+    <option value="superseded">Superseded</option>
+    <option value="rejected">Rejected</option>
+  </select>
+</section>
+
+<section class="card decision-form-card" id="decision-form-card" hidden>
+  <h2 class="card-title" id="decision-form-heading">Create decision</h2>
+  <form id="decision-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="decision-team">Project / team</label>
+        <select id="decision-team" class="form-control" required></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="decision-title">Decision title</label>
+        <input id="decision-title" class="form-control" maxlength="200" required>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label" for="decision-details">Decision details</label><textarea id="decision-details" class="form-control" maxlength="10000" required></textarea></div>
+    <div class="form-group"><label class="form-label" for="decision-rationale">Rationale</label><textarea id="decision-rationale" class="form-control" maxlength="10000" required></textarea></div>
+    <div class="form-group"><label class="form-label" for="decision-alternatives">Alternatives considered</label><textarea id="decision-alternatives" class="form-control" maxlength="5000"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label" for="decision-status-input">Status</label><select id="decision-status-input" class="form-control"><option value="proposed">Proposed</option><option value="accepted">Accepted</option><option value="superseded">Superseded</option><option value="rejected">Rejected</option></select></div>
+      <div class="form-group"><label class="form-label" for="decision-change-note">Change note</label><input id="decision-change-note" class="form-control" maxlength="2000"></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Save decision</button>
+  </form>
+</section>
+
+<section id="decision-list" class="decision-list" aria-live="polite"></section>
+<nav id="decision-pagination" class="decision-pagination" aria-label="Decision pages"></nav>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/decisions.js') }}"></script>
+{% endblock %}

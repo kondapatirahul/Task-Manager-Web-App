@@ -37,6 +37,9 @@ const TaskDetail = {
         await Promise.all([
           this.loadComments(),
           this.loadSubmissions(),
+          this.loadDependencies(),
+          this.loadHandovers(),
+          this.loadLinkedDecisions(),
         ]);
       } else {
         this.showError(taskRes?.error || 'Task not found or access denied.');
@@ -142,6 +145,28 @@ const TaskDetail = {
       });
     }
 
+    const dependencySearch = document.getElementById('dependency-task-search');
+    if (dependencySearch) {
+      let dependencySearchTimeout;
+      dependencySearch.addEventListener('input', (event) => {
+        clearTimeout(dependencySearchTimeout);
+        dependencySearchTimeout = setTimeout(
+          () => this.searchDependencyTasks(event.target.value),
+          250,
+        );
+      });
+    }
+
+    document.getElementById('handover-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await this.createHandover();
+    });
+    document.getElementById('detail-handover-history')?.addEventListener('click', async (event) => {
+      const button = event.target.closest('[data-handover-action]');
+      if (!button) return;
+      await this.handleHandoverAction(button.dataset.handoverAction, button.dataset.handoverId);
+    });
+
     // File preview modal close
     document.querySelectorAll('.close-preview-modal').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -217,6 +242,12 @@ const TaskDetail = {
     return 'FILE';
   },
 
+  escapeHtml(value) {
+    const div = document.createElement('div');
+    div.textContent = value === null || value === undefined ? '' : String(value);
+    return div.innerHTML;
+  },
+
   renderTask() {
     const t = this.task;
     if (!t) return;
@@ -289,12 +320,311 @@ const TaskDetail = {
 
     // Render Reference Attachments
     this.renderReferenceAttachments(t.reference_attachments || []);
+    this.renderDependencies(t.dependencies || { blocked_by: [], blocks: [] });
 
     // Timeline
     this.renderTimeline(t.status_history || []);
 
     // Action buttons in top-bar
     this.renderActions();
+  },
+
+  async loadDependencies() {
+    try {
+      const res = await window.API.get(`/api/tasks/${this.taskId}/dependencies`);
+      if (res && res.ok) this.renderDependencies(res.data);
+    } catch (err) {
+      const status = document.getElementById('detail-dependencies-status');
+      if (status) status.textContent = err.message || 'Unable to load dependencies.';
+    }
+  },
+
+  async loadHandovers() {
+    try {
+      const res = await window.API.get(`/api/tasks/${this.taskId}/handovers`);
+      if (res && res.ok) {
+        this.renderHandovers(res.data || {});
+        await this.loadHandoverOwners();
+      }
+    } catch (err) {
+      window.API.toast(err.message || 'Unable to load handover history.', 'danger');
+    }
+  },
+
+  async loadLinkedDecisions() {
+    const container = document.getElementById('detail-decisions-list');
+    if (!container) return;
+    try {
+      const response = await window.API.get(`/api/decisions?task_id=${encodeURIComponent(this.taskId)}`);
+      container.replaceChildren();
+      const decisions = response.data?.items || [];
+      if (!decisions.length) {
+        const empty = document.createElement('p');
+        empty.className = 'text-muted';
+        empty.textContent = 'No linked decisions.';
+        container.appendChild(empty);
+        return;
+      }
+      decisions.forEach((decision) => {
+        const item = document.createElement('article');
+        item.className = 'decision-linked-item';
+        const title = document.createElement('strong');
+        title.textContent = decision.title;
+        const status = document.createElement('span');
+        status.className = 'badge badge-neutral';
+        status.textContent = decision.status;
+        const details = document.createElement('p');
+        details.textContent = decision.details;
+        item.append(title, status, details);
+        container.appendChild(item);
+      });
+    } catch (error) {
+      container.replaceChildren();
+      const message = document.createElement('p');
+      message.className = 'text-danger';
+      message.textContent = error.message || 'Unable to load linked decisions.';
+      container.appendChild(message);
+    }
+  },
+
+  async loadHandoverOwners() {
+    const form = document.getElementById('handover-form');
+    const select = document.getElementById('handover-owner-select');
+    if (!form || !select || !this.task || this.task.status === 'completed') return;
+    if (!this.currentUser || (
+      this.task.assigned_to_id !== this.currentUser.id &&
+      !['admin', 'super_admin', 'team_lead'].includes(this.currentUser.role)
+    )) return;
+    try {
+      const query = this.task.team_id
+        ? `/api/employees?team_id=${encodeURIComponent(this.task.team_id)}&role=employee&status=active`
+        : '/api/employees?role=employee&status=active';
+      const res = await window.API.get(query);
+      const owners = (res.data || []).filter((user) => user.id !== this.task.assigned_to_id);
+      select.replaceChildren();
+      owners.forEach((owner) => {
+        const option = document.createElement('option');
+        option.value = owner.id;
+        option.textContent = owner.full_name || owner.username || owner.email;
+        select.appendChild(option);
+      });
+      form.style.display = owners.length ? '' : 'none';
+    } catch (err) {
+      window.API.toast(err.message || 'Unable to load eligible handover owners.', 'danger');
+    }
+  },
+
+  renderHandovers(data) {
+    const current = document.getElementById('detail-handover-current');
+    const history = document.getElementById('detail-handover-history');
+    const badge = document.getElementById('detail-handover-status');
+    if (!current || !history || !badge) return;
+    const items = data.items || [];
+    const pending = data.pending;
+    badge.textContent = pending ? pending.status : 'No pending handover';
+    badge.className = `badge ${pending ? 'badge-warning' : 'badge-neutral'}`;
+    current.replaceChildren();
+    history.replaceChildren();
+    if (pending) {
+      const panel = document.createElement('div');
+      panel.className = 'handover-entry';
+      this.appendHandoverDetails(panel, pending);
+      current.appendChild(panel);
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'text-muted';
+      empty.textContent = items.length ? 'No handover is awaiting acknowledgement.' : 'No handover history recorded.';
+      current.appendChild(empty);
+    }
+    const resolved = items.filter((item) => item.status !== 'pending');
+    if (resolved.length) {
+      const heading = document.createElement('h4');
+      heading.textContent = 'Handover history';
+      history.appendChild(heading);
+      resolved.forEach((item) => {
+        const entry = document.createElement('div');
+        entry.className = 'handover-entry';
+        this.appendHandoverDetails(entry, item);
+        history.appendChild(entry);
+      });
+    }
+  },
+
+  appendHandoverDetails(container, handover) {
+    const title = document.createElement('strong');
+    title.textContent = `${handover.status} handover`;
+    container.appendChild(title);
+    const owner = document.createElement('p');
+    owner.textContent = `From ${handover.previous_owner?.name || 'Former owner'} to ${handover.new_owner?.name || 'Unavailable owner'}`;
+    container.appendChild(owner);
+    [['Reason', handover.reason], ['Current progress', handover.current_progress], ['Next steps', handover.next_steps]].forEach(([label, value]) => {
+      const paragraph = document.createElement('p');
+      const labelNode = document.createElement('strong');
+      labelNode.textContent = `${label}: `;
+      paragraph.append(labelNode, document.createTextNode(value || 'Not provided.'));
+      container.appendChild(paragraph);
+    });
+    if (handover.status === 'pending') {
+      if (this.currentUser?.id === handover.new_owner?.id) {
+        ['accept', 'decline'].forEach((action) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `btn btn-sm ${action === 'accept' ? 'btn-primary' : 'btn-secondary'}`;
+          button.dataset.handoverAction = action;
+          button.dataset.handoverId = handover.id;
+          button.textContent = action === 'accept' ? 'Accept handover' : 'Decline handover';
+          container.appendChild(button);
+        });
+      }
+      if (this.currentUser?.id === handover.initiated_by?.id ||
+          this.currentUser?.id === handover.previous_owner?.id ||
+          ['admin', 'super_admin', 'team_lead'].includes(this.currentUser?.role)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-secondary btn-sm';
+        button.dataset.handoverAction = 'cancel';
+        button.dataset.handoverId = handover.id;
+        button.textContent = 'Cancel handover';
+        container.appendChild(button);
+      }
+    }
+  },
+
+  async createHandover() {
+    const payload = {
+      new_owner_id: Number(document.getElementById('handover-owner-select')?.value),
+      reason: document.getElementById('handover-reason-input')?.value.trim(),
+      current_progress: document.getElementById('handover-progress-input')?.value.trim(),
+      next_steps: document.getElementById('handover-next-steps-input')?.value.trim(),
+    };
+    try {
+      await window.API.post(`/api/tasks/${this.taskId}/handovers`, payload);
+      window.API.toast('Handover requested.', 'success');
+      document.getElementById('handover-form')?.reset();
+      await this.loadHandovers();
+    } catch (err) {
+      window.API.toast(err.message || 'Unable to request handover.', 'danger');
+    }
+  },
+
+  async handleHandoverAction(action, handoverId) {
+    let payload = {};
+    if (action === 'decline' || action === 'cancel') {
+      const reason = window.prompt(`${action === 'decline' ? 'Decline' : 'Cancellation'} reason (optional):`) || '';
+      payload = { reason };
+    }
+    try {
+      await window.API.post(`/api/tasks/${this.taskId}/handovers/${handoverId}/${action}`, payload);
+      window.API.toast(`Handover ${action}d.`, 'success');
+      await this.loadHandovers();
+      if (action === 'accept') {
+        const taskRes = await window.API.get(`/api/tasks/${this.taskId}`);
+        if (taskRes?.ok) {
+          this.task = taskRes.data;
+          this.renderTask();
+        }
+      }
+    } catch (err) {
+      window.API.toast(err.message || `Unable to ${action} handover.`, 'danger');
+    }
+  },
+
+  renderDependencies(state) {
+    const blockedBy = state.blocked_by || [];
+    const blocks = state.blocks || [];
+    const status = document.getElementById('detail-dependencies-status');
+    const manager = document.getElementById('dependency-manager');
+    if (status) {
+      status.textContent = state.is_blocked
+        ? 'Blocked until all prerequisite tasks are completed.'
+        : (blockedBy.length ? 'Ready: all prerequisite tasks are completed.' : 'No prerequisite tasks.');
+      status.className = `dependency-state ${state.is_blocked ? 'text-danger' : 'text-success'}`;
+    }
+    if (manager) manager.style.display = this.canManageTask() ? 'block' : 'none';
+    this.renderDependencyList('detail-blocked-by', blockedBy, true);
+    this.renderDependencyList('detail-blocks', blocks, false);
+  },
+
+  canManageTask() {
+    return this.currentUser && (
+      ['super_admin', 'admin'].includes(this.currentUser.role) ||
+      this.task.user_id === this.currentUser.id ||
+      ['team_lead'].includes(this.currentUser.role)
+    );
+  },
+
+  renderDependencyList(containerId, dependencies, removable) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.replaceChildren();
+    if (!dependencies.length) {
+      const empty = document.createElement('span');
+      empty.className = 'text-muted';
+      empty.textContent = 'None';
+      container.appendChild(empty);
+      return;
+    }
+    dependencies.forEach((dependency) => {
+      const row = document.createElement('div');
+      row.className = 'dependency-item';
+      const link = document.createElement('a');
+      link.href = dependency.task_url || `/tasks/${encodeURIComponent(dependency.task_id)}`;
+      link.textContent = dependency.title || `Task #${dependency.task_id}`;
+      const badge = document.createElement('span');
+      badge.className = `badge ${dependency.status === 'completed' ? 'badge-success' : 'badge-neutral'}`;
+      badge.textContent = dependency.status_label || dependency.status || 'Unknown';
+      row.append(link, badge);
+      if (removable && this.canManageTask()) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-ghost btn-xs text-danger';
+        remove.textContent = 'Remove';
+        remove.addEventListener('click', () => this.removeDependency(dependency.task_id));
+        row.appendChild(remove);
+      }
+      container.appendChild(row);
+    });
+  },
+
+  async searchDependencyTasks(query) {
+    const results = document.getElementById('dependency-task-results');
+    if (!results) return;
+    results.replaceChildren();
+    if (!query.trim()) return;
+    try {
+      const res = await window.API.get(`/api/tasks?q=${encodeURIComponent(query.trim())}`);
+      (res.data || []).filter((task) => task.id !== this.taskId).slice(0, 10).forEach((task) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'dependency-search-result';
+        button.textContent = `${task.title} (${task.status_label || task.status})`;
+        button.addEventListener('click', () => this.addDependency(task.id));
+        results.appendChild(button);
+      });
+    } catch (err) {
+      results.textContent = err.message || 'Unable to search tasks.';
+    }
+  },
+
+  async addDependency(blockingTaskId) {
+    try {
+      await window.API.post(`/api/tasks/${this.taskId}/dependencies`, { blocking_task_id: blockingTaskId });
+      window.API.toast('Dependency added.', 'success');
+      document.getElementById('dependency-task-results')?.replaceChildren();
+      await this.loadDependencies();
+    } catch (err) {
+      window.API.toast(err.message || 'Unable to add dependency.', 'danger');
+    }
+  },
+
+  async removeDependency(blockingTaskId) {
+    try {
+      await window.API.delete(`/api/tasks/${this.taskId}/dependencies/${blockingTaskId}`);
+      window.API.toast('Dependency removed.', 'success');
+      await this.loadDependencies();
+    } catch (err) {
+      window.API.toast(err.message || 'Unable to remove dependency.', 'danger');
+    }
   },
 
   // =========================================================================
@@ -331,7 +661,7 @@ const TaskDetail = {
 
     threadEl.innerHTML = comments
       .map((c) => {
-        const initial = (c.author_name || 'U').charAt(0).toUpperCase();
+        const initial = this.escapeHtml((c.author_name || 'U').charAt(0).toUpperCase());
         const roleStr = c.author_role ? c.author_role.replace('_', ' ').toUpperCase() : '';
         const timeStr = c.created_at
           ? new Date(c.created_at).toLocaleString(undefined, {
@@ -352,13 +682,14 @@ const TaskDetail = {
             <div class="message-attachments-wrap">
               ${c.attachments
                 .map((att) => {
+                  const safeName = this.escapeHtml(att.original_filename || 'Attachment');
                   if (att.is_image) {
                     return `
                       <div class="attachment-image-thumb-card">
-                        <img src="${att.preview_url}" alt="${att.original_filename}" class="comment-img-thumb" onclick="TaskDetail.openPreview(${att.id})">
+                        <img src="${att.preview_url}" alt="${safeName}" class="comment-img-thumb" onclick="TaskDetail.openPreview(${att.id})">
                         <div class="thumb-meta">
-                          <span class="thumb-name" title="${att.original_filename}">${att.original_filename}</span>
-                          <span class="thumb-size">${att.file_size_human}</span>
+                          <span class="thumb-name" title="${safeName}">${safeName}</span>
+                          <span class="thumb-size">${this.escapeHtml(att.file_size_human)}</span>
                         </div>
                       </div>
                     `;
@@ -367,8 +698,8 @@ const TaskDetail = {
                       <div class="attachment-file-chip">
                         <span class="file-chip-icon">${this.getFileBadgeIcon(att.file_extension)}</span>
                         <div class="file-chip-info">
-                          <div class="file-chip-name" title="${att.original_filename}">${att.original_filename}</div>
-                          <div class="file-chip-size text-muted">${att.file_size_human}</div>
+                          <div class="file-chip-name" title="${safeName}">${safeName}</div>
+                          <div class="file-chip-size text-muted">${this.escapeHtml(att.file_size_human)}</div>
                         </div>
                         <div class="file-chip-actions">
                           ${
@@ -394,11 +725,12 @@ const TaskDetail = {
             <div class="message-avatar">${initial}</div>
             <div class="message-content-box">
               <div class="message-header">
-                <span class="message-author">${c.author_name}</span>
+                <span class="message-author">${this.escapeHtml(c.author_name || 'Former Member')}</span>
                 ${roleStr ? `<span class="badge badge-neutral message-role-badge">${roleStr}</span>` : ''}
                 <span class="message-time text-muted">${timeStr}</span>
               </div>
               <div class="message-body">${formattedContent}</div>
+              ${this.commentActions(c)}
               ${attachmentsHtml}
             </div>
           </div>
@@ -424,13 +756,54 @@ const TaskDetail = {
     });
   },
 
+  commentActions(comment) {
+    const isAuthor = this.currentUser && comment.user_id === this.currentUser.id;
+    const isManager = this.currentUser && ['super_admin', 'admin', 'team_lead'].includes(this.currentUser.role);
+    if (!isAuthor && !isManager) return '';
+    return `
+      <div class="message-actions">
+        ${isAuthor ? `<button type="button" class="btn btn-ghost btn-xs" onclick="TaskDetail.editComment(${comment.id})">Edit</button>` : ''}
+        <button type="button" class="btn btn-ghost btn-xs text-danger" onclick="TaskDetail.deleteComment(${comment.id})">Delete</button>
+      </div>
+    `;
+  },
+
+  async editComment(commentId) {
+    const comment = this.comments.find((item) => item.id === commentId);
+    if (!comment) return;
+    const content = window.prompt('Edit message:', comment.content);
+    if (content === null) return;
+    try {
+      const res = await window.API.put(`/api/tasks/${this.taskId}/comments/${commentId}`, { content });
+      if (res && res.ok) {
+        window.API.toast('Message updated.', 'success');
+        await this.loadComments();
+      }
+    } catch (err) {
+      window.API.toast(err.message || 'Failed to update message.', 'danger');
+    }
+  },
+
+  async deleteComment(commentId) {
+    if (!window.confirm('Delete this message and its attachments?')) return;
+    try {
+      const res = await window.API.delete(`/api/tasks/${this.taskId}/comments/${commentId}`);
+      if (res && res.ok) {
+        window.API.toast('Message deleted.', 'success');
+        await this.loadComments();
+      }
+    } catch (err) {
+      window.API.toast(err.message || 'Failed to delete message.', 'danger');
+    }
+  },
+
   async handlePostComment() {
     const input = document.getElementById('comment-content-input');
     const content = input?.value?.trim() || '';
     const files = this.composerFiles;
 
-    if (!content && files.length === 0) {
-      window.API.toast('Please enter a message or attach a file.', 'danger');
+    if (!content) {
+      window.API.toast('Please enter a message.', 'danger');
       return;
     }
 
@@ -508,15 +881,21 @@ const TaskDetail = {
 
     listEl.innerHTML = attachments
       .map((att) => {
+        const safeName = this.escapeHtml(att.original_filename || 'Attachment');
+        const uploadedAt = att.created_at
+          ? new Date(att.created_at).toLocaleDateString()
+          : 'Unknown date';
         return `
         <div class="reference-file-card" id="attachment-${att.id}">
           <div class="ref-file-icon">${this.getFileBadgeIcon(att.file_extension)}</div>
           <div class="ref-file-info">
-            <div class="ref-file-name" title="${att.original_filename}">${att.original_filename}</div>
+            <div class="ref-file-name" title="${safeName}">${safeName}</div>
             <div class="ref-file-meta text-muted">
-              <span>${att.file_size_human}</span>
+              <span>${this.escapeHtml(att.file_size_human)}</span>
               <span>•</span>
-              <span>Uploaded by ${att.uploader_name || 'Team Lead'}</span>
+              <span>Uploaded by ${this.escapeHtml(att.uploader_name || 'Unknown')}</span>
+              <span>•</span>
+              <span>${this.escapeHtml(uploadedAt)}</span>
             </div>
           </div>
           <div class="ref-file-actions">
@@ -640,20 +1019,19 @@ const TaskDetail = {
               <div class="deliverables-title">Deliverable Files (${sub.attachments.length}):</div>
               <div class="deliverables-grid">
                 ${sub.attachments
-                  .map((att) => `
-                    <div class="attachment-file-chip">
-                      <span class="file-chip-icon">${this.getFileBadgeIcon(att.file_extension)}</span>
+                  .map((att, attachmentIndex) => `
+                    <div class="attachment-file-chip submission-attachment"
+                         data-submission-index="${idx}" data-attachment-index="${attachmentIndex}">
+                      <span class="file-chip-icon"></span>
                       <div class="file-chip-info">
-                        <div class="file-chip-name" title="${att.original_filename}">${att.original_filename}</div>
-                        <div class="file-chip-size text-muted">${att.file_size_human}</div>
+                        <div class="file-chip-name"></div>
+                        <div class="file-chip-size text-muted"></div>
                       </div>
                       <div class="file-chip-actions">
-                        ${
-                          att.is_previewable
-                            ? `<button type="button" class="btn btn-ghost btn-xs" onclick="TaskDetail.openPreview(${att.id})">Preview</button>`
-                            : ''
-                        }
-                        <a href="${att.download_url}" class="btn btn-ghost btn-xs" download title="Download">
+                        <button type="button" class="btn btn-ghost btn-xs attachment-preview"
+                                hidden>Preview</button>
+                        <a href="#" class="btn btn-ghost btn-xs attachment-download"
+                           download title="Download">
                           <svg class="icon icon-xs" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         </a>
                       </div>
@@ -678,11 +1056,11 @@ const TaskDetail = {
           reviewBlock = `
             <div class="submission-review-card ${isApproved ? 'review-card-approved' : 'review-card-changes'}">
               <div class="review-card-header">
-                <span class="review-author">Reviewed by ${sub.reviewed_by_name || 'Team Lead'}</span>
+                <span class="review-author">Reviewed by ${this.escapeHtml(sub.reviewed_by_name || 'Team Lead')}</span>
                 <span class="review-time text-muted">${revTime}</span>
               </div>
               <div class="review-feedback-text">
-                ${sub.review_feedback ? sub.review_feedback : (isApproved ? 'Work approved and completed.' : 'Changes requested.')}
+                ${sub.review_feedback ? this.escapeHtml(sub.review_feedback) : (isApproved ? 'Work approved and completed.' : 'Changes requested.')}
               </div>
             </div>
           `;
@@ -693,7 +1071,7 @@ const TaskDetail = {
             <div class="submission-item-header">
               <div class="submission-item-title-wrap">
                 <span class="submission-cycle-badge">Submission #${cycleNum}</span>
-                <span class="submission-submitter">Submitted by <strong>${sub.submitted_by_name}</strong></span>
+                <span class="submission-submitter">Submitted by <strong>${this.escapeHtml(sub.submitted_by_name)}</strong></span>
                 <span class="submission-time text-muted">${submittedTime}</span>
               </div>
               <div>${statusBadge}</div>
@@ -701,7 +1079,7 @@ const TaskDetail = {
 
             <div class="submission-summary-box">
               <div class="submission-summary-label">Summary of Work Completed:</div>
-              <div class="submission-summary-content">${sub.summary || '<span class="text-muted">No notes provided.</span>'}</div>
+              <div class="submission-summary-content">${sub.summary ? this.escapeHtml(sub.summary) : '<span class="text-muted">No notes provided.</span>'}</div>
             </div>
 
             ${deliverablesHtml}
@@ -710,6 +1088,50 @@ const TaskDetail = {
         `;
       })
       .join('');
+    this.hydrateSubmissionAttachments(submissions);
+  },
+
+  getSafeAttachmentUrl(url) {
+    if (!url) return null;
+    try {
+      const parsed = new URL(url, window.location.origin);
+      if (!['http:', 'https:'].includes(parsed.protocol) ||
+          parsed.origin !== window.location.origin) {
+        return null;
+      }
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      return null;
+    }
+  },
+
+  hydrateSubmissionAttachments(submissions) {
+    document.querySelectorAll('.submission-attachment').forEach((element) => {
+      const submissionIndex = Number(element.dataset.submissionIndex);
+      const attachmentIndex = Number(element.dataset.attachmentIndex);
+      const attachment = submissions[submissionIndex]?.attachments?.[attachmentIndex];
+      if (!attachment) return;
+
+      const name = element.querySelector('.file-chip-name');
+      const size = element.querySelector('.file-chip-size');
+      const icon = element.querySelector('.file-chip-icon');
+      const preview = element.querySelector('.attachment-preview');
+      const download = element.querySelector('.attachment-download');
+
+      if (name) {
+        name.textContent = attachment.original_filename || 'Attachment';
+        name.title = attachment.original_filename || 'Attachment';
+      }
+      if (size) size.textContent = attachment.file_size_human || '';
+      if (icon) icon.textContent = this.getFileBadgeIcon(attachment.file_extension);
+      if (preview && attachment.is_previewable && Number.isInteger(attachment.id)) {
+        preview.hidden = false;
+        preview.addEventListener('click', () => this.openPreview(attachment.id));
+      }
+      const safeUrl = this.getSafeAttachmentUrl(attachment.download_url);
+      if (download && safeUrl) download.href = safeUrl;
+      if (download && !safeUrl) download.remove();
+    });
   },
 
   async handleWorkSubmission() {
@@ -1013,11 +1435,11 @@ const TaskDetail = {
           <div class="timeline-marker"></div>
           <div class="timeline-content">
             <div class="timeline-header">
-              <span class="timeline-author">${item.changed_by_name}</span>
+              <span class="timeline-author">${this.escapeHtml(item.changed_by_name)}</span>
               ${newLabel ? `<span class="timeline-transition">status: <strong>${newLabel}</strong></span>` : ''}
               <span class="timeline-time text-muted">${timeStr}</span>
             </div>
-            ${item.comment ? `<div class="timeline-comment">${item.comment}</div>` : ''}
+            ${item.comment ? `<div class="timeline-comment">${this.escapeHtml(item.comment)}</div>` : ''}
           </div>
         </div>
       `;

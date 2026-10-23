@@ -221,6 +221,9 @@ All endpoints return a uniform JSON envelope:
 | `POST` | `/api/categories` | Create new category |
 | `DELETE` | `/api/categories/<id>` | Delete category and safely unassign tasks |
 | `GET` | `/api/stats` | Real-time user statistics & overdue counts |
+| `GET/POST` | `/api/automation/rules` | List or create authorized recurring workflow rules |
+| `PATCH` | `/api/automation/rules/<id>` | Enable or disable a recurring workflow rule |
+| `GET` | `/api/automation/rules/<id>/executions` | Inspect authorized rule execution records |
 
 *See [`docs/api-contract.md`](docs/api-contract.md) for full endpoint specifications.*
 
@@ -236,6 +239,21 @@ All endpoints return a uniform JSON envelope:
    - When calling state-changing endpoints (`POST`, `PUT`, `DELETE`, `PATCH`) from the frontend, pass the `X-CSRFToken` header from the meta tag or session cookie. The included `static/js/api.js` client automatically handles this.
 4. **Port 5000 in use**
    - In `run.py`, you can pass a custom port: `app.run(debug=True, port=5001)`.
+
+### Automation scheduling
+
+TaskNest does not start a background scheduler in the web process. Controlled
+automation is executed once by:
+
+```text
+flask --app run.py run-automation
+```
+
+Production deployments must invoke this command from an approved scheduler
+such as cron, a container scheduled job, or a platform task runner. The runner
+creates deduplicated overdue notifications and idempotent recurring tasks.
+Task completion already uses the existing dependency notification lifecycle
+hooks. No user-supplied code is executed.
 
 ---
 

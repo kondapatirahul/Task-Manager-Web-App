@@ -1,0 +1,50 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Calendar — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro calendar-intro">
+  <div>
+    <h1 class="page-title">Calendar</h1>
+    <p class="page-subtitle">Plan deadlines from your authorized tasks.</p>
+  </div>
+  <button class="btn btn-primary open-add-task-btn">New Task</button>
+</div>
+
+<section class="card calendar-card" aria-labelledby="calendar-title">
+  <div class="calendar-toolbar">
+    <div class="calendar-navigation">
+      <button class="btn btn-secondary btn-sm" id="calendar-prev" type="button" aria-label="Previous period">Previous</button>
+      <button class="btn btn-secondary btn-sm" id="calendar-today" type="button">Today</button>
+      <button class="btn btn-secondary btn-sm" id="calendar-next" type="button" aria-label="Next period">Next</button>
+    </div>
+    <h2 class="card-title" id="calendar-title">Loading calendar...</h2>
+    <div class="calendar-views" role="tablist" aria-label="Calendar view">
+      <button class="btn btn-ghost btn-sm is-active" data-calendar-view="month" type="button">Month</button>
+      <button class="btn btn-ghost btn-sm" data-calendar-view="week" type="button">Week</button>
+      <button class="btn btn-ghost btn-sm" data-calendar-view="agenda" type="button">Agenda</button>
+    </div>
+  </div>
+  <div class="calendar-filters">
+    <input class="form-control" id="calendar-search" type="search" placeholder="Search task titles" aria-label="Search task titles">
+    <select class="filter-select" id="calendar-status" aria-label="Filter by status">
+      <option value="">All statuses</option><option value="todo">To Do</option><option value="in_progress">In Progress</option><option value="blocked">Blocked</option><option value="in_review">In Review</option><option value="changes_requested">Changes Requested</option><option value="completed">Completed</option>
+    </select>
+    <select class="filter-select" id="calendar-priority" aria-label="Filter by priority">
+      <option value="">All priorities</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+    </select>
+    <select class="filter-select" id="calendar-deadline" aria-label="Filter by deadline">
+      <option value="">All deadlines</option><option value="overdue">Overdue</option><option value="upcoming">Upcoming</option>
+    </select>
+    {% if current_user.role in ('team_lead', 'admin', 'super_admin') %}
+    <input class="form-control" id="calendar-employee" type="number" min="1" placeholder="Employee ID" aria-label="Filter by employee ID">
+    {% endif %}
+  </div>
+  <p class="calendar-status text-muted" id="calendar-status-message" role="status"></p>
+  <div id="calendar-content" class="calendar-content" aria-live="polite"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
+{% endblock %}

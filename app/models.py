@@ -1,4 +1,5 @@
 from datetime import datetime, date, timezone
+import json
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app import db
@@ -46,6 +47,50 @@ STATUS_LABELS = {
 }
 
 
+class TaskHandover(db.Model):
+    __tablename__ = 'task_handovers'
+
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False, index=True)
+    previous_owner_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    new_owner_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    initiated_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    reason = db.Column(db.Text, nullable=False)
+    current_progress = db.Column(db.Text, nullable=False)
+    next_steps = db.Column(db.Text, nullable=False)
+    resolution_reason = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='pending', index=True)
+    acknowledged_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    task = db.relationship('Task', back_populates='handovers')
+    previous_owner = db.relationship('User', foreign_keys=[previous_owner_id])
+    new_owner = db.relationship('User', foreign_keys=[new_owner_id])
+    initiated_by = db.relationship('User', foreign_keys=[initiated_by_id])
+    resolved_by = db.relationship('User', foreign_keys=[resolved_by_id])
+    attachments = db.relationship(
+'TaskHandoverAttachment', back_populates='handover',
+lazy='dynamic', cascade='all, delete-orphan',
+    )
+
+
+class TaskHandoverAttachment(db.Model):
+    __tablename__ = 'task_handover_attachments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    handover_id = db.Column(db.Integer, db.ForeignKey('task_handovers.id', ondelete='CASCADE'), nullable=False)
+    attachment_id = db.Column(db.Integer, db.ForeignKey('task_attachments.id', ondelete='CASCADE'), nullable=False)
+
+    __table_args__ = (
+db.UniqueConstraint('handover_id', 'attachment_id', name='uq_handover_attachment'),
+    )
+
+    handover = db.relationship('TaskHandover', back_populates='attachments')
+    attachment = db.relationship('TaskAttachment')
+
+
 
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
@@ -70,6 +115,7 @@ class User(UserMixin, db.Model):
     # Profile & Contact info
     job_title       = db.Column(db.String(100), nullable=True)
     phone           = db.Column(db.String(30), nullable=True)
+    weekly_capacity_hours = db.Column(db.Float, nullable=False, default=40.0)
 
     # Reporting relationship (Manager / Reports To hierarchy)
     reports_to_id   = db.Column(db.Integer, db.ForeignKey('users.id', use_alter=True, name='fk_users_reports_to', ondelete='SET NULL'), nullable=True)
@@ -159,6 +205,12 @@ team_members = db.Table(
     db.Column('joined_at', db.DateTime, default=utc_now, nullable=False),
 )
 
+decision_tasks = db.Table(
+    'decision_tasks',
+    db.Column('decision_id', db.Integer, db.ForeignKey('project_decisions.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('task_id', db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True),
+)
+
 
 class Organization(db.Model):
     __tablename__ = 'organizations'
@@ -239,6 +291,10 @@ class Team(db.Model):
     members      = db.relationship('User', secondary=team_members,
                                    backref=db.backref('teams', lazy='dynamic'), lazy='dynamic')
     tasks        = db.relationship('Task', back_populates='team', lazy='dynamic')
+    decisions    = db.relationship(
+        'ProjectDecision', back_populates='team', lazy='dynamic',
+        cascade='all, delete-orphan',
+    )
 
     def to_dict(self):
         return {
@@ -278,6 +334,133 @@ class Category(db.Model):
         }
 
 
+class Goal(db.Model):
+    __tablename__ = 'goals'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    goal_type = db.Column(db.String(40), nullable=False)
+    target_value = db.Column(db.Integer, nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    target_date = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='active')
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    owner = db.relationship('User', backref=db.backref('goals', lazy='dynamic'))
+
+
+class FocusSession(db.Model):
+    __tablename__ = 'focus_sessions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default='active', index=True)
+    started_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    last_resumed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    paused_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    ended_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    active_seconds = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+
+    user = db.relationship('User', backref=db.backref('focus_sessions', lazy='dynamic'))
+    task = db.relationship('Task', backref=db.backref('focus_sessions', lazy='dynamic'))
+
+    __table_args__ = (
+        db.CheckConstraint("status IN ('active', 'paused', 'finished', 'interrupted')", name='ck_focus_session_status'),
+        db.CheckConstraint('active_seconds >= 0', name='ck_focus_session_seconds'),
+    )
+
+
+class WorkflowTemplate(db.Model):
+    __tablename__ = 'workflow_templates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'), nullable=True, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    checklist_json = db.Column(db.Text, nullable=False, default='[]')
+    default_priority = db.Column(db.String(10), nullable=False, default='medium')
+    visibility = db.Column(db.String(20), nullable=False, default='private', index=True)
+    is_archived = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+
+    owner = db.relationship('User', foreign_keys=[owner_id])
+    organization = db.relationship('Organization')
+    generated_tasks = db.relationship(
+        'WorkflowTemplateTask', back_populates='template',
+        lazy='dynamic', cascade='all, delete-orphan',
+    )
+
+    @property
+    def checklist(self):
+        try:
+            value = json.loads(self.checklist_json or '[]')
+        except (TypeError, ValueError):
+            return []
+        return value if isinstance(value, list) else []
+
+
+class WorkflowTemplateTask(db.Model):
+    __tablename__ = 'workflow_template_tasks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('workflow_templates.id', ondelete='CASCADE'), nullable=False, index=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False, unique=True)
+    item_index = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+
+    template = db.relationship('WorkflowTemplate', back_populates='generated_tasks')
+    task = db.relationship('Task')
+
+
+class AutomationRule(db.Model):
+    __tablename__ = 'automation_rules'
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id', ondelete='CASCADE'), nullable=True, index=True)
+    source_task_id = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=True, index=True)
+    template_id = db.Column(db.Integer, db.ForeignKey('workflow_templates.id', ondelete='SET NULL'), nullable=True)
+    rule_type = db.Column(db.String(40), nullable=False, index=True)
+    name = db.Column(db.String(200), nullable=False)
+    schedule = db.Column(db.String(20), nullable=True)
+    next_run_at = db.Column(db.DateTime(timezone=True), nullable=True, index=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=True, index=True)
+    config_json = db.Column(db.Text, nullable=False, default='{}')
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
+
+    owner = db.relationship('User', foreign_keys=[owner_id])
+    organization = db.relationship('Organization')
+    source_task = db.relationship('Task', foreign_keys=[source_task_id])
+    template = db.relationship('WorkflowTemplate')
+    executions = db.relationship(
+        'AutomationExecution', back_populates='rule',
+        lazy='dynamic', cascade='all, delete-orphan',
+    )
+
+
+class AutomationExecution(db.Model):
+    __tablename__ = 'automation_executions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    rule_id = db.Column(db.Integer, db.ForeignKey('automation_rules.id', ondelete='CASCADE'), nullable=False, index=True)
+    execution_key = db.Column(db.String(255), nullable=False, unique=True)
+    status = db.Column(db.String(20), nullable=False, default='running')
+    started_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    error_message = db.Column(db.Text, nullable=True)
+    result_json = db.Column(db.Text, nullable=True)
+
+    rule = db.relationship('AutomationRule', back_populates='executions')
+
+
 class TaskStatusHistory(db.Model):
     __tablename__ = 'task_status_history'
 
@@ -303,6 +486,103 @@ class TaskStatusHistory(db.Model):
             'new_status':      self.new_status,
             'comment':         self.comment or '',
             'created_at':      self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class TaskDependency(db.Model):
+    __tablename__ = 'task_dependencies'
+
+    id = db.Column(db.Integer, primary_key=True)
+    blocked_task_id = db.Column(
+        db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    blocking_task_id = db.Column(
+        db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    created_by_id = db.Column(
+        db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'blocked_task_id', 'blocking_task_id',
+            name='uq_task_dependency_pair',
+        ),
+        db.CheckConstraint(
+            'blocked_task_id != blocking_task_id',
+            name='ck_task_dependency_not_self',
+        ),
+    )
+
+    blocked_task = db.relationship(
+        'Task', foreign_keys=[blocked_task_id],
+        back_populates='blocking_dependencies',
+    )
+    blocking_task = db.relationship(
+        'Task', foreign_keys=[blocking_task_id],
+        back_populates='blocked_dependencies',
+    )
+    created_by = db.relationship('User', foreign_keys=[created_by_id])
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+
+    id           = db.Column(db.Integer, primary_key=True)
+    recipient_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    actor_id     = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    task_id      = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=True, index=True)
+    notification_type = db.Column(db.String(50), nullable=False, index=True)
+    title        = db.Column(db.String(120), nullable=False)
+    message      = db.Column(db.String(500), nullable=False)
+    event_key    = db.Column(db.String(255), nullable=True, unique=True)
+    is_read      = db.Column(db.Boolean, default=False, nullable=False, index=True)
+    created_at   = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
+
+    recipient = db.relationship('User', foreign_keys=[recipient_id])
+    actor = db.relationship('User', foreign_keys=[actor_id])
+    task = db.relationship('Task', foreign_keys=[task_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'type': self.notification_type,
+            'title': self.title,
+            'message': self.message,
+            'task_id': self.task_id,
+            'actor_name': (self.actor.full_name or self.actor.username) if self.actor else None,
+            'is_read': bool(self.is_read),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Activity(db.Model):
+    __tablename__ = 'activities'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    actor_id    = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    task_id     = db.Column(db.Integer, db.ForeignKey('tasks.id', ondelete='CASCADE'), nullable=True, index=True)
+    activity_type = db.Column(db.String(50), nullable=False, index=True)
+    description = db.Column(db.String(500), nullable=False)
+    event_key   = db.Column(db.String(255), nullable=True, unique=True)
+    created_at  = db.Column(db.DateTime, default=utc_now, nullable=False, index=True)
+
+    actor = db.relationship('User', foreign_keys=[actor_id])
+    task = db.relationship('Task', foreign_keys=[task_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'type': self.activity_type,
+            'description': self.description,
+            'actor_name': (self.actor.full_name or self.actor.username) if self.actor else 'System',
+            'task_id': self.task_id,
+            'task_title': self.task.title if self.task else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -434,6 +714,7 @@ class Task(db.Model):
     created_at   = db.Column(db.DateTime, default=utc_now, nullable=False)
     updated_at   = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
     completed_at = db.Column(db.DateTime, nullable=True)
+    estimated_effort_hours = db.Column(db.Float, nullable=True)
 
     # Workflow & company fields
     acceptance_criteria  = db.Column(db.Text, nullable=True)
@@ -460,6 +741,24 @@ class Task(db.Model):
     comments    = db.relationship('TaskComment', backref='task', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskComment.created_at.asc()')
     attachments = db.relationship('TaskAttachment', backref='task', lazy='dynamic', cascade='all, delete-orphan')
     submissions = db.relationship('TaskSubmission', backref='task', lazy='dynamic', cascade='all, delete-orphan', order_by='TaskSubmission.created_at.desc()')
+    blocking_dependencies = db.relationship(
+        'TaskDependency', foreign_keys='TaskDependency.blocked_task_id',
+        back_populates='blocked_task', lazy='dynamic',
+        cascade='all, delete-orphan',
+    )
+    blocked_dependencies = db.relationship(
+        'TaskDependency', foreign_keys='TaskDependency.blocking_task_id',
+        back_populates='blocking_task', lazy='dynamic',
+        cascade='all, delete-orphan',
+    )
+    handovers = db.relationship(
+        'TaskHandover', back_populates='task', lazy='dynamic',
+        cascade='all, delete-orphan',
+    )
+    decisions = db.relationship(
+        'ProjectDecision', secondary=decision_tasks,
+        back_populates='linked_tasks', lazy='dynamic',
+    )
 
     @property
     def is_overdue(self):
@@ -471,7 +770,7 @@ class Task(db.Model):
     def status_label(self):
         return STATUS_LABELS.get(self.status, self.status.replace('_', ' ').title())
 
-    def to_dict(self, include_history=False, include_collaboration=False):
+    def to_dict(self, include_history=False, include_collaboration=False, dependency_user=None):
         data = {
             'id':                  self.id,
             'title':               self.title,
@@ -481,6 +780,7 @@ class Task(db.Model):
             'priority':            self.priority,
             'start_date':          self.start_date.isoformat() if self.start_date else None,
             'due_date':            self.due_date.isoformat() if self.due_date else None,
+            'estimated_effort_hours': self.estimated_effort_hours,
             'created_at':          self.created_at.isoformat() if self.created_at else None,
             'updated_at':          self.updated_at.isoformat() if self.updated_at else None,
             'completed_at':        self.completed_at.isoformat() if self.completed_at else None,
@@ -504,6 +804,48 @@ class Task(db.Model):
             'assigned_to_role':    self.assigned_to.role if self.assigned_to else None,
         }
 
+        blocking = self.blocking_dependencies.all()
+        blocked = self.blocked_dependencies.all()
+        if dependency_user is not None:
+            from app.services.workload import authorized_task_query
+            visible_ids = {
+                row[0] for row in authorized_task_query(dependency_user).with_entities(Task.id).filter(
+                    Task.id.in_([
+                        dependency.blocking_task_id for dependency in blocking
+                    ] + [
+                        dependency.blocked_task_id for dependency in blocked
+                    ])
+                ).all()
+            }
+            blocking = [
+                dependency for dependency in blocking
+                if dependency.blocking_task_id in visible_ids
+            ]
+            blocked = [
+                dependency for dependency in blocked
+                if dependency.blocked_task_id in visible_ids
+            ]
+        unfinished_blockers = [
+            dependency.blocking_task for dependency in blocking
+            if dependency.blocking_task and dependency.blocking_task.status != STATUS_COMPLETED
+        ]
+        data['dependency_count'] = len(blocking) + len(blocked)
+        data['is_blocked_by_dependencies'] = any(
+            dependency.blocking_task and dependency.blocking_task.status != STATUS_COMPLETED
+            for dependency in blocking
+        )
+        data['dependency_ready'] = bool(blocking) and not unfinished_blockers
+        data['dependency_blockers'] = [
+            {
+                'id': blocker.id,
+                'title': blocker.title,
+                'status': blocker.status,
+                'status_label': blocker.status_label,
+                'task_url': f'/tasks/{blocker.id}',
+            }
+            for blocker in unfinished_blockers
+        ]
+
         # Collaboration counts & reference attachments
         if hasattr(self, 'attachments'):
             ref_attachments = self.attachments.filter_by(attachment_type='reference').all()
@@ -523,5 +865,73 @@ class Task(db.Model):
             data['comments'] = [c.to_dict() for c in self.comments.all()] if hasattr(self, 'comments') else []
             data['submissions'] = [s.to_dict() for s in self.submissions.all()] if hasattr(self, 'submissions') else []
             data['attachments'] = [a.to_dict() for a in self.attachments.all()] if hasattr(self, 'attachments') else []
+            data['dependencies'] = {
+                'blocked_by': [
+                    dependency_to_dict(dependency, dependency.blocking_task)
+                    for dependency in blocking if dependency.blocking_task
+                ],
+                'blocks': [
+                    dependency_to_dict(dependency, dependency.blocked_task)
+                    for dependency in blocked if dependency.blocked_task
+                ],
+            }
 
         return data
+
+
+class ProjectDecision(db.Model):
+    __tablename__ = 'project_decisions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    team_id = db.Column(db.Integer, db.ForeignKey('teams.id', ondelete='CASCADE'), nullable=False, index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True, index=True)
+    title = db.Column(db.String(200), nullable=False)
+    details = db.Column(db.Text, nullable=False)
+    rationale = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='proposed', index=True)
+    alternatives = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    team = db.relationship('Team', back_populates='decisions')
+    author = db.relationship('User', foreign_keys=[author_id])
+    linked_tasks = db.relationship(
+        'Task', secondary=decision_tasks,
+        back_populates='decisions', lazy='dynamic',
+    )
+    history = db.relationship(
+        'DecisionHistory', back_populates='decision',
+        lazy='dynamic', cascade='all, delete-orphan',
+        order_by='DecisionHistory.created_at.desc()',
+    )
+
+
+class DecisionHistory(db.Model):
+    __tablename__ = 'decision_history'
+
+    id = db.Column(db.Integer, primary_key=True)
+    decision_id = db.Column(db.Integer, db.ForeignKey('project_decisions.id', ondelete='CASCADE'), nullable=False, index=True)
+    changed_by_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    old_status = db.Column(db.String(20), nullable=True)
+    new_status = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    details = db.Column(db.Text, nullable=False)
+    rationale = db.Column(db.Text, nullable=False)
+    alternatives = db.Column(db.Text, nullable=True)
+    change_note = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    decision = db.relationship('ProjectDecision', back_populates='history')
+    changed_by = db.relationship('User', foreign_keys=[changed_by_id])
+
+
+def dependency_to_dict(dependency, task):
+    return {
+        'id': dependency.id,
+        'task_id': task.id,
+        'title': task.title,
+        'status': task.status,
+        'status_label': task.status_label,
+        'task_url': f'/tasks/{task.id}',
+        'created_at': dependency.created_at.isoformat() if dependency.created_at else None,
+    }

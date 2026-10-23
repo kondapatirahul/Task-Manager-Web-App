@@ -1,0 +1,43 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Focus Sessions — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">Focus sessions</h1>
+    <p class="page-subtitle">Record focused work time for your tasks. Only elapsed time is stored.</p>
+  </div>
+</div>
+
+<section class="card focus-timer-card" aria-labelledby="focus-timer-title">
+  <h2 class="card-title" id="focus-timer-title">Focus timer</h2>
+  <div class="focus-timer-display" id="focus-timer-display">00:00:00</div>
+  <p class="text-muted" id="focus-timer-task">No active session</p>
+  <div class="form-row">
+    <label class="form-label" for="focus-task">Task</label>
+    <select id="focus-task" class="form-control"></select>
+  </div>
+  <div class="focus-actions">
+    <button class="btn btn-primary" id="focus-start">Start</button>
+    <button class="btn btn-secondary" id="focus-pause" disabled>Pause</button>
+    <button class="btn btn-secondary" id="focus-resume" disabled>Resume</button>
+    <button class="btn btn-danger" id="focus-finish" disabled>Finish</button>
+  </div>
+  <p class="text-muted" id="focus-message" aria-live="polite"></p>
+</section>
+
+<section class="card" aria-labelledby="focus-summary-title">
+  <div class="card-header"><h2 class="card-title" id="focus-summary-title">Today and this week</h2></div>
+  <div class="focus-summary-grid" id="focus-summary"></div>
+</section>
+
+<section class="card" aria-labelledby="focus-history-title">
+  <div class="card-header"><h2 class="card-title" id="focus-history-title">Session history</h2></div>
+  <div id="focus-history" aria-live="polite"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/focus.js') }}"></script>
+{% endblock %}

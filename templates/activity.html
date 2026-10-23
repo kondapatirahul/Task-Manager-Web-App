@@ -1,0 +1,44 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Activity — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">Activity Center</h1>
+    <p class="page-subtitle">A chronological view of changes to tasks you can access.</p>
+  </div>
+</div>
+<section class="card activity-card" aria-live="polite">
+  <div id="activity-list" class="activity-list"><p class="text-muted">Loading activity...</p></div>
+  <button id="activity-load-more" class="btn btn-secondary" hidden>Load more</button>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (async function () {
+    const list = document.getElementById('activity-list');
+    const more = document.getElementById('activity-load-more');
+    let page = 1;
+    const escapeHtml = (value) => { const el = document.createElement('div'); el.textContent = value == null ? '' : String(value); return el.innerHTML; };
+    async function load() {
+      const result = await window.API.get(`/api/activity?page=${page}&per_page=20`);
+      const items = result.data.items || [];
+      if (page === 1 && !items.length) {
+        list.innerHTML = '<p class="text-muted">No activity yet.</p>';
+      } else {
+        list.insertAdjacentHTML('beforeend', items.map((item) => `
+          <article class="activity-item">
+            <div class="activity-dot" aria-hidden="true"></div>
+            <div><strong>${escapeHtml(item.description)}</strong><p class="text-muted">${escapeHtml(item.actor_name)} · ${escapeHtml(new Date(item.created_at).toLocaleString())} ${item.task_id ? `· <a href="/tasks/${item.task_id}">View task</a>` : ''}</p></div>
+          </article>
+        `).join(''));
+      }
+      more.hidden = !result.data.has_more;
+    }
+    try { await load(); } catch (error) { list.innerHTML = `<p class="text-danger">${error.message}</p>`; }
+    more.addEventListener('click', async () => { page += 1; await load(); });
+  })();
+</script>
+{% endblock %}

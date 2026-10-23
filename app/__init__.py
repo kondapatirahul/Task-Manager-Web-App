@@ -2,7 +2,7 @@ import os
 import secrets
 from flask import Flask, session, request, redirect, url_for, g
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -38,7 +38,7 @@ def create_app(test_config=None):
         CSRF_ENABLED=True,
         UPLOAD_FOLDER=default_upload_path,
         MAX_CONTENT_LENGTH=25 * 1024 * 1024,
-        MAX_ATTACHMENT_SIZE=10 * 1024 * 1024,
+        MAX_ATTACHMENT_SIZE=5 * 1024 * 1024,
         MAX_ATTACHMENTS_PER_MESSAGE=5,
     )
 
@@ -127,11 +127,22 @@ def create_app(test_config=None):
         )
 
         expected_token = session.get('csrf_token')
-        if expected_token and csrf_token:
-            if not secrets.compare_digest(csrf_token, expected_token):
-                if request.path.startswith('/api/'):
-                    return {'ok': False, 'error': 'Invalid CSRF token'}, 403
-                return 'Invalid CSRF token', 403
+        auth_bootstrap_paths = {'/api/auth/login', '/api/auth/signup', '/api/auth/register'}
+        if (
+            request.path in auth_bootstrap_paths
+            and not current_user.is_authenticated
+            and not expected_token
+        ):
+            return
+        if not expected_token or not csrf_token:
+            message = 'CSRF token required'
+            if request.path.startswith('/api/'):
+                return {'ok': False, 'error': message}, 403
+            return message, 403
+        if not secrets.compare_digest(csrf_token, expected_token):
+            if request.path.startswith('/api/'):
+                return {'ok': False, 'error': 'Invalid CSRF token'}, 403
+            return 'Invalid CSRF token', 403
 
     # Register blueprints
     from app.routes.web import web_bp
@@ -143,6 +154,14 @@ def create_app(test_config=None):
     from app.routes.departments import departments_bp
     from app.routes.teams import teams_bp
     from app.routes.employees import employees_bp
+    from app.routes.notifications import notifications_bp
+    from app.routes.workload import workload_bp
+    from app.routes.calendar import calendar_bp
+    from app.routes.analytics import analytics_bp
+    from app.routes.decisions import decisions_bp
+    from app.routes.focus_sessions import focus_bp
+    from app.routes.workflow_templates import templates_bp
+    from app.routes.automation import automation_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
@@ -153,6 +172,14 @@ def create_app(test_config=None):
     app.register_blueprint(departments_bp)
     app.register_blueprint(teams_bp)
     app.register_blueprint(employees_bp)
+    app.register_blueprint(notifications_bp)
+    app.register_blueprint(workload_bp)
+    app.register_blueprint(calendar_bp)
+    app.register_blueprint(analytics_bp)
+    app.register_blueprint(decisions_bp)
+    app.register_blueprint(focus_bp)
+    app.register_blueprint(templates_bp)
+    app.register_blueprint(automation_bp)
 
     # CLI command to initialize database
     @app.cli.command('init-db')
@@ -161,6 +188,18 @@ def create_app(test_config=None):
         with app.app_context():
             db.create_all()
         print("Database initialized successfully.")
+
+    @app.cli.command('send-deadline-reminders')
+    def send_deadline_reminders_command():
+        """Create deduplicated in-app reminders for tasks due tomorrow."""
+        from app.services.notifications import generate_deadline_reminders
+        print(f"Created {generate_deadline_reminders()} deadline reminder(s).")
+
+    @app.cli.command('run-automation')
+    def run_automation_command():
+        """Run overdue notifications and due recurring rules once."""
+        from app.services.automation import run_automation
+        print(run_automation())
 
     # Create tables automatically on start if they don't exist
     with app.app_context():
@@ -183,6 +222,8 @@ def create_app(test_config=None):
                     db.session.execute(text("ALTER TABLE users ADD COLUMN job_title VARCHAR(100)"))
                 if 'phone' not in existing_user_cols:
                     db.session.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
+                if 'weekly_capacity_hours' not in existing_user_cols:
+                    db.session.execute(text("ALTER TABLE users ADD COLUMN weekly_capacity_hours FLOAT DEFAULT 40.0 NOT NULL"))
                 if 'reports_to_id' not in existing_user_cols:
                     db.session.execute(text("ALTER TABLE users ADD COLUMN reports_to_id INTEGER"))
 
@@ -206,6 +247,8 @@ def create_app(test_config=None):
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN recurrence_interval VARCHAR(20)"))
                 if 'updated_at' not in existing_task_cols:
                     db.session.execute(text("ALTER TABLE tasks ADD COLUMN updated_at DATETIME"))
+                if 'estimated_effort_hours' not in existing_task_cols:
+                    db.session.execute(text("ALTER TABLE tasks ADD COLUMN estimated_effort_hours FLOAT"))
 
             db.session.commit()
         except Exception:

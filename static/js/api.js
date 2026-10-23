@@ -71,6 +71,15 @@ async function api(method, path, body = null) {
   }
 }
 
+window.API = {
+  get: (path) => api('GET', path),
+  post: (path, body) => api('POST', path, body),
+  put: (path, body) => api('PUT', path, body),
+  delete: (path) => api('DELETE', path),
+  patch: (path, body) => api('PATCH', path, body),
+  toast: (message, type) => showToast(message, type === 'danger' ? 'error' : type)
+};
+
 /** Toast Notifications */
 function showToast(message, type = 'info') {
   let container = document.getElementById('toast-container');

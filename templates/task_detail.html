@@ -113,7 +113,7 @@
                     <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
                     <span>Attach Files</span>
                   </button>
-                  <span class="file-hint text-muted">PDF, PNG, JPG, DOCX, XLSX, TXT (up to 10MB)</span>
+                  <span class="file-hint text-muted">PDF, PNG, JPG, DOCX, XLSX, TXT (up to 5MB per file)</span>
                 </div>
                 <button type="submit" id="btn-send-comment" class="btn btn-primary btn-sm">
                   <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
@@ -134,6 +134,47 @@
           </div>
           <div id="detail-submissions-list" class="submissions-history-container" style="margin-top: 1rem;">
             <p class="text-muted" style="margin: 0.5rem 0;">No work submissions recorded yet.</p>
+          </div>
+        </div>
+
+        <div class="card" id="detail-handovers-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">
+              <span>Task Handover</span>
+              <span id="detail-handover-status" class="badge badge-neutral">No pending handover</span>
+            </h3>
+          </div>
+          <div id="detail-handover-current" class="handover-current-state">
+            <p class="text-muted">No handover history recorded.</p>
+          </div>
+          <form id="handover-form" class="handover-form" style="display: none;">
+            <div class="form-group">
+              <label class="form-label" for="handover-owner-select">New owner</label>
+              <select id="handover-owner-select" class="form-control"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="handover-reason-input">Reason</label>
+              <textarea id="handover-reason-input" class="form-control" rows="2" required maxlength="2000"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="handover-progress-input">Current progress</label>
+              <textarea id="handover-progress-input" class="form-control" rows="3" required maxlength="5000"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="handover-next-steps-input">Next steps</label>
+              <textarea id="handover-next-steps-input" class="form-control" rows="3" required maxlength="5000"></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Request handover</button>
+          </form>
+          <div id="detail-handover-history" class="handover-history"></div>
+        </div>
+
+        <div class="card" id="detail-decisions-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">Linked Decisions</h3>
+          </div>
+          <div id="detail-decisions-list">
+            <p class="text-muted">No linked decisions.</p>
           </div>
         </div>
 
@@ -196,6 +237,27 @@
             <dt>Created</dt>
             <dd id="detail-created-at">—</dd>
           </dl>
+        </div>
+
+        <div class="card" id="detail-dependencies-card">
+          <div class="card-header-with-actions">
+            <h3 class="card-section-title" style="margin-bottom: 0;">Dependencies</h3>
+          </div>
+          <div id="detail-dependencies-status" class="dependency-state text-muted">Loading dependencies...</div>
+          <div class="dependency-group">
+            <h4>Blocked by</h4>
+            <div id="detail-blocked-by" class="dependency-list"></div>
+          </div>
+          <div class="dependency-group">
+            <h4>Blocks</h4>
+            <div id="detail-blocks" class="dependency-list"></div>
+          </div>
+          <div id="dependency-manager" style="display: none;">
+            <label class="form-label" for="dependency-task-search">Add blocking task</label>
+            <input id="dependency-task-search" class="form-control" type="search"
+                   placeholder="Search authorized tasks">
+            <div id="dependency-task-results" class="dependency-search-results"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -326,4 +388,3 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/task_detail.js') }}"></script>
 {% endblock %}
-

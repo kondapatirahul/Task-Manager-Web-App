@@ -15,6 +15,9 @@ from app.models import (
     TaskComment,
     TaskSubmission,
     TaskAttachment,
+    TaskDependency,
+    TaskHandover,
+    TaskHandoverAttachment,
     STATUS_TODO,
     STATUS_IN_PROGRESS,
     STATUS_BLOCKED,
@@ -25,8 +28,9 @@ from app.models import (
     COMPANY_TASK_STATUSES,
     STATUS_LABELS,
 )
-from app.routes.utils import api_success, api_error
+from app.routes.utils import api_success, api_error, active_account_required
 from app.file_utils import (
+    extract_mentions,
     validate_uploaded_file,
     save_attachment_file,
     get_attachment_filepath,
@@ -35,6 +39,29 @@ from app.file_utils import (
     DEFAULT_MAX_FILES_PER_MESSAGE,
 )
 from app.services.notifications import notify_task_collaboration_event
+from app.services.dependencies import (
+    create_dependency,
+    dependency_state,
+    notify_dependency_status_change,
+    remove_dependency,
+    task_is_authorized,
+)
+from app.services.handovers import (
+    HANDOVER_ACCEPTED,
+    HANDOVER_CANCELLED,
+    HANDOVER_DECLINED,
+    HANDOVER_EXPIRED,
+    HANDOVER_PENDING,
+    authorized_task_for_user,
+    can_initiate_handover,
+    eligible_new_owner_ids,
+    expire_stale_handover,
+    pending_handover,
+    serialize_handover,
+    task_can_be_managed,
+    task_can_be_viewed,
+    validate_handover_attachments,
+)
 
 tasks_bp = Blueprint('tasks', __name__, url_prefix='/api/tasks')
 
@@ -48,6 +75,7 @@ VALID_STATUSES = {
     STATUS_CHANGES_REQUESTED,
     STATUS_PENDING,
 }
+MAX_COMMENT_LENGTH = 5000
 
 
 def parse_date(date_str):
@@ -311,7 +339,9 @@ def get_tasks():
         query = query.order_by(Task.created_at.desc())
 
     tasks = query.all()
-    return api_success([t.to_dict() for t in tasks])
+    return api_success([
+        t.to_dict(dependency_user=current_user) for t in tasks
+    ])
 
 
 @tasks_bp.route('', methods=['POST'])
@@ -343,6 +373,13 @@ def create_task():
     # Parse dates
     due_date = parse_date(data.get('due_date'))
     start_date = parse_date(data.get('start_date'))
+    raw_effort = data.get('estimated_effort_hours')
+    try:
+        estimated_effort_hours = float(raw_effort) if raw_effort not in (None, '') else None
+    except (TypeError, ValueError):
+        return api_error('Estimated effort must be a non-negative number.', 400)
+    if estimated_effort_hours is not None and (estimated_effort_hours < 0 or estimated_effort_hours > 10000):
+        return api_error('Estimated effort must be between 0 and 10000 hours.', 400)
 
     # Category validation
     category_id = data.get('category_id')
@@ -423,6 +460,7 @@ def create_task():
         status=status,
         start_date=start_date,
         due_date=due_date,
+        estimated_effort_hours=estimated_effort_hours,
         completed_at=completed_at,
         category_id=category_id,
         team_id=team_id,
@@ -470,6 +508,13 @@ def create_task():
         db.session.add(history)
         db.session.commit()
 
+        notify_task_collaboration_event(
+            'task_created',
+            task,
+            current_user,
+            recipients=[task.assigned_to_id] if task.assigned_to_id else [],
+            metadata={'description': f'Created task "{task.title}".'},
+        )
         if validated_files:
             notify_task_collaboration_event(
                 'reference_uploaded',
@@ -479,7 +524,11 @@ def create_task():
                 metadata={'count': len(validated_files)}
             )
 
-        return api_success(task.to_dict(include_history=True, include_collaboration=True), message='Task created successfully', status_code=201)
+        return api_success(task.to_dict(
+            include_history=True,
+            include_collaboration=True,
+            dependency_user=current_user,
+        ), message='Task created successfully', status_code=201)
     except Exception as e:
         db.session.rollback()
         for p in saved_filepaths:
@@ -498,7 +547,93 @@ def get_task(task_id):
     if not task or not can_user_view_task(current_user, task):
         return api_error('Task not found.', 404)
 
-    return api_success(task.to_dict(include_history=True, include_collaboration=True))
+    payload = task.to_dict(
+        include_history=True,
+        include_collaboration=True,
+        dependency_user=current_user,
+    )
+    state = dependency_state(task, current_user)
+    payload['dependencies'] = {
+        'blocked_by': state['blocked_by'],
+        'blocks': state['blocks'],
+    }
+    payload['is_blocked_by_dependencies'] = state['is_blocked']
+    return api_success(payload)
+
+
+@tasks_bp.route('/<int:task_id>/dependencies', methods=['GET'])
+@active_account_required
+@login_required
+def list_task_dependencies(task_id):
+    task = db.session.get(Task, task_id)
+    if not task or not task_is_authorized(current_user, task_id):
+        return api_error('Task not found.', 404)
+    return api_success(dependency_state(task, current_user))
+
+
+@tasks_bp.route('/<int:task_id>/dependencies', methods=['POST'])
+@active_account_required
+@login_required
+def add_task_dependency(task_id):
+    blocked_task = db.session.get(Task, task_id)
+    if not blocked_task or not task_is_authorized(current_user, task_id):
+        return api_error('Task not found.', 404)
+    data = request.get_json(silent=True) or {}
+    try:
+        blocking_task_id = int(data.get('blocking_task_id'))
+    except (TypeError, ValueError):
+        return api_error('blocking_task_id must be a valid integer.', 400)
+    blocking_task = db.session.get(Task, blocking_task_id)
+    if not blocking_task:
+        return api_error('Task not found.', 404)
+    dependency, error, status_code = create_dependency(
+        current_user, blocked_task, blocking_task
+    )
+    if error:
+        return api_error(error, status_code)
+    notify_task_collaboration_event(
+        'dependency_added',
+        blocked_task,
+        current_user,
+        recipients=[blocked_task.assigned_to_id, blocked_task.user_id],
+        metadata={
+            'description': f'"{blocked_task.title}" is blocked by "{blocking_task.title}".',
+            'event_id': f'dependency-added:{dependency.id}',
+        },
+    )
+    return api_success(
+        dependency_state(blocked_task, current_user),
+        message='Dependency added.',
+        status_code=201,
+    )
+
+
+@tasks_bp.route('/<int:task_id>/dependencies/<int:blocking_task_id>', methods=['DELETE'])
+@active_account_required
+@login_required
+def delete_task_dependency(task_id, blocking_task_id):
+    blocked_task = db.session.get(Task, task_id)
+    if not blocked_task or not task_is_authorized(current_user, task_id):
+        return api_error('Task not found.', 404)
+    dependency, error, status_code = remove_dependency(
+        current_user, blocked_task, blocking_task_id
+    )
+    if error:
+        return api_error(error, status_code)
+    notify_task_collaboration_event(
+        'dependency_removed',
+        blocked_task,
+        current_user,
+        recipients=[blocked_task.assigned_to_id, blocked_task.user_id],
+        metadata={
+            'description': f'Dependency removed from "{blocked_task.title}".',
+            'event_id': f'dependency-removed:{dependency.id}',
+        },
+    )
+    return api_success(
+        dependency_state(blocked_task, current_user),
+        message='Dependency removed.',
+    )
 
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
@@ -522,8 +657,12 @@ def update_task(task_id):
         for field in protected_fields:
             if field in data and data[field] != getattr(task, field):
                 return api_error('Employees cannot modify protected task details or assignment.', 403)
+        if 'estimated_effort_hours' in data and data['estimated_effort_hours'] != task.estimated_effort_hours:
+            return api_error('Employees cannot modify protected task details or assignment.', 403)
 
     old_status = task.status
+    old_assigned_id = task.assigned_to_id
+    old_due_date = task.due_date
     status_changed = False
 
     # Update title
@@ -552,6 +691,15 @@ def update_task(task_id):
     if 'start_date' in data:
         raw_start = data.get('start_date')
         task.start_date = parse_date(raw_start) if raw_start else None
+
+    if 'estimated_effort_hours' in data:
+        try:
+            value = float(data['estimated_effort_hours']) if data['estimated_effort_hours'] not in (None, '') else None
+        except (TypeError, ValueError):
+            return api_error('Estimated effort must be a non-negative number.', 400)
+        if value is not None and (value < 0 or value > 10000):
+            return api_error('Estimated effort must be between 0 and 10000 hours.', 400)
+        task.estimated_effort_hours = value
 
     # Update acceptance criteria
     if 'acceptance_criteria' in data and is_manager:
@@ -593,6 +741,11 @@ def update_task(task_id):
         if 'assigned_to_id' in data:
             raw_a = data.get('assigned_to_id')
             new_assigned_id = int(raw_a) if raw_a else None
+        if new_assigned_id != task.assigned_to_id and pending_handover(task.id):
+            return api_error(
+                'Resolve the pending handover before changing this assignment.',
+                409,
+            )
 
         if current_user.role == 'team_lead':
             led_teams = get_user_led_team_ids(current_user)
@@ -642,7 +795,50 @@ def update_task(task_id):
         db.session.add(history)
 
     db.session.commit()
-    return api_success(task.to_dict(include_history=True), message='Task updated successfully')
+    if status_changed:
+        notify_dependency_status_change(task, old_status, current_user)
+    if status_changed and task.status == STATUS_COMPLETED:
+        handover = pending_handover(task.id)
+        if handover:
+            expire_stale_handover(handover, 'Task was completed before the handover was accepted.')
+            db.session.commit()
+    if task.assigned_to_id != old_assigned_id:
+        notify_task_collaboration_event(
+            'task_reassigned',
+            task,
+            current_user,
+            recipients=[task.assigned_to_id] if task.assigned_to_id else [],
+            metadata={
+                'description': f'Assignment changed for "{task.title}".',
+                'event_id': f'assignment:{task.id}:{task.updated_at.isoformat()}',
+            },
+        )
+    if status_changed:
+        notify_task_collaboration_event(
+            'status_changed',
+            task,
+            current_user,
+            recipients=[task.user_id, task.assigned_to_id],
+            metadata={
+                'description': f'Status changed for "{task.title}".',
+                'event_id': f'status:{task.id}:{task.updated_at.isoformat()}',
+            },
+        )
+    if task.due_date != old_due_date:
+        notify_task_collaboration_event(
+            'deadline_updated',
+            task,
+            current_user,
+            recipients=[task.assigned_to_id] if task.assigned_to_id else [],
+            metadata={
+                'description': f'Deadline updated for "{task.title}".',
+                'event_id': f'deadline:{task.id}:{task.updated_at.isoformat()}',
+            },
+        )
+    return api_success(task.to_dict(
+        include_history=True,
+        dependency_user=current_user,
+    ), message='Task updated successfully')
 
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
@@ -654,6 +850,14 @@ def delete_task(task_id):
 
     if not can_user_manage_task(current_user, task):
         return api_error('You do not have permission to delete this task.', 403)
+    dependent_count = TaskDependency.query.filter_by(
+        blocking_task_id=task.id
+    ).count()
+    if dependent_count:
+        return api_error(
+            'Task cannot be deleted while other tasks depend on it.',
+            409,
+        )
 
     # Clean up attachment files from disk
     upload_root = current_app.config.get('UPLOAD_FOLDER')
@@ -711,7 +915,27 @@ def toggle_task_complete(task_id):
     )
     db.session.add(history)
     db.session.commit()
-    return api_success(task.to_dict(include_history=True, include_collaboration=True), message='Task status updated')
+    notify_dependency_status_change(task, old_status, current_user)
+    if task.status == STATUS_COMPLETED:
+        handover = pending_handover(task.id)
+        if handover:
+            expire_stale_handover(handover, 'Task was completed before the handover was accepted.')
+            db.session.commit()
+    notify_task_collaboration_event(
+        'status_changed',
+        task,
+        current_user,
+        recipients=[task.user_id, task.assigned_to_id],
+        metadata={
+            'description': f'Status changed for "{task.title}".',
+            'event_id': f'status:{task.id}:{task.updated_at.isoformat()}',
+        },
+    )
+    return api_success(task.to_dict(
+        include_history=True,
+        include_collaboration=True,
+        dependency_user=current_user,
+    ), message='Task status updated')
 
 
 @tasks_bp.route('/<int:task_id>/submit', methods=['POST'])
@@ -795,6 +1019,7 @@ def submit_task_for_review(task_id):
         )
         db.session.add(history)
         db.session.commit()
+        notify_dependency_status_change(task, old_status, current_user)
 
         notify_task_collaboration_event(
             'submission_created',
@@ -804,7 +1029,11 @@ def submit_task_for_review(task_id):
             metadata={'deliverable_count': deliverable_count}
         )
 
-        return api_success(task.to_dict(include_history=True, include_collaboration=True), message='Task submitted for review successfully')
+        return api_success(task.to_dict(
+            include_history=True,
+            include_collaboration=True,
+            dependency_user=current_user,
+        ), message='Task submitted for review successfully')
     except Exception as e:
         db.session.rollback()
         for p in saved_filepaths:
@@ -873,6 +1102,11 @@ def review_task(task_id):
     )
     db.session.add(history)
     db.session.commit()
+    if action == 'approve':
+        handover = pending_handover(task.id)
+        if handover:
+            expire_stale_handover(handover, 'Task was completed before the handover was accepted.')
+            db.session.commit()
 
     notify_task_collaboration_event(
         event_type,
@@ -882,7 +1116,218 @@ def review_task(task_id):
         metadata={'review_action': action}
     )
 
-    return api_success(task.to_dict(include_history=True, include_collaboration=True), message=message)
+    return api_success(task.to_dict(
+        include_history=True,
+        include_collaboration=True,
+        dependency_user=current_user,
+    ), message=message)
+
+
+@tasks_bp.route('/<int:task_id>/handovers', methods=['GET'])
+@active_account_required
+@login_required
+def list_task_handovers(task_id):
+    task = db.session.get(Task, task_id)
+    if not task:
+        return api_error('Task not found.', 404)
+    handovers = TaskHandover.query.filter_by(task_id=task.id).order_by(
+        TaskHandover.created_at.desc()
+    ).all()
+    if not task_can_be_viewed(current_user, task):
+        pending = next(
+            (item for item in handovers if item.status == HANDOVER_PENDING),
+            None,
+        )
+        if not pending or pending.new_owner_id != current_user.id:
+            return api_error('Task not found.', 404)
+    return api_success({
+        'items': [serialize_handover(item, current_user) for item in handovers],
+        'pending': next(
+            (serialize_handover(item, current_user) for item in handovers
+             if item.status == HANDOVER_PENDING),
+            None,
+        ),
+    })
+
+
+@tasks_bp.route('/<int:task_id>/handovers', methods=['POST'])
+@active_account_required
+@login_required
+def create_task_handover(task_id):
+    task = db.session.get(Task, task_id)
+    if not task or not can_initiate_handover(current_user, task):
+        return api_error('Task not found or handover is not permitted.', 404)
+    if task.status == STATUS_COMPLETED:
+        return api_error('Completed tasks cannot be handed over.', 409)
+    if pending_handover(task.id):
+        return api_error('A handover is already pending for this task.', 409)
+
+    data = request.get_json(silent=True) or {}
+    reason = (data.get('reason') or '').strip()
+    progress = (data.get('current_progress') or '').strip()
+    next_steps = (data.get('next_steps') or '').strip()
+    if not reason or len(reason) > 2000:
+        return api_error('A handover reason between 1 and 2000 characters is required.', 400)
+    if not progress or len(progress) > 5000:
+        return api_error('Current progress between 1 and 5000 characters is required.', 400)
+    if not next_steps or len(next_steps) > 5000:
+        return api_error('Next steps between 1 and 5000 characters are required.', 400)
+    try:
+        new_owner_id = int(data.get('new_owner_id'))
+    except (TypeError, ValueError):
+        return api_error('A valid new_owner_id is required.', 400)
+    if new_owner_id not in eligible_new_owner_ids(current_user, task):
+        return api_error('The proposed owner is outside your authorized scope.', 403)
+    attachments = validate_handover_attachments(task.id, data.get('attachment_ids') or [])
+    if attachments is None:
+        return api_error('All attachment references must belong to this task.', 400)
+
+    handover = TaskHandover(
+        task_id=task.id,
+        previous_owner_id=task.assigned_to_id,
+        new_owner_id=new_owner_id,
+        initiated_by_id=current_user.id,
+        reason=reason,
+        current_progress=progress,
+        next_steps=next_steps,
+    )
+    db.session.add(handover)
+    db.session.flush()
+    for attachment in attachments:
+        db.session.add(TaskHandoverAttachment(
+            handover_id=handover.id,
+            attachment_id=attachment.id,
+        ))
+    db.session.commit()
+    notify_task_collaboration_event(
+        'handover_created',
+        task,
+        current_user,
+        recipients=[new_owner_id],
+        metadata={
+            'description': f'Handover requested for "{task.title}".',
+            'message': f'You have been asked to acknowledge a handover for "{task.title}".',
+            'event_id': f'handover-created:{handover.id}',
+        },
+    )
+    return api_success(serialize_handover(handover, current_user), message='Handover created.', status_code=201)
+
+
+def _get_handover_for_action(task_id, handover_id):
+    task = db.session.get(Task, task_id)
+    handover = db.session.get(TaskHandover, handover_id)
+    if not task or not handover or handover.task_id != task.id:
+        return None, None
+    if not task_can_be_viewed(current_user, task) and handover.new_owner_id != current_user.id:
+        return None, None
+    return task, handover
+
+
+@tasks_bp.route('/<int:task_id>/handovers/<int:handover_id>/accept', methods=['POST'])
+@active_account_required
+@login_required
+def accept_task_handover(task_id, handover_id):
+    task, handover = _get_handover_for_action(task_id, handover_id)
+    if not handover:
+        return api_error('Handover not found.', 404)
+    db.session.refresh(task)
+    db.session.refresh(handover)
+    if handover.new_owner_id != current_user.id:
+        return api_error('Only the proposed owner can accept this handover.', 403)
+    if handover.status != HANDOVER_PENDING:
+        return api_error('This handover is no longer pending.', 409)
+    if task.status == STATUS_COMPLETED or task.assigned_to_id != handover.previous_owner_id:
+        expire_stale_handover(handover, 'Task ownership or status changed before acceptance.')
+        db.session.commit()
+        return api_error('This handover is stale and can no longer be accepted.', 409)
+    if current_user.id not in eligible_new_owner_ids(current_user, task) and current_user.id != handover.new_owner_id:
+        return api_error('The proposed owner is no longer eligible.', 409)
+    task.assigned_to_id = current_user.id
+    handover.status = HANDOVER_ACCEPTED
+    handover.resolved_by_id = current_user.id
+    handover.acknowledged_at = datetime.now(timezone.utc)
+    db.session.add(TaskStatusHistory(
+        task_id=task.id,
+        changed_by_id=current_user.id,
+        old_status=task.status,
+        new_status=task.status,
+        comment=f'Handover accepted by {current_user.full_name or current_user.username}.',
+    ))
+    db.session.commit()
+    notify_task_collaboration_event(
+        'handover_accepted', task, current_user,
+        recipients=[handover.previous_owner_id, handover.initiated_by_id],
+        metadata={
+            'description': f'Handover accepted for "{task.title}".',
+            'event_id': f'handover-accepted:{handover.id}',
+        },
+    )
+    return api_success({
+        'handover': serialize_handover(handover, current_user),
+        'task': task.to_dict(dependency_user=current_user),
+    }, message='Handover accepted.')
+
+
+@tasks_bp.route('/<int:task_id>/handovers/<int:handover_id>/decline', methods=['POST'])
+@active_account_required
+@login_required
+def decline_task_handover(task_id, handover_id):
+    task, handover = _get_handover_for_action(task_id, handover_id)
+    if not handover:
+        return api_error('Handover not found.', 404)
+    if handover.new_owner_id != current_user.id:
+        return api_error('Only the proposed owner can decline this handover.', 403)
+    if handover.status != HANDOVER_PENDING:
+        return api_error('This handover is no longer pending.', 409)
+    reason = ((request.get_json(silent=True) or {}).get('reason') or '').strip()
+    if len(reason) > 2000:
+        return api_error('Decline reason cannot exceed 2000 characters.', 400)
+    handover.status = HANDOVER_DECLINED
+    handover.resolution_reason = reason or None
+    handover.resolved_by_id = current_user.id
+    handover.acknowledged_at = datetime.now(timezone.utc)
+    db.session.commit()
+    notify_task_collaboration_event(
+        'handover_declined', task, current_user,
+        recipients=[handover.previous_owner_id, handover.initiated_by_id],
+        metadata={
+            'description': f'Handover declined for "{task.title}".',
+            'event_id': f'handover-declined:{handover.id}',
+        },
+    )
+    return api_success(serialize_handover(handover, current_user), message='Handover declined.')
+
+
+@tasks_bp.route('/<int:task_id>/handovers/<int:handover_id>/cancel', methods=['POST'])
+@active_account_required
+@login_required
+def cancel_task_handover(task_id, handover_id):
+    task, handover = _get_handover_for_action(task_id, handover_id)
+    if not handover:
+        return api_error('Handover not found.', 404)
+    if handover.status != HANDOVER_PENDING:
+        return api_error('This handover is no longer pending.', 409)
+    if current_user.id not in {
+        handover.initiated_by_id, handover.previous_owner_id
+    } and not task_can_be_managed(current_user, task):
+        return api_error('You cannot cancel this handover.', 403)
+    reason = ((request.get_json(silent=True) or {}).get('reason') or '').strip()
+    if len(reason) > 2000:
+        return api_error('Cancellation reason cannot exceed 2000 characters.', 400)
+    handover.status = HANDOVER_CANCELLED
+    handover.resolution_reason = reason or None
+    handover.resolved_by_id = current_user.id
+    handover.acknowledged_at = datetime.now(timezone.utc)
+    db.session.commit()
+    notify_task_collaboration_event(
+        'handover_cancelled', task, current_user,
+        recipients=[handover.new_owner_id],
+        metadata={
+            'description': f'Handover cancelled for "{task.title}".',
+            'event_id': f'handover-cancelled:{handover.id}',
+        },
+    )
+    return api_success(serialize_handover(handover, current_user), message='Handover cancelled.')
 
 
 @tasks_bp.route('/<int:task_id>/comments', methods=['GET'])
@@ -913,8 +1358,10 @@ def post_task_comment(task_id):
         content = (request.form.get('content') or '').strip()
         files = request.files.getlist('files') or request.files.getlist('attachments')
 
-    if not content and not files:
-        return api_error('Comment content or file attachment is required.', 400)
+    if not content:
+        return api_error('Comment content is required.', 400)
+    if len(content) > MAX_COMMENT_LENGTH:
+        return api_error(f'Comment cannot exceed {MAX_COMMENT_LENGTH} characters.', 400)
 
     max_size = current_app.config.get('MAX_ATTACHMENT_SIZE', DEFAULT_MAX_FILE_SIZE)
     max_files = current_app.config.get('MAX_ATTACHMENTS_PER_MESSAGE', DEFAULT_MAX_FILES_PER_MESSAGE)
@@ -973,7 +1420,16 @@ def post_task_comment(task_id):
             'comment_created',
             task,
             current_user,
-            recipients=[task.user_id, task.assigned_to_id],
+            recipients=[
+                task.user_id,
+                task.assigned_to_id,
+                *[
+                    mentioned.id
+                    for mentioned in User.query.filter(
+                        User.username.in_(extract_mentions(content))
+                    ).all()
+                ],
+            ],
             metadata={'comment_id': comment.id, 'attachments_count': len(validated_files)}
         )
 
@@ -987,6 +1443,58 @@ def post_task_comment(task_id):
                 except OSError:
                     pass
         raise e
+
+
+@tasks_bp.route('/<int:task_id>/comments/<int:comment_id>', methods=['PUT'])
+@login_required
+def update_task_comment(task_id, comment_id):
+    """Edit a comment only by its author or an authorized task manager."""
+    task = db.session.get(Task, task_id)
+    comment = db.session.get(TaskComment, comment_id)
+    if not task or not can_user_view_task(current_user, task) or not comment or comment.task_id != task.id:
+        return api_error('Comment not found.', 404)
+
+    if comment.user_id != current_user.id and not can_user_manage_task(current_user, task):
+        return api_error('You do not have permission to edit this comment.', 403)
+
+    data = request.get_json(silent=True) or {}
+    content = (data.get('content') or '').strip()
+    if not content:
+        return api_error('Comment content is required.', 400)
+    if len(content) > MAX_COMMENT_LENGTH:
+        return api_error(f'Comment cannot exceed {MAX_COMMENT_LENGTH} characters.', 400)
+
+    comment.content = content
+    comment.updated_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return api_success(comment.to_dict(), message='Comment updated successfully')
+
+
+@tasks_bp.route('/<int:task_id>/comments/<int:comment_id>', methods=['DELETE'])
+@login_required
+def delete_task_comment(task_id, comment_id):
+    """Delete a comment only by its author or an authorized task manager."""
+    task = db.session.get(Task, task_id)
+    comment = db.session.get(TaskComment, comment_id)
+    if not task or not can_user_view_task(current_user, task) or not comment or comment.task_id != task.id:
+        return api_error('Comment not found.', 404)
+
+    if comment.user_id != current_user.id and not can_user_manage_task(current_user, task):
+        return api_error('You do not have permission to delete this comment.', 403)
+
+    attachment_paths = [
+        (attachment.storage_name, attachment.task_id)
+        for attachment in comment.attachments.all()
+    ]
+    for storage_name, attachment_task_id in attachment_paths:
+        delete_attachment_file(
+            attachment_task_id,
+            storage_name,
+            current_app.config.get('UPLOAD_FOLDER'),
+        )
+    db.session.delete(comment)
+    db.session.commit()
+    return api_success(message='Comment deleted successfully')
 
 
 @tasks_bp.route('/<int:task_id>/attachments', methods=['GET'])
@@ -1202,4 +1710,3 @@ def get_task_submissions(task_id):
 
     submissions = task.submissions.all()
     return api_success([s.to_dict() for s in submissions])
-

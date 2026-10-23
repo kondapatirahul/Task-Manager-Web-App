@@ -1,0 +1,36 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Workflow Templates — TaskNest{% endblock %}
+
+{% block app_content %}
+<div class="page-intro">
+  <div>
+    <h1 class="page-title">Workflow templates</h1>
+    <p class="page-subtitle">Reuse repeatable checklists without changing the original template.</p>
+  </div>
+  <button class="btn btn-primary" id="template-create-toggle">New template</button>
+</div>
+
+<section class="card template-form-card" id="template-form-card" hidden>
+  <h2 class="card-title" id="template-form-heading">Create template</h2>
+  <form id="template-form">
+    <div class="form-row">
+      <div class="form-group"><label class="form-label" for="template-name">Name</label><input id="template-name" class="form-control" maxlength="200" required></div>
+      <div class="form-group"><label class="form-label" for="template-priority">Default priority</label><select id="template-priority" class="form-control"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div>
+    </div>
+    <div class="form-group"><label class="form-label" for="template-description">Description</label><textarea id="template-description" class="form-control" maxlength="10000"></textarea></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label" for="template-visibility">Visibility</label><select id="template-visibility" class="form-control"><option value="private">Private</option><option value="organization">Organization</option></select></div>
+      <div class="form-group"><label class="form-label" for="template-items">Checklist items</label><textarea id="template-items" class="form-control" placeholder="One item per line; optional offset: Publish release | 2"></textarea></div>
+    </div>
+    <button class="btn btn-primary" type="submit">Save template</button>
+  </form>
+</section>
+
+<section id="template-preview" class="card" hidden aria-live="polite"></section>
+<section id="template-list" class="template-list" aria-live="polite"></section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/workflow_templates.js') }}"></script>
+{% endblock %}

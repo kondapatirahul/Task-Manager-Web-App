@@ -3,6 +3,174 @@
 {% block title %}Dashboard — TaskNest{% endblock %}
 
 {% block app_content %}
+{% if employee_dashboard %}
+<div class="page-intro my-day-intro">
+  <div>
+    <h1 class="page-title">Good morning, {{ (current_user.full_name or current_user.username).split(' ')[0] }}</h1>
+    <p class="page-subtitle">Here is your plan for {{ dashboard_today.strftime('%A, %B %d, %Y') }}.</p>
+  </div>
+  <div class="my-day-actions">
+    <button class="btn btn-primary open-add-task-btn">
+      <svg class="icon" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>New Task</span>
+    </button>
+    <a class="btn btn-secondary" href="{{ url_for('web.tasks') }}">View All Tasks</a>
+  </div>
+</div>
+
+<div class="metrics-grid my-day-metrics" aria-label="My Day summary">
+  <a class="metric-card metric-total" href="{{ url_for('web.tasks') }}" aria-label="View my open tasks">
+    <div class="metric-icon-box"><svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></div>
+    <div class="metric-info"><div class="metric-value">{{ dashboard_counts.open }}</div><div class="metric-label">My Open Tasks</div></div>
+  </a>
+  <a class="metric-card metric-pending" href="{{ url_for('web.tasks', due_after=dashboard_today.isoformat(), due_before=dashboard_today.isoformat()) }}" aria-label="View tasks due today">
+    <div class="metric-icon-box"><svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></div>
+    <div class="metric-info"><div class="metric-value">{{ dashboard_counts.due_today }}</div><div class="metric-label">Due Today</div></div>
+  </a>
+  <a class="metric-card metric-overdue" href="{{ url_for('web.tasks', due_before=dashboard_yesterday.isoformat()) }}" aria-label="View overdue tasks">
+    <div class="metric-icon-box"><svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div>
+    <div class="metric-info"><div class="metric-value">{{ dashboard_counts.overdue }}</div><div class="metric-label">Overdue Tasks</div></div>
+  </a>
+  <a class="metric-card metric-completed" href="{{ url_for('web.tasks', status='completed') }}" aria-label="View completed tasks">
+    <div class="metric-icon-box"><svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
+    <div class="metric-info"><div class="metric-value">{{ dashboard_counts.completed_this_week }}</div><div class="metric-label">Completed This Week</div></div>
+  </a>
+</div>
+
+<div class="my-day-layout">
+  <section class="card my-day-tasks" aria-labelledby="my-day-tasks-title">
+    <div class="card-header">
+      <div><h2 class="card-title" id="my-day-tasks-title">My Day</h2><p class="text-muted my-day-helper">Focus on what needs your attention first.</p></div>
+      <a href="{{ url_for('web.tasks') }}" class="btn btn-ghost btn-sm">All tasks</a>
+    </div>
+    {% macro task_section(title, tasks, section_class) %}
+    <section class="my-day-section {{ section_class }}" aria-labelledby="{{ section_class }}-title">
+      <h3 id="{{ section_class }}-title" class="my-day-section-title">{{ title }} <span>{{ tasks|length }}</span></h3>
+      {% if tasks %}
+        {% for task in tasks %}
+        <article class="my-day-task">
+          <input class="task-checkbox my-day-task-checkbox" type="checkbox" data-task-id="{{ task.id }}" {% if task.status == 'completed' %}checked{% endif %} aria-label="Mark {{ task.title }} complete">
+          <div class="task-body">
+            <a class="task-title" href="{{ url_for('web.task_detail', task_id=task.id) }}">{{ task.title }}</a>
+            <div class="task-meta">
+              <span class="badge badge-{{ task.priority }}">{{ task.priority|capitalize }}</span>
+              <span class="badge badge-{{ 'completed' if task.status == 'completed' else 'pending' }}">{{ task.status_label }}</span>
+              {% if task.due_date %}<span class="task-due-tag {% if task.is_overdue %}is-overdue{% endif %}">{{ task.due_date.strftime('%b %d') }}</span>{% endif %}
+              {% if task.category %}<span class="badge badge-category">{{ task.category.name }}</span>{% endif %}
+            </div>
+          </div>
+          <a class="btn btn-ghost btn-sm" href="{{ url_for('web.task_detail', task_id=task.id) }}">Details</a>
+        </article>
+        {% endfor %}
+      {% else %}
+        <p class="my-day-empty">Nothing here right now.</p>
+      {% endif %}
+    </section>
+    {% endmacro %}
+    {{ task_section('Overdue', dashboard_tasks.overdue, 'my-day-overdue') }}
+    {{ task_section('Due Today', dashboard_tasks.due_today, 'my-day-today') }}
+    {{ task_section('High Priority', dashboard_tasks.high_priority, 'my-day-high') }}
+    {{ task_section('In Progress', dashboard_tasks.in_progress, 'my-day-progress') }}
+  </section>
+
+  <aside class="my-day-sidebar">
+    <section class="card daily-progress-card" aria-labelledby="daily-progress-title">
+      <div class="card-header"><h2 class="card-title" id="daily-progress-title">Daily Progress</h2></div>
+      {% set progress_percent = ((daily_progress.completed / daily_progress.due) * 100)|round|int if daily_progress.due else 0 %}
+      <div class="daily-progress-content">
+        <div class="daily-progress-value">{{ daily_progress.completed }}<span>/{{ daily_progress.due }}</span></div>
+        <p class="text-muted">tasks due today completed today</p>
+        <div class="progress-track" role="progressbar" aria-valuenow="{{ progress_percent }}" aria-valuemin="0" aria-valuemax="100" aria-label="Daily task progress"><div class="progress-fill" style="width: {{ progress_percent }}%;"></div></div>
+        <strong>{{ progress_percent }}%</strong>
+      </div>
+    </section>
+    <section class="card quick-actions-card" aria-labelledby="quick-actions-title">
+      <div class="card-header"><h2 class="card-title" id="quick-actions-title">Quick Actions</h2></div>
+      <div class="quick-actions">
+        <button class="btn btn-primary open-add-task-btn">Create a new task</button>
+        <a class="btn btn-secondary" href="{{ url_for('web.tasks') }}">View all my tasks</a>
+        <a class="btn btn-secondary" href="{{ url_for('web.tasks', sort='due_date_asc') }}">Plan by due date</a>
+        <a class="btn btn-secondary" href="{{ url_for('web.calendar') }}">Open calendar</a>
+      </div>
+    </section>
+  </aside>
+</div>
+<section class="card workload-summary-card" aria-labelledby="my-workload-title">
+  <div class="card-header"><div><h2 class="card-title" id="my-workload-title">My Workload</h2><p class="text-muted">Open work and estimated capacity for this week.</p></div><span class="badge badge-{{ workload_summary.workload_level }}">{{ workload_summary.workload_level|replace('_', ' ')|title }}</span></div>
+  <div class="workload-summary-grid">
+    <div><strong>{{ workload_summary.open_tasks }}</strong><span>Open tasks</span></div>
+    <div><strong>{{ workload_summary.in_progress }}</strong><span>In progress</span></div>
+    <div><strong>{{ workload_summary.due_today }}</strong><span>Due today</span></div>
+    <div><strong>{{ workload_summary.overdue }}</strong><span>Overdue</span></div>
+    <div><strong>{{ workload_summary.high_priority }}</strong><span>High priority</span></div>
+    <div><strong>{{ workload_summary.completed_this_week }}</strong><span>Completed this week</span></div>
+  </div>
+  <div class="workload-capacity">
+    <span>Estimated remaining effort: {{ workload_summary.estimated_remaining_effort_hours|round(1) }}h of {{ workload_summary.weekly_capacity_hours|round(1) }}h capacity</span>
+    {% if workload_summary.utilization_percent is not none %}
+    <div class="progress-track" role="progressbar" aria-valuenow="{{ workload_summary.utilization_percent|round|int }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width: {{ [workload_summary.utilization_percent, 100]|min }}%;"></div></div>
+    <strong>{{ workload_summary.utilization_percent|round(1) }}% utilized</strong>
+    {% else %}<span class="text-muted">Capacity is zero; utilization is unavailable.</span>{% endif %}
+  </div>
+  {% if workload_summary.overdue_warning %}<p class="workload-warning">Overdue work requires attention. Review priorities before taking on new work.</p>{% endif %}
+  {% if workload_summary.recommendations %}<ul class="workload-recommendations">{% for recommendation in workload_summary.recommendations %}<li>{{ recommendation }}</li>{% endfor %}</ul>{% endif %}
+</section>
+<section class="card upcoming-deadlines-card" aria-labelledby="upcoming-deadlines-title">
+  <div class="card-header">
+    <div><h2 class="card-title" id="upcoming-deadlines-title">Upcoming Deadlines</h2><p class="text-muted">Overdue and outstanding work through the next seven days.</p></div>
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('web.calendar') }}">Calendar</a>
+  </div>
+  {% if upcoming_deadlines %}
+  <div class="upcoming-deadlines-list">
+    {% for task in upcoming_deadlines %}
+    <a class="upcoming-deadline-row {% if task.is_overdue %}is-overdue{% endif %}" href="{{ url_for('web.task_detail', task_id=task.id) }}">
+      <span class="upcoming-deadline-date">{{ task.due_date.strftime('%b %d') }}</span>
+      <span class="upcoming-deadline-title">{{ task.title }}</span>
+      <span class="badge badge-{{ task.priority }}">{{ task.priority|capitalize }}</span>
+      <span class="badge badge-{{ 'completed' if task.status == 'completed' else 'pending' }}">{{ task.status_label }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}<p class="my-day-empty">No outstanding deadlines in this window.</p>{% endif %}
+</section>
+<section class="card analytics-summary-card" aria-labelledby="analytics-summary-title">
+  <div class="card-header"><div><h2 class="card-title" id="analytics-summary-title">Productivity Snapshot</h2><p class="text-muted">Last seven days, based on completed task timestamps.</p></div><a class="btn btn-ghost btn-sm" href="{{ url_for('web.goals') }}">Goals & analytics</a></div>
+  <div class="workload-summary-grid">
+    <div><strong>{{ dashboard_analytics.completed }}</strong><span>Completed</span></div>
+    <div><strong>{{ dashboard_analytics.open }}</strong><span>Open</span></div>
+    <div><strong>{{ dashboard_analytics.overdue }}</strong><span>Overdue</span></div>
+    <div><strong>{{ dashboard_analytics.completion_rate }}%</strong><span>Completion rate</span></div>
+  </div>
+</section>
+{% else %}
+{% if team_workload_dashboard %}
+<section class="card workload-dashboard-card" aria-labelledby="team-workload-title">
+  <div class="card-header">
+    <div><h2 class="card-title" id="team-workload-title">Team Workload</h2><p class="text-muted">Informational estimates based on assigned open tasks.</p></div>
+  </div>
+  <div class="workload-summary-grid">
+    <div><strong>{{ team_workload_counts.overloaded }}</strong><span>Overloaded</span></div>
+    <div><strong>{{ team_workload_counts.near_capacity }}</strong><span>Near capacity</span></div>
+    <div><strong>{{ team_workload_counts.available }}</strong><span>Available</span></div>
+    <div><strong>{{ team_workload_counts.unknown }}</strong><span>Capacity unknown</span></div>
+  </div>
+  {% if team_workload %}
+  <div class="workload-table-wrap"><table class="workload-table">
+    <thead><tr><th>Employee</th><th>Open</th><th>In progress</th><th>Overdue</th><th>High priority</th><th>Utilization</th><th>Capacity signal</th></tr></thead>
+    <tbody>
+    {% for employee in team_workload %}
+    <tr>
+      <td>{{ employee.employee_name }}</td><td>{{ employee.open_tasks }}</td><td>{{ employee.in_progress }}</td>
+      <td class="{% if employee.overdue_warning %}text-danger{% endif %}">{{ employee.overdue }}</td><td>{{ employee.high_priority }}</td>
+      <td>{% if employee.utilization_percent is not none %}{{ employee.utilization_percent|round(1) }}%{% else %}Not available{% endif %}</td>
+      <td><span class="badge badge-{{ employee.capacity_state }}">{{ employee.capacity_state|replace('_', ' ')|title }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="my-day-empty">No employees are currently in your authorized teams.</p>{% endif %}
+</section>
+{% endif %}
 <!-- Personalized Greeting & Action Bar -->
 <div class="page-intro">
   <div>
@@ -108,4 +276,19 @@
     </div>
   </div>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if employee_dashboard %}
+<script>
+  document.addEventListener('change', function (event) {
+    const checkbox = event.target.closest('.my-day-task-checkbox');
+    if (checkbox && window.TaskManager) {
+      window.TaskManager.toggleTaskCompletion(Number(checkbox.dataset.taskId), checkbox.checked)
+        .then(() => window.location.reload());
+    }
+  });
+</script>
+{% endif %}
 {% endblock %}
