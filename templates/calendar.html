@@ -3,6 +3,7 @@
 {% block title %}Calendar & Scheduling — TaskNest Enterprise{% endblock %}
 
 {% block app_content %}
+<<<<<<< HEAD
 <style>
 /* ── Calendar Module Styles (TaskNest Brown/Cream Palette) ─────────────── */
 .calendar-wrapper {
@@ -492,6 +493,81 @@
       <div id="calendar-active-view">
         <div class="card" style="padding: 3rem 1rem; text-align: center;">
           <p class="text-muted">Loading schedule and calendar events...</p>
+=======
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 class="page-title">Calendar & Scheduling</h1>
+    <p class="page-subtitle">Track deadlines, schedule team meetings, and manage RSVPs across timezones.</p>
+  </div>
+  {% if current_user.is_management %}<button id="open-meeting-modal-btn" class="btn btn-primary btn-sm">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+    <span>Schedule Meeting</span>
+  </button>{% endif %}
+</div>
+
+<!-- Calendar Controls & Schedule Grid -->
+<div class="dashboard-grid" style="grid-template-columns: 2fr 1fr; align-items: start;">
+  <!-- Left: Calendar Agenda / Event Feed -->
+  <div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <h2 class="card-title">Calendar Events</h2>
+      <div class="calendar-navigation" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="cal-prev" type="button">Previous</button>
+        <button class="btn btn-secondary btn-sm" id="cal-today" type="button">Today</button>
+        <button class="btn btn-secondary btn-sm" id="cal-next" type="button">Next</button>
+        <strong id="cal-range-label" aria-live="polite"></strong>
+        <select id="cal-view" class="form-control" style="width:auto;padding:.35rem"><option value="month">Month</option><option value="week">Week</option><option value="day">Day</option></select>
+      </div>
+      <div style="display: flex; gap: 0.5rem; flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" id="cal-filter-all">All Events</button>
+        <button class="btn btn-ghost btn-sm" id="cal-filter-tasks">Tasks</button>
+        <button class="btn btn-ghost btn-sm" id="cal-filter-meetings">Meetings</button>
+        <button class="btn btn-ghost btn-sm" id="cal-filter-my">My Events</button>
+        {% if current_user.is_management %}<button class="btn btn-ghost btn-sm" id="cal-filter-team">Team Events</button>{% endif %}
+      </div>
+    </div>
+    <div id="calendar-grid" class="tasknest-calendar-grid" aria-label="Calendar date grid"></div>
+    <div id="calendar-event-feed" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 1.25rem 0; min-width:0;">
+      <p class="text-muted" style="text-align: center; padding: 2rem;">Loading calendar schedule...</p>
+    </div>
+  </div>
+
+  <!-- Right: Upcoming Meetings & Actionable RSVPs -->
+  <div>
+  </div>
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+      <h3 class="card-title">Scheduled Meetings</h3>
+    </div>
+    <div id="meetings-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
+      <p class="text-muted" style="font-size: var(--font-size-sm); padding: 1rem 0;">Checking meetings...</p>
+    </div>
+
+    <!-- Quick Tip Card -->
+    <div class="card" style="background: var(--color-surface-subtle); border: 1px solid var(--color-border);">
+      <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary); margin-bottom: 0.35rem;">
+        Task & Meeting Sync
+      </div>
+      <p style="font-size: var(--font-size-xs); color: var(--color-muted); line-height: 1.5;">
+        Tasks with assigned deadlines automatically appear on your calendar alongside scheduled meetings.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Schedule Meeting Modal -->
+<div class="modal-backdrop" id="meeting-modal" style="display: none;">
+  <div class="modal" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Schedule New Meeting</h3>
+      <button class="modal-close-btn" id="close-meeting-modal" aria-label="Close modal">&times;</button>
+    </div>
+    <form id="meeting-form">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="meet-title">Meeting Title <span class="required">*</span></label>
+          <input type="text" id="meet-title" class="form-control" placeholder="e.g. Q4 Sprint Retrospective" required>
+>>>>>>> origin/main
         </div>
       </div>
     </div>
@@ -597,6 +673,7 @@
   </div>
 </div>
 
+<<<<<<< HEAD
 <!-- ── MODAL 2: Meeting Details & RSVP ────────────────────────────────────── -->
 <div class="modal-overlay" id="meeting-details-modal" role="dialog" aria-modal="true" aria-labelledby="md-title">
   <div class="modal-card" style="max-width: 560px;">
@@ -740,6 +817,11 @@
 </div>
 
 <!-- ── Application Logic Script ───────────────────────────────────────────── -->
+=======
+<style>
+.tasknest-calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.35rem;margin:.75rem 0;min-width:0}.cal-day{border:1px solid var(--color-border);border-radius:8px;padding:.45rem;min-height:76px;min-width:0;overflow-wrap:anywhere;background:var(--color-surface)}.cal-day button{border:0;background:transparent;font-weight:700;cursor:pointer}.cal-day.is-today{outline:2px solid var(--color-primary)}.cal-day.outside{opacity:.5}.cal-day .cal-dot{display:block;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.2rem}.calendar-event-card{min-width:0;max-width:100%;overflow-wrap:anywhere}.calendar-event-card a{flex-shrink:0}.calendar-event-card .event-meta{overflow-wrap:anywhere;word-break:break-word}.leave-reason{max-width:260px;overflow-wrap:anywhere;white-space:normal}@media(max-width:700px){.tasknest-calendar-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}.cal-day{padding:.2rem;min-height:54px;font-size:.75rem}.cal-day .cal-dot{font-size:.6rem}}
+</style>
+>>>>>>> origin/main
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -749,6 +831,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentView = 'month'; // 'month' | 'week' | 'day'
   let currentFilter = 'all'; // 'all' | 'tasks' | 'meetings'
   let allEvents = [];
+<<<<<<< HEAD
   let allMeetings = [];
   let employeesList = [];
   let activeMeetingObj = null;
@@ -1037,6 +1120,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
     html += `
         </div>
+=======
+  let currentFilter = 'all';
+  let selectedDate = new Date(); selectedDate.setHours(0,0,0,0);
+  let calendarView = 'month';
+  const esc = value => String(value ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+  const safeHref = value => { try { const u = new URL(value, window.location.origin); return u.origin === window.location.origin ? u.pathname + u.search + u.hash : '#'; } catch (_) { return '#'; } };
+  const dateKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const safeExternal = value => { try { const u = new URL(value); return ['https:','http:'].includes(u.protocol) && !u.username && !u.password ? u.href : null; } catch (_) { return null; } };
+  function rangeForView(){ const start=new Date(selectedDate); const end=new Date(selectedDate); if(calendarView==='month'){start.setDate(1);start.setDate(start.getDate()-start.getDay());end.setMonth(end.getMonth()+1,0);end.setDate(end.getDate()+(6-end.getDay()));} else if(calendarView==='week'){start.setDate(start.getDate()-start.getDay());end.setDate(start.getDate()+6);} return {start,end}; }
+  function renderGrid(){ const grid=document.getElementById('calendar-grid'); if(!grid)return; const {start,end}=rangeForView(); const label=document.getElementById('cal-range-label'); label.textContent=calendarView==='day'?selectedDate.toLocaleDateString([], {month:'long',day:'numeric',year:'numeric'}):calendarView==='week'?`${start.toLocaleDateString()} – ${end.toLocaleDateString()}`:selectedDate.toLocaleDateString([], {month:'long',year:'numeric'}); grid.style.gridTemplateColumns=calendarView==='day'?'minmax(0,1fr)':'repeat(7,minmax(0,1fr))'; grid.innerHTML=''; if(calendarView!=='day'&&calendarView==='month'){['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(d=>{const h=document.createElement('div');h.textContent=d;h.style.fontWeight='700';h.style.textAlign='center';grid.appendChild(h);});} const cursor=new Date(start); while(cursor<=end){if(calendarView==='day'&&cursor.toDateString()!==selectedDate.toDateString()){cursor.setDate(cursor.getDate()+1);continue;}const key=dateKey(cursor);let dayEvents=allEvents.filter(e=>e.date===key);if(currentFilter==='tasks')dayEvents=dayEvents.filter(e=>e.type==='task');if(currentFilter==='meetings')dayEvents=dayEvents.filter(e=>e.type==='meeting');const dayDate=new Date(cursor);const cell=document.createElement('div');cell.className='cal-day'+(cursor.toDateString()===new Date().toDateString()?' is-today':'')+(cursor.getMonth()!==selectedDate.getMonth()?' outside':'');const btn=document.createElement('button');btn.type='button';btn.textContent=String(cursor.getDate());btn.setAttribute('aria-label',`Select ${key}`);btn.addEventListener('click',()=>{selectedDate=new Date(dayDate);calendarView='day';document.getElementById('cal-view').value='day';renderEvents();});cell.appendChild(btn);dayEvents.slice(0,3).forEach(ev=>{const dot=document.createElement('span');dot.className='cal-dot';dot.textContent=(ev.type==='task'?'Task: ':'Meeting: ')+ev.title.replace(/^(Task: |Meeting: )/,'');dot.title=dot.textContent;cell.appendChild(dot);});grid.appendChild(cell);cursor.setDate(cursor.getDate()+1);}}
+
+  async function loadCalendarEvents() {
+    try {
+      const {start,end}=rangeForView();
+      const res = await fetch(`/api/calendar/events?start=${start.toISOString().slice(0,10)}&end=${end.toISOString().slice(0,10)}`);
+      if (!res.ok) throw new Error('Calendar events could not be loaded.');
+      allEvents = (await res.json()).data || []; renderGrid(); renderEvents();
+    } catch (e) { eventFeed.textContent = 'Unable to load calendar events. Please refresh and try again.'; }
+  }
+
+  function renderEvents() {
+    if (!eventFeed) return;
+    let filtered = allEvents;
+    if (currentFilter === 'tasks') filtered = allEvents.filter(e => e.type === 'task');
+    if (currentFilter === 'meetings') filtered = allEvents.filter(e => e.type === 'meeting');
+    if (currentFilter === 'my') filtered = allEvents.filter(e => e.scope === 'my');
+    if (currentFilter === 'team') filtered = allEvents.filter(e => e.scope === 'team');
+
+    renderGrid();
+    if (filtered.length === 0) {
+      eventFeed.innerHTML = '<p class="text-muted" style="text-align: center; padding: 2rem;">No events scheduled for this period.</p>';
+      return;
+    }
+
+    eventFeed.innerHTML = filtered.map(e => `
+      <div class="calendar-event-card" style="display: flex; align-items: center; justify-content: space-between; gap:.75rem; padding: 0.85rem 1rem; background: var(--color-surface-subtle); border-radius: var(--radius-md); border-left: 4px solid ${e.type === 'task' ? '#25845A' : '#245548'};">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; border: 1px solid var(--color-border);">
+            ${e.type === 'task' ? '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>' : '<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect></svg>'}
+          </div>
+          <div>
+            <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">${esc(e.title)}</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-muted);">
+              ${new Date(e.date).toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric'})}
+              ${e.start_time ? ' • ' + new Date(e.start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}
+              ${e.type === 'task' ? ' • ' + esc(e.priority || 'medium') + ' priority • ' + esc(e.status || 'open') + (e.assignee_name ? ' • ' + esc(e.assignee_name) : '') : ''}
+              ${e.location_or_link ? ' • ' + esc(e.location_or_link.startsWith('http') ? 'Meeting link available' : e.location_or_link) : ''}
+            </div>
+          </div>
+        </div>
+        ${e.type === 'meeting' && safeExternal(e.join_url) ? `<a href="${esc(safeExternal(e.join_url))}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-xs">Join meeting</a>` : ''} <a href="${esc(safeHref(e.url))}" class="btn btn-secondary btn-xs">View Details</a>
+>>>>>>> origin/main
       </div>
     `;
 
@@ -1044,6 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindEventChips();
   }
 
+<<<<<<< HEAD
   function renderWeekEventCard(e) {
     if (e.type === 'task') {
       const isCompleted = (e.status === 'completed');
@@ -1188,6 +1324,34 @@ document.addEventListener('DOMContentLoaded', () => {
               <div style="font-size: 0.72rem; color: var(--color-muted); display: flex; align-items: center; gap: 0.35rem;">
                 <svg class="icon icon-xs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span>${dateStr} at ${timeStr}</span>
+=======
+  // Filter Buttons
+  document.getElementById('cal-prev')?.addEventListener('click',()=>{selectedDate.setDate(1);selectedDate.setMonth(selectedDate.getMonth()-(calendarView==='day'?0:calendarView==='week'?0:1));if(calendarView==='week')selectedDate.setDate(selectedDate.getDate()-7);else if(calendarView==='day')selectedDate.setDate(selectedDate.getDate()-1);loadCalendarEvents();});
+  document.getElementById('cal-next')?.addEventListener('click',()=>{selectedDate.setDate(1);selectedDate.setMonth(selectedDate.getMonth()+(calendarView==='month'?1:0));if(calendarView==='week')selectedDate.setDate(selectedDate.getDate()+7);else if(calendarView==='day')selectedDate.setDate(selectedDate.getDate()+1);loadCalendarEvents();});
+  document.getElementById('cal-today')?.addEventListener('click',()=>{selectedDate=new Date();selectedDate.setHours(0,0,0,0);loadCalendarEvents();});
+  document.getElementById('cal-view')?.addEventListener('change',e=>{calendarView=e.target.value;loadCalendarEvents();});
+  document.getElementById('cal-filter-all')?.addEventListener('click', () => { currentFilter = 'all'; renderEvents(); });
+  document.getElementById('cal-filter-tasks')?.addEventListener('click', () => { currentFilter = 'tasks'; renderEvents(); });
+  document.getElementById('cal-filter-meetings')?.addEventListener('click', () => { currentFilter = 'meetings'; renderEvents(); });
+  document.getElementById('cal-filter-my')?.addEventListener('click', () => { currentFilter = 'my'; renderEvents(); });
+  document.getElementById('cal-filter-team')?.addEventListener('click', () => { currentFilter = 'team'; renderEvents(); });
+
+  async function loadMeetings() {
+    try {
+      const res = await fetch('/api/meetings');
+      if (res.ok) {
+        const meetings = (await res.json()).data;
+        if (meetingsList) {
+          meetingsList.innerHTML = meetings.length ? meetings.map(m => `
+            <div style="padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: #fff;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
+                <span style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">${esc(m.title)}</span>
+                <span class="badge badge-team_lead">${m.status}</span>
+              </div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-bottom: 0.5rem;">
+                ${new Date(m.start_time).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}
+                ${m.location_or_link ? ` | ${esc(m.location_or_link.startsWith('http') ? 'Meeting link available' : m.location_or_link)}` : ''}
+>>>>>>> origin/main
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.25rem;">
                 ${renderJoinButton(m.location_or_link)}
@@ -1332,6 +1496,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── Meeting Details & RSVP Modal ───────────────────────────────────────────
   window.openMeetingDetails = async function(meetingId) {
     try {
+<<<<<<< HEAD
       const res = await fetch(`/api/meetings/${meetingId}`);
       if (!res.ok) return;
       const json = await res.json();
@@ -1343,6 +1508,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (statusBadge) {
         statusBadge.textContent = m.status;
         statusBadge.className = m.status === 'cancelled' ? 'badge badge-danger' : 'badge badge-team_lead';
+=======
+      const res = await fetch('/api/employees');
+      if (res.ok) {
+        const emps = (await res.json()).data;
+        container.innerHTML = emps.map(emp => `
+          <label style="display: flex; align-items: center; gap: 0.5rem; font-size: var(--font-size-xs); cursor: pointer;">
+            <input type="checkbox" name="invitee" value="${emp.id}">
+            <span><b>${esc(emp.full_name)}</b> (@${esc(emp.username)}) — ${esc(emp.designation || 'Staff')}</span>
+          </label>
+        `).join('');
+>>>>>>> origin/main
       }
 
       // Date & Time

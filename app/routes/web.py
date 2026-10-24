@@ -287,6 +287,18 @@ def notifications():
     return render_template('notifications.html', active_page='notifications')
 
 
+@web_bp.route('/employee/leave')
+@login_required
+def employee_leave():
+    return render_template('leave_management.html', active_page='leave')
+
+
+@web_bp.route('/lead/leave-requests')
+@web_roles_required('super_admin', 'admin', 'admin_hr', 'hr', 'team_lead')
+def lead_leave_requests():
+    return render_template('leave_management.html', active_page='leave', review_mode=True)
+
+
 # ── Dedicated Task Detail View ────────────────────────────────────────────────
 
 @web_bp.route('/tasks/<int:task_id>')

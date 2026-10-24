@@ -29,7 +29,7 @@ def create_app(test_config=None):
 
     default_db_path = os.path.join(app.instance_path, 'tasks.db')
     app.config.from_mapping(
-        SECRET_KEY=os.getenv('SECRET_KEY', 'tasknest-dev-secret-key-change-in-prod'),
+        SECRET_KEY=os.getenv('SECRET_KEY') or secrets.token_hex(32),
         SQLALCHEMY_DATABASE_URI=os.getenv('DATABASE_URL', f'sqlite:///{default_db_path}'),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         CSRF_ENABLED=True,
@@ -39,6 +39,8 @@ def create_app(test_config=None):
 
     if test_config:
         app.config.update(test_config)
+    if os.getenv('FLASK_ENV') == 'production' and not os.getenv('SECRET_KEY'):
+        raise RuntimeError('SECRET_KEY must be configured in production.')
     app.config.setdefault('PROPAGATE_EXCEPTIONS', False)
 
     # Initialize extensions
@@ -106,11 +108,10 @@ def create_app(test_config=None):
         )
 
         expected_token = session.get('csrf_token')
-        if expected_token and csrf_token:
-            if not secrets.compare_digest(csrf_token, expected_token):
-                if request.path.startswith('/api/'):
-                    return {'ok': False, 'error': 'Invalid CSRF token'}, 403
-                return 'Invalid CSRF token', 403
+        if not expected_token or not csrf_token or not secrets.compare_digest(csrf_token, expected_token):
+            if request.path.startswith('/api/'):
+                return {'ok': False, 'error': 'Invalid CSRF token (missing or incorrect).'}, 403
+            return 'Invalid CSRF token (missing or incorrect).', 403
 
     # Error handlers
     from flask import render_template

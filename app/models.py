@@ -807,6 +807,41 @@ class MeetingAttendee(db.Model):
         }
 
 
+
+class LeaveRequest(db.Model):
+    """Employee leave request and review audit record."""
+    __tablename__ = 'leave_requests'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    leave_type = db.Column(db.String(20), nullable=False)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    days = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending', index=True)
+    reviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    reviewer_comment = db.Column(db.Text, nullable=True)
+    decided_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+
+    employee = db.relationship('User', foreign_keys=[user_id], backref='leave_requests')
+    reviewer = db.relationship('User', foreign_keys=[reviewer_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id, 'user_id': self.user_id,
+            'employee_name': (self.employee.full_name or self.employee.username) if self.employee else 'Unknown',
+            'leave_type': self.leave_type, 'start_date': self.start_date.isoformat(),
+            'end_date': self.end_date.isoformat(), 'days': self.days,
+            'reason': self.reason, 'status': self.status,
+            'reviewer_id': self.reviewer_id,
+            'reviewer_name': (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None,
+            'reviewer_comment': self.reviewer_comment or '',
+            'decided_at': self.decided_at.isoformat() if self.decided_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
 # ── Notifications ──────────────────────────────────────────────────────────────
 
 class Notification(db.Model):

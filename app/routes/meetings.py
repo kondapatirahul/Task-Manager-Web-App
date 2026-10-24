@@ -2,14 +2,23 @@
 Calendar, Meetings, and Scheduling API routes.
 """
 from datetime import datetime, date, timedelta, timezone
+<<<<<<< HEAD
 import urllib.parse
+=======
+from urllib.parse import urlparse
+>>>>>>> origin/main
 from flask import Blueprint, request
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 from app import db
 from app.models import (
+<<<<<<< HEAD
     Meeting, MeetingAttendee, Task, User, Team, TeamMember,
     ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD
+=======
+    Meeting, MeetingAttendee, Task, User, Team,
+    ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD, TeamMember
+>>>>>>> origin/main
 )
 from app.routes.utils import (
     api_success, api_error, active_account_required,
@@ -23,6 +32,7 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 
+<<<<<<< HEAD
 def can_manage_meeting(meeting, user):
     """Check if the user is authorized to modify or cancel a meeting."""
     if not user or not user.is_authenticated:
@@ -90,6 +100,37 @@ def validate_and_normalize_location_link(val):
             raise ValueError("Invalid meeting URL format.")
     return s
 
+=======
+
+def _is_admin():
+    return current_user.role in (ROLE_SUPER_ADMIN, ROLE_ADMIN, 'admin_hr', 'hr')
+
+def _visible_meeting_query():
+    invited_ids = db.session.query(MeetingAttendee.meeting_id).filter_by(user_id=current_user.id)
+    clauses = [Meeting.organizer_id == current_user.id, Meeting.id.in_(invited_ids)]
+    if _is_admin():
+        if current_user.organization_id is not None:
+            clauses.append(Meeting.organization_id == current_user.organization_id)
+        else:
+            clauses.append(Meeting.organizer_id == current_user.id)
+    elif current_user.role == ROLE_TEAM_LEAD:
+        led_team_ids = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+        if led_team_ids:
+            clauses.append(Meeting.team_id.in_(led_team_ids))
+    query = Meeting.query.filter(or_(*clauses))
+    if current_user.organization_id is not None and not _is_admin():
+        query = query.filter(Meeting.organization_id == current_user.organization_id)
+    return query
+
+def _valid_location(value):
+    value = (value or '').strip()
+    if len(value) > 255:
+        return False
+    if not value or '://' not in value:
+        return True  # physical room or empty value
+    parsed = urlparse(value)
+    return parsed.scheme in ('https', 'http') and bool(parsed.netloc) and parsed.username is None and parsed.password is None
+>>>>>>> origin/main
 
 # ── Meeting List & Creation ───────────────────────────────────────────────────
 
@@ -98,6 +139,7 @@ def validate_and_normalize_location_link(val):
 @active_account_required
 def meetings():
     if request.method == 'GET':
+<<<<<<< HEAD
         # Scoped meetings list
         if current_user.is_admin:
             query = Meeting.query.filter(
@@ -134,6 +176,9 @@ def meetings():
         include_cancelled = request.args.get('include_cancelled', '').lower() == 'true'
         if not include_cancelled:
             query = query.filter(Meeting.status != 'cancelled')
+=======
+        query = _visible_meeting_query().filter(Meeting.status != 'cancelled')
+>>>>>>> origin/main
 
         upcoming_only = request.args.get('upcoming')
         if upcoming_only:
@@ -159,7 +204,9 @@ def meetings():
 
         return api_success(res)
 
-    # POST — schedule meeting
+    # POST — only authorized management roles may schedule meetings.
+    if not (_is_admin() or current_user.role == ROLE_TEAM_LEAD):
+        return api_error('Only authorized management users can schedule meetings.', 403)
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip()
     start_str = data.get('start_time')
@@ -182,6 +229,22 @@ def meetings():
 
     if end_time <= start_time:
         return api_error('End time must be after start time.', 400)
+    if not _valid_location(location_or_link):
+        return api_error('Meeting link must be a valid HTTP(S) URL or a room name.', 400)
+    if end_time - start_time > timedelta(hours=24):
+        return api_error('Meeting duration cannot exceed 24 hours.', 400)
+
+    if current_user.role == ROLE_TEAM_LEAD:
+        led_team_ids = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+        if team_id and (not str(team_id).isdigit() or int(team_id) not in led_team_ids):
+            return api_error('You can schedule meetings only for a team you lead.', 403)
+        team_id = int(team_id) if team_id else (led_team_ids[0] if len(led_team_ids) == 1 else None)
+        if not team_id:
+            return api_error('Select a team you lead for this meeting.', 400)
+    elif team_id:
+        team = db.session.get(Team, int(team_id)) if str(team_id).isdigit() else None
+        if not team or (current_user.organization_id and team.organization_id != current_user.organization_id):
+            return api_error('Invalid team for your organization.', 403)
 
     try:
         location_or_link = validate_and_normalize_location_link(raw_location)
@@ -212,8 +275,13 @@ def meetings():
         title=title,
         agenda=agenda,
         organizer_id=current_user.id,
+<<<<<<< HEAD
         team_id=assigned_team_id,
         organization_id=current_user.organization_id or 1,
+=======
+        team_id=int(team_id) if team_id else None,
+        organization_id=current_user.organization_id,
+>>>>>>> origin/main
         start_time=start_time,
         end_time=end_time,
         location_or_link=location_or_link,
@@ -230,8 +298,17 @@ def meetings():
         for uid in invitee_ids:
             try:
                 uid_int = int(uid)
-                if uid_int != current_user.id and User.query.get(uid_int):
+                invitee = db.session.get(User, uid_int)
+                if uid_int == current_user.id or not invitee:
+                    continue
+                if invitee.organization_id != current_user.organization_id:
+                    continue
+                if current_user.role == ROLE_TEAM_LEAD and invitee.team_id != team_id:
+                    continue
+                existing = MeetingAttendee.query.filter_by(meeting_id=meeting.id, user_id=uid_int).first()
+                if not existing:
                     db.session.add(MeetingAttendee(meeting_id=meeting.id, user_id=uid_int, status='invited'))
+<<<<<<< HEAD
                     send_notification(
                         uid_int,
                         f'Meeting Invitation: {title}',
@@ -239,6 +316,9 @@ def meetings():
                         f'/calendar?meeting_id={meeting.id}',
                         'meeting_invite'
                     )
+=======
+                    send_notification(uid_int, f'Meeting Invitation: {title}', f'{current_user.full_name or current_user.username} invited you to {title} ({start_time.strftime("%b %d, %H:%M")})', '/calendar', 'meeting_invite', f'meeting-invite-{meeting.id}-{uid_int}')
+>>>>>>> origin/main
             except (ValueError, TypeError):
                 continue
 
@@ -258,6 +338,8 @@ def meetings():
 @active_account_required
 def meeting_detail(meeting_id):
     meeting = Meeting.query.get_or_404(meeting_id)
+    if not _visible_meeting_query().filter(Meeting.id == meeting.id).first():
+        return api_error('Meeting not found or access denied.', 404)
 
     if request.method == 'GET':
         if not can_view_meeting(meeting, current_user):
@@ -272,9 +354,19 @@ def meeting_detail(meeting_id):
         res['is_url'] = bool(meeting.location_or_link and ('http' in meeting.location_or_link.lower() or 'zoom' in meeting.location_or_link.lower() or 'meet' in meeting.location_or_link.lower()))
         return api_success(res)
 
+<<<<<<< HEAD
     # Permission check for modify / cancel
     if not can_manage_meeting(meeting, current_user):
         return api_error('Only the meeting organizer, team lead, or admin can edit this meeting.', 403)
+=======
+    # Permission check for modify/cancel
+    can_modify = (
+        meeting.organizer_id == current_user.id or
+        _is_admin() or (current_user.role == ROLE_TEAM_LEAD and meeting.team_id in [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()])
+    )
+    if not can_modify:
+        return api_error('Only the meeting organizer or admin can edit this meeting.', 403)
+>>>>>>> origin/main
 
     if request.method == 'DELETE':
         meeting.status = 'cancelled'
@@ -307,6 +399,7 @@ def meeting_detail(meeting_id):
         meeting.agenda = (data['agenda'] or '').strip()
 
     if 'location_or_link' in data:
+<<<<<<< HEAD
         try:
             meeting.location_or_link = validate_and_normalize_location_link(data['location_or_link'])
         except ValueError as e:
@@ -361,6 +454,24 @@ def meeting_detail(meeting_id):
                         f'/calendar?meeting_id={meeting.id}',
                         'meeting_invite'
                     )
+=======
+        candidate_link = str(data['location_or_link'] or '').strip()
+        if not _valid_location(candidate_link):
+            return api_error('Meeting link must be a valid HTTP(S) URL or a room name.', 400)
+        meeting.location_or_link = candidate_link
+    if 'start_time' in data:
+        try:
+            meeting.start_time = datetime.fromisoformat(data['start_time'])
+        except (ValueError, TypeError):
+            return api_error('Invalid start time.', 400)
+    if 'end_time' in data:
+        try:
+            meeting.end_time = datetime.fromisoformat(data['end_time'])
+        except (ValueError, TypeError):
+            return api_error('Invalid end time.', 400)
+    if meeting.end_time <= meeting.start_time or meeting.end_time - meeting.start_time > timedelta(hours=24):
+        return api_error('Meeting end must be after start and duration cannot exceed 24 hours.', 400)
+>>>>>>> origin/main
 
     db.session.commit()
     log_audit('meeting_updated', 'Meeting', meeting.id, f'Updated meeting: {meeting.title}')
@@ -408,6 +519,7 @@ def cancel_meeting_post(meeting_id):
 @active_account_required
 def rsvp_meeting(meeting_id):
     meeting = Meeting.query.get_or_404(meeting_id)
+<<<<<<< HEAD
 
     if meeting.status == 'cancelled':
         return api_error('Cannot RSVP to a cancelled meeting.', 400)
@@ -415,6 +527,10 @@ def rsvp_meeting(meeting_id):
     if not can_view_meeting(meeting, current_user):
         return api_error('You are not authorized to RSVP to this meeting.', 403)
 
+=======
+    if not MeetingAttendee.query.filter_by(meeting_id=meeting.id, user_id=current_user.id).first():
+        return api_error('You are not invited to this meeting.', 403)
+>>>>>>> origin/main
     data = request.get_json(silent=True) or {}
     status = (data.get('status') or '').strip().lower()
 
@@ -423,8 +539,7 @@ def rsvp_meeting(meeting_id):
 
     attendee = MeetingAttendee.query.filter_by(meeting_id=meeting.id, user_id=current_user.id).first()
     if not attendee:
-        attendee = MeetingAttendee(meeting_id=meeting.id, user_id=current_user.id)
-        db.session.add(attendee)
+        return api_error('You are not invited to this meeting.', 403)
 
     attendee.status = status
     db.session.commit()
@@ -476,6 +591,7 @@ def calendar_events():
 
     events = []
 
+<<<<<<< HEAD
     # 1. Task Deadlines (Scoped by Role)
     if current_user.is_admin:
         task_query = Task.query.filter(
@@ -517,6 +633,25 @@ def calendar_events():
         )
 
     tasks = task_query.order_by(Task.due_date.asc()).all()
+=======
+    # 1. Tasks within the authenticated user's authorized scope.
+    personal_scope = (Task.assignee_id == current_user.id) | (Task.user_id == current_user.id)
+    if _is_admin():
+        task_query = Task.query
+        if current_user.organization_id is not None:
+            task_query = task_query.filter(Task.organization_id == current_user.organization_id)
+        else:
+            task_query = task_query.filter(personal_scope | (Task.creator_id == current_user.id))
+    elif current_user.role == ROLE_TEAM_LEAD:
+        team_ids = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+        scope = [personal_scope | (Task.creator_id == current_user.id)]
+        if team_ids:
+            scope.append(Task.team_id.in_(team_ids))
+        task_query = Task.query.filter(or_(*scope))
+    else:
+        task_query = Task.query.filter(personal_scope)
+    tasks = task_query.filter(Task.due_date.isnot(None), Task.due_date >= start_date, Task.due_date <= end_date).all()
+>>>>>>> origin/main
 
     for t in tasks:
         # Determine color badge
@@ -534,11 +669,17 @@ def calendar_events():
             'id': f"task-{t.id}",
             'raw_id': t.id,
             'type': 'task',
+<<<<<<< HEAD
             'title': t.title,
+=======
+            'scope': 'team' if t.team_id else 'my',
+            'title': f"Task: {t.title}",
+>>>>>>> origin/main
             'date': t.due_date.isoformat(),
             'due_date': t.due_date.isoformat(),
             'status': t.status,
             'priority': t.priority,
+<<<<<<< HEAD
             'is_overdue': t.is_overdue,
             'assignee_name': assignee_display,
             'url': f"/tasks/{t.id}",
@@ -598,6 +739,19 @@ def calendar_events():
         MeetingAttendee.user_id == current_user.id
     ).all() if meeting_ids else []
     rsvp_map = {a.meeting_id: a.status for a in attendees}
+=======
+            'assignee_name': (t.assignee.full_name or t.assignee.username) if t.assignee else ((t.user.full_name or t.user.username) if t.user else None),
+            'url': f"/tasks?task_id={t.id}",
+            'color': '#25845A' if t.status == 'completed' else '#C96B45' if t.is_overdue else '#173F35',
+        })
+
+    # 2. Meetings
+    meetings_list = _visible_meeting_query().filter(
+        Meeting.status == 'scheduled',
+        Meeting.start_time >= datetime.combine(start_date, datetime.min.time()),
+        Meeting.start_time <= datetime.combine(end_date, datetime.max.time())
+    ).all()
+>>>>>>> origin/main
 
     for m in meetings_list:
         is_url = bool(m.location_or_link and ('http' in m.location_or_link.lower() or 'zoom' in m.location_or_link.lower() or 'meet' in m.location_or_link.lower()))
@@ -607,18 +761,27 @@ def calendar_events():
             'id': f"meeting-{m.id}",
             'raw_id': m.id,
             'type': 'meeting',
+<<<<<<< HEAD
             'title': m.title,
             'agenda': m.agenda or '',
             'date': m.start_time.date().isoformat(),
+=======
+            'scope': 'team' if m.team_id else 'my',
+            'title': f"Meeting: {m.title}",
+>>>>>>> origin/main
             'start_time': m.start_time.isoformat(),
             'end_time': m.end_time.isoformat(),
             'location_or_link': m.location_or_link or '',
+<<<<<<< HEAD
             'is_url': is_url,
             'organizer_id': m.organizer_id,
             'organizer_name': organizer_name,
             'status': m.status,
             'my_rsvp': rsvp_map.get(m.id, 'none'),
             'can_manage': can_manage_meeting(m, current_user),
+=======
+            'join_url': m.location_or_link if _valid_location(m.location_or_link) and urlparse(m.location_or_link or '').scheme in ('https', 'http') else None,
+>>>>>>> origin/main
             'url': f"/calendar?meeting_id={m.id}",
             'color': '#C96B45', # Terracotta Brand Accent
         })
