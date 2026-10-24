@@ -615,7 +615,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
 
   {% elif current_user.is_team_lead %}
+  // Team Lead Dashboard Data Loader
   try {
+    // 1. Team Attendance
     const teamAttRes = await fetch('/api/attendance/team');
     if (teamAttRes.ok) {
       const teamAtt = (await teamAttRes.json()).data;
@@ -631,25 +633,333 @@ document.addEventListener('DOMContentLoaded', async () => {
               ${m.status === 'active' ? 'Checked In' : 'Away'}
             </span>
           </div>
-        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs);">No team members</p>';
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.5rem 0;">No team members</p>';
+      }
+    }
+
+    // 2. Team Tasks & Review Queue
+    const taskRes = await fetch('/api/tasks');
+    if (taskRes.ok) {
+      const tasks = (await taskRes.json()).data || [];
+      const total = tasks.length;
+      const inReview = tasks.filter(t => t.status === 'in_review').length;
+      const completed = tasks.filter(t => t.status === 'completed').length;
+      const overdue = tasks.filter(t => t.status !== 'completed' && (t.is_overdue || t.status === 'blocked')).length;
+
+      const statTotal = document.getElementById('stat-total');
+      const statReview = document.getElementById('lead-stat-in-review');
+      const statComp = document.getElementById('stat-completed');
+      const statOver = document.getElementById('stat-overdue');
+
+      if (statTotal) statTotal.textContent = total;
+      if (statReview) statReview.textContent = inReview;
+      if (statComp) statComp.textContent = completed;
+      if (statOver) statOver.textContent = overdue;
+
+      const taskContainer = document.getElementById('task-list-container');
+      if (taskContainer) {
+        if (!tasks.length) {
+          taskContainer.innerHTML = '<p class="text-muted" style="text-align: center; padding: 2rem;">No team tasks assigned yet. Click Tasks & Board to create assignments.</p>';
+        } else {
+          // Sort: in_review first, then overdue, then active
+          const sorted = [...tasks].sort((a, b) => {
+            if (a.status === 'in_review' && b.status !== 'in_review') return -1;
+            if (b.status === 'in_review' && a.status !== 'in_review') return 1;
+            if (a.is_overdue && !b.is_overdue) return -1;
+            if (b.is_overdue && !a.is_overdue) return 1;
+            return 0;
+          });
+
+          taskContainer.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 0.65rem; padding: 0.75rem 0;">
+              ${sorted.slice(0, 7).map(t => {
+                const isReview = (t.status === 'in_review');
+                const badgeColor = isReview ? 'var(--color-accent)' : (t.status === 'completed' ? '#25845A' : (t.is_overdue ? '#D94C4C' : '#173F35'));
+                const actionLabel = isReview ? 'Review Work →' : 'View Task →';
+                const assigneeName = t.assignee_name || (t.assignee ? (t.assignee.full_name || t.assignee.username) : 'Unassigned');
+
+                return `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 4px solid ${badgeColor}; gap: 0.75rem; flex-wrap: wrap;">
+                    <div style="min-width: 0; flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">${t.title}</span>
+                        <span class="badge" style="font-size: 0.65rem; background: ${badgeColor}15; color: ${badgeColor}; font-weight: 700; text-transform: uppercase;">${t.status.replace('_', ' ')}</span>
+                        ${t.priority ? `<span class="badge" style="font-size: 0.65rem; background: #fff; border: 1px solid var(--color-border);">${t.priority}</span>` : ''}
+                      </div>
+                      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.2rem;">
+                        Assignee: <b>${assigneeName}</b> · Due: <b>${t.due_date || 'No deadline'}</b>
+                      </div>
+                    </div>
+                    <a href="/tasks/${t.id}" class="btn ${isReview ? 'btn-primary' : 'btn-secondary'} btn-xs" style="white-space: nowrap;">
+                      ${actionLabel}
+                    </a>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }
+      }
+    }
+
+    // 3. Upcoming Meetings
+    const meetRes = await fetch('/api/meetings?upcoming=1');
+    if (meetRes.ok) {
+      const meetings = (await meetRes.json()).data || [];
+      const mList = document.getElementById('dashboard-upcoming-list');
+      if (mList) {
+        mList.innerHTML = meetings.length ? meetings.slice(0, 4).map(m => `
+          <div style="padding: 0.6rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid var(--color-accent); margin-bottom: 0.4rem;">
+            <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--color-primary);">${m.title}</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.15rem;">
+              ${new Date(m.start_time).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+            </div>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.75rem 0; text-align: center;">No upcoming meetings</p>';
       }
     }
   } catch (e) {}
 
   {% else %}
-  // Employee upcoming meetings
+  // Employee Dashboard Data Loader
   try {
-    const meetRes = await fetch('/api/meetings?upcoming=1');
-    if (meetRes.ok) {
-      const meetings = (await meetRes.json()).data;
-      const mList = document.getElementById('employee-meetings-list');
-      if (mList) {
-        mList.innerHTML = meetings.length ? meetings.slice(0, 4).map(m => `
-          <div style="padding: 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary);">
-            <div style="font-weight: 600; font-size: var(--font-size-xs);">${m.title}</div>
-            <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(m.start_time).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}</div>
-          </div>
-        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.5rem 0;">No upcoming meetings</p>';
+    // 1. Employee Attendance & Hours
+    const attMyRes = await fetch('/api/attendance/my');
+    if (attMyRes.ok) {
+      const attData = (await attMyRes.json()).data;
+      const weekHours = document.getElementById('emp-hours-week');
+      if (weekHours) weekHours.textContent = `${attData.weekly_hours}h`;
+
+      const recentShiftsContainer = document.getElementById('emp-recent-shifts');
+      if (recentShiftsContainer) {
+        const records = attData.records || [];
+        if (!records.length) {
+          recentShiftsContainer.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); text-align: center; padding: 0.5rem 0;">No recent shift records</p>';
+        } else {
+          recentShiftsContainer.innerHTML = records.slice(0, 4).map(r => {
+            const dObj = r.check_in ? new Date(r.check_in) : new Date(r.created_at);
+            const dateStr = dObj.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const inStr = r.check_in ? new Date(r.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+            const outStr = r.check_out ? new Date(r.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (r.status === 'active' ? 'Active' : '-');
+            const lateBadge = r.is_late ? '<span class="badge badge-high" style="font-size: 0.65rem;">Late</span>' : '';
+
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-xs); font-size: var(--font-size-xs);">
+                <div>
+                  <span style="font-weight: 600;">${dateStr}</span>
+                  <span style="color: var(--color-muted); margin-left: 0.35rem;">(${inStr} – ${outStr})</span>
+                  ${lateBadge}
+                </div>
+                <span style="font-weight: 700; color: var(--color-primary);">${r.duration_display || r.duration_hours + 'h'}</span>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    }
+
+    // 2. Employee Tasks, Summary Metrics, Smart Priority, and Productivity
+    const taskRes = await fetch('/api/tasks');
+    if (taskRes.ok) {
+      const tasks = (await taskRes.json()).data || [];
+      const total = tasks.length;
+      const personalTasks = tasks.filter(t => t.is_personal);
+      const companyTasks = tasks.filter(t => !t.is_personal);
+
+      const todoCount = tasks.filter(t => t.status === 'todo' || t.status === 'pending').length;
+      const inProgressCount = tasks.filter(t => t.status === 'in_progress').length;
+      const inReviewCount = tasks.filter(t => t.status === 'in_review').length;
+      const completedCount = tasks.filter(t => t.status === 'completed').length;
+      const overdueCount = tasks.filter(t => t.status !== 'completed' && (t.is_overdue || t.status === 'blocked')).length;
+
+      // Populate 6 Summary Cards
+      const statTotal = document.getElementById('stat-total');
+      const statBreakdown = document.getElementById('emp-stat-personal-breakdown');
+      const statTodo = document.getElementById('emp-stat-todo');
+      const statPending = document.getElementById('stat-pending');
+      const statReview = document.getElementById('emp-stat-in-review');
+      const statCompleted = document.getElementById('stat-completed');
+      const statOverdue = document.getElementById('stat-overdue');
+
+      if (statTotal) statTotal.textContent = total;
+      if (statBreakdown) statBreakdown.textContent = `${companyTasks.length} assigned · ${personalTasks.length} personal`;
+      if (statTodo) statTodo.textContent = todoCount;
+      if (statPending) statPending.textContent = inProgressCount;
+      if (statReview) statReview.textContent = inReviewCount;
+      if (statCompleted) statCompleted.textContent = completedCount;
+      if (statOverdue) statOverdue.textContent = overdueCount;
+
+      // Populate Weekly Productivity Breakdown
+      const now = new Date();
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const assignedThisWeek = tasks.filter(t => t.created_at && new Date(t.created_at) >= oneWeekAgo).length;
+      const completedThisWeek = tasks.filter(t => t.status === 'completed' && t.completed_at && new Date(t.completed_at) >= oneWeekAgo).length;
+
+      const weeklyAssigned = document.getElementById('weekly-assigned');
+      const weeklyCompleted = document.getElementById('weekly-completed');
+      const weeklyReview = document.getElementById('weekly-review');
+      const weeklyOverdue = document.getElementById('weekly-overdue');
+      const weeklyRate = document.getElementById('weekly-progress-rate');
+      const weeklyTrend = document.getElementById('weekly-progress-trend');
+
+      if (weeklyAssigned) weeklyAssigned.textContent = assignedThisWeek;
+      if (weeklyCompleted) weeklyCompleted.textContent = completedThisWeek;
+      if (weeklyReview) weeklyReview.textContent = inReviewCount;
+      if (weeklyOverdue) weeklyOverdue.textContent = overdueCount;
+
+      const completionPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+      if (weeklyRate) weeklyRate.textContent = `${completionPct}% Complete`;
+      if (weeklyTrend) weeklyTrend.textContent = `${completedCount} of ${total} total assigned tasks completed`;
+
+      // Smart Priority Recommendation Algorithm
+      const activeTasks = tasks.filter(t => t.status !== 'completed');
+      if (activeTasks.length > 0) {
+        // Sort priority: overdue > priority (urgent > high > medium > low) > due date
+        const priorityOrder = { 'urgent': 4, 'high': 3, 'medium': 2, 'low': 1 };
+        activeTasks.sort((a, b) => {
+          if (a.is_overdue && !b.is_overdue) return -1;
+          if (b.is_overdue && !a.is_overdue) return 1;
+          const pa = priorityOrder[a.priority] || 2;
+          const pb = priorityOrder[b.priority] || 2;
+          if (pa !== pb) return pb - pa;
+          if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+          if (a.due_date) return -1;
+          return 0;
+        });
+
+        const topTask = activeTasks[0];
+        const nextTitle = document.getElementById('smart-next-title');
+        const nextReason = document.getElementById('smart-next-reason');
+        const nextMeta = document.getElementById('smart-next-meta');
+        const nextAction = document.getElementById('smart-next-action');
+
+        if (nextTitle) nextTitle.textContent = topTask.title;
+        if (nextReason) {
+          if (topTask.is_overdue) {
+            nextReason.textContent = 'Overdue Deadline';
+            nextReason.className = 'badge badge-overdue';
+          } else if (topTask.priority === 'urgent' || topTask.priority === 'high') {
+            nextReason.textContent = `${topTask.priority.toUpperCase()} Priority`;
+            nextReason.className = 'badge badge-high';
+          } else if (topTask.status === 'in_progress') {
+            nextReason.textContent = 'In Progress';
+            nextReason.className = 'badge badge-pending';
+          } else {
+            nextReason.textContent = 'Next Up';
+            nextReason.className = 'badge badge-employee';
+          }
+        }
+        if (nextMeta) {
+          const typeLabel = topTask.is_personal ? 'Private Personal Task' : 'Company Assigned';
+          nextMeta.textContent = `Due: ${topTask.due_date || 'No deadline'} · ${typeLabel}`;
+        }
+        if (nextAction) {
+          nextAction.innerHTML = `<a href="/tasks/${topTask.id}" class="btn btn-primary btn-sm">Work on Task →</a>`;
+        }
+      } else {
+        const nextTitle = document.getElementById('smart-next-title');
+        const nextReason = document.getElementById('smart-next-reason');
+        const nextMeta = document.getElementById('smart-next-meta');
+        const nextAction = document.getElementById('smart-next-action');
+
+        if (nextTitle) nextTitle.textContent = 'All caught up! No active tasks.';
+        if (nextReason) {
+          nextReason.textContent = 'Completed';
+          nextReason.className = 'badge badge-completed';
+        }
+        if (nextMeta) nextMeta.textContent = 'Great work! You have finished all pending assignments.';
+        if (nextAction) {
+          nextAction.innerHTML = `<a href="/tasks" class="btn btn-secondary btn-sm">+ Create Personal Task</a>`;
+        }
+      }
+
+      // My Active Tasks List
+      const taskContainer = document.getElementById('task-list-container');
+      if (taskContainer) {
+        if (!activeTasks.length) {
+          taskContainer.innerHTML = '<p class="text-muted" style="text-align: center; padding: 2rem;">No active tasks. You are all caught up!</p>';
+        } else {
+          taskContainer.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 0.65rem; padding: 0.75rem 0;">
+              ${activeTasks.slice(0, 5).map(t => {
+                const badgeColor = t.status === 'in_review' ? 'var(--color-accent)' : (t.is_overdue ? '#D94C4C' : (t.priority === 'high' ? '#E6A23C' : '#173F35'));
+                const typeBadge = t.is_personal ? '<span class="badge" style="background: #F4EBE2; color: #7D4829; font-size: 0.65rem;">Personal</span>' : '<span class="badge" style="background: #EAF5EF; color: #173F35; font-size: 0.65rem;">Assigned</span>';
+
+                return `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 4px solid ${badgeColor}; gap: 0.75rem; flex-wrap: wrap;">
+                    <div style="min-width: 0; flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">${t.title}</span>
+                        ${typeBadge}
+                        <span class="badge" style="font-size: 0.65rem; background: ${badgeColor}15; color: ${badgeColor}; font-weight: 700; text-transform: uppercase;">${t.status.replace('_', ' ')}</span>
+                      </div>
+                      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.2rem;">
+                        Due: <b>${t.due_date || 'No deadline'}</b> · Priority: <b>${t.priority}</b>
+                      </div>
+                    </div>
+                    <a href="/tasks/${t.id}" class="btn btn-secondary btn-xs" style="white-space: nowrap;">
+                      View Task →
+                    </a>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }
+      }
+
+      // Recent Activity List
+      const actList = document.getElementById('emp-recent-activity-list');
+      if (actList) {
+        const activities = [];
+        tasks.forEach(t => {
+          if (t.completed_at) {
+            activities.push({ text: `Completed task: <b>${t.title}</b>`, date: new Date(t.completed_at), type: 'completed' });
+          } else if (t.status === 'in_review') {
+            activities.push({ text: `Submitted task for review: <b>${t.title}</b>`, date: new Date(t.updated_at || t.created_at), type: 'review' });
+          } else if (t.created_at) {
+            activities.push({ text: `Task created: <b>${t.title}</b>`, date: new Date(t.created_at), type: 'created' });
+          }
+        });
+        activities.sort((a, b) => b.date - a.date);
+
+        if (!activities.length) {
+          actList.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.75rem; text-align: center;">No recent task activity</p>';
+        } else {
+          actList.innerHTML = activities.slice(0, 5).map(a => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--color-border-subtle); font-size: var(--font-size-xs);">
+              <div>${a.text}</div>
+              <span style="color: var(--color-muted); font-size: 0.7rem;">${a.date.toLocaleDateString([], {month: 'short', day: 'numeric'})}</span>
+            </div>
+          `).join('');
+        }
+      }
+
+      // Upcoming Deadlines List
+      const upcomingDeadlines = tasks
+        .filter(t => t.status !== 'completed' && t.due_date)
+        .sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+      const deadList = document.getElementById('dashboard-upcoming-list');
+      if (deadList) {
+        if (!upcomingDeadlines.length) {
+          deadList.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 1rem 0; text-align: center;">No upcoming deadlines</p>';
+        } else {
+          deadList.innerHTML = upcomingDeadlines.slice(0, 5).map(t => {
+            const isOverdue = t.is_overdue;
+            return `
+              <div style="padding: 0.5rem 0.6rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid ${isOverdue ? '#D94C4C' : 'var(--color-primary)'}; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
+                <div style="min-width: 0; flex: 1;">
+                  <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.title}</div>
+                  <div style="font-size: 0.7rem; color: ${isOverdue ? 'var(--color-danger)' : 'var(--color-muted)'};">
+                    ${isOverdue ? 'Overdue: ' : 'Due: '} <b>${t.due_date}</b>
+                  </div>
+                </div>
+                <a href="/tasks/${t.id}" class="btn btn-secondary btn-xs" style="margin-left: 0.5rem;">Open</a>
+              </div>
+            `;
+          }).join('');
+        }
       }
     }
   } catch (e) {}

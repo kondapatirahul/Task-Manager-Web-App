@@ -968,6 +968,27 @@ def task_comments(task_id):
             )
             db.session.add(att)
 
+    # Notify other task participants and mentions
+    target_users = set()
+    if task.assignee_id and task.assignee_id != current_user.id:
+        target_users.add(task.assignee_id)
+    if task.creator_id and task.creator_id != current_user.id:
+        target_users.add(task.creator_id)
+    for m in (msg.mentions or []):
+        if m.get('id') and m['id'] != current_user.id:
+            target_users.add(m['id'])
+
+    commenter_name = current_user.full_name or current_user.username
+    snippet = content[:80] + '...' if len(content) > 80 else content
+    for uid in target_users:
+        send_notification(
+            uid,
+            f'New Comment on "{task.title}"',
+            f'{commenter_name}: {snippet}',
+            f'/tasks/{task.id}',
+            'task_message'
+        )
+
     db.session.commit()
     log_audit('comment_added', 'Task', task.id, f'Comment posted on task {task.id}')
     return api_success(msg.to_dict(), message='Comment posted.', status_code=201)

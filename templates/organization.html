@@ -26,8 +26,12 @@
 <div class="card" style="margin-bottom: 2rem;">
   <div class="card-header" style="border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.25rem;">
     <div style="display: flex; gap: 1rem;">
+      {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
       <button class="btn btn-ghost btn-sm org-tab-btn active" data-tab="departments" style="font-weight: 700; color: var(--color-primary);">Departments</button>
       <button class="btn btn-ghost btn-sm org-tab-btn" data-tab="teams" style="font-weight: 600;">Teams & Rosters</button>
+      {% else %}
+      <button class="btn btn-ghost btn-sm org-tab-btn active" data-tab="teams" style="font-weight: 700; color: var(--color-primary);">Teams & Rosters</button>
+      {% endif %}
       {% if current_user.role in ['super_admin', 'admin_hr'] %}
       <button class="btn btn-ghost btn-sm org-tab-btn" data-tab="audit" style="font-weight: 600;">Audit & Security History</button>
       {% endif %}
@@ -35,14 +39,16 @@
   </div>
 
   <!-- Tab 1: Departments -->
+  {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
   <div id="tab-departments" class="org-tab-pane" style="padding: 1.5rem;">
     <div class="metrics-grid" id="dept-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));">
       <div style="grid-column: 1 / -1; text-align: center; color: var(--color-muted); padding: 2rem;">Loading departments...</div>
     </div>
   </div>
 
+  {% endif %}
   <!-- Tab 2: Teams -->
-  <div id="tab-teams" class="org-tab-pane" style="padding: 1.5rem; display: none;">
+  <div id="tab-teams" class="org-tab-pane" style="padding: 1.5rem; {% if current_user.role == 'team_lead' %}display: block;{% else %}display: none;{% endif %}">
     <div class="metrics-grid" id="teams-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
       <div style="grid-column: 1 / -1; text-align: center; color: var(--color-muted); padding: 2rem;">Loading teams...</div>
     </div>
@@ -271,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       grid.innerHTML = teams.map(t => `
-        <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
+        <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; border-top: 3px solid var(--color-primary);">
           <div>
             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
               <h4 style="font-size: var(--font-size-base); font-weight: 700; color: var(--color-primary); margin: 0;">${t.name}</h4>
@@ -280,21 +286,100 @@ document.addEventListener('DOMContentLoaded', () => {
             <p style="font-size: var(--font-size-xs); color: var(--color-text-light); margin-bottom: 0.75rem;">
               ${t.description || 'Dedicated organizational team.'}
             </p>
-            <div style="background-color: var(--color-surface-subtle); padding: 0.5rem 0.75rem; border-radius: var(--radius-sm); font-size: var(--font-size-xs); margin-bottom: 0.75rem;">
-              <span style="color: var(--color-muted);">Lead:</span>
-              <strong style="color: var(--color-text); margin-left: 0.25rem;">${t.lead_name || 'Unassigned'}</strong>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
+              <div style="background-color: var(--color-surface-subtle); padding: 0.4rem 0.6rem; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">
+                <span style="color: var(--color-muted); display: block; font-size: 0.65rem;">LEAD</span>
+                <strong style="color: var(--color-text);">${t.lead_name || 'Unassigned'}</strong>
+              </div>
+              <div style="background-color: var(--color-surface-subtle); padding: 0.4rem 0.6rem; border-radius: var(--radius-sm); font-size: var(--font-size-xs);">
+                <span style="color: var(--color-muted); display: block; font-size: 0.65rem;">TASKS</span>
+                <strong>${t.active_tasks ?? 0} active</strong> · <span style="color: var(--color-muted);">${t.completed_tasks ?? 0} done</span>
+              </div>
             </div>
           </div>
-          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border); padding-top: 0.75rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--color-border); padding-top: 0.75rem; gap: 0.5rem;">
             <span style="font-size: var(--font-size-xs); color: var(--color-muted);">Members: <strong>${t.member_count || 0}</strong></span>
-            {% if current_user.role in ['super_admin', 'admin_hr', 'team_lead'] %}
-            <button class="btn btn-ghost btn-sm open-add-member-btn" data-team-id="${t.id}" data-team-name="${t.name}">
-              + Add Member
-            </button>
-            {% endif %}
+            <div style="display: flex; gap: 0.35rem;">
+              <button class="btn btn-secondary btn-xs view-roster-btn" data-team-id="${t.id}" data-team-name="${t.name}">
+                View Roster
+              </button>
+              {% if current_user.role in ['super_admin', 'admin_hr', 'team_lead'] %}
+              <button class="btn btn-ghost btn-xs open-add-member-btn" data-team-id="${t.id}" data-team-name="${t.name}">
+                + Add
+              </button>
+              {% endif %}
+            </div>
           </div>
         </div>
       `).join('');
+
+      document.querySelectorAll('.view-roster-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const tid = btn.dataset.teamId;
+          const tname = btn.dataset.teamName;
+          try {
+            const mRes = await fetch(`/api/organization/teams/${tid}/members`);
+            const mJson = await mRes.json();
+            const members = mJson.data || [];
+            let rosterHtml = `
+              <div class="modal-card" style="max-width: 650px;">
+                <div class="modal-header">
+                  <h3>Team Roster: ${tname}</h3>
+                  <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+                    <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  </button>
+                </div>
+                <div class="modal-body" style="padding: 1.25rem;">
+                  <table class="table" style="width: 100%;">
+                    <thead>
+                      <tr>
+                        <th>Member</th>
+                        <th>Role / Designation</th>
+                        <th>Active Tasks</th>
+                        <th>Completed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${!members.length ? '<tr><td colspan="4" style="text-align: center; color: var(--color-muted);">No members assigned yet.</td></tr>' : 
+                        members.map(m => `
+                          <tr>
+                            <td>
+                              <strong>${m.full_name || 'Member'}</strong>
+                              <div style="font-size: 0.65rem; color: var(--color-muted);">${m.employee_id_code || ''}</div>
+                            </td>
+                            <td>
+                              <span class="badge badge-${m.role || 'employee'}">${m.role_in_team || m.role || 'Member'}</span>
+                            </td>
+                            <td><strong>${m.active_tasks ?? 0}</strong></td>
+                            <td style="color: var(--color-muted);">${m.completed_tasks ?? 0}</td>
+                          </tr>
+                        `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary modal-close-trigger">Close</button>
+                  <a href="/tasks" class="btn btn-primary btn-sm">Assign Work on Board →</a>
+                </div>
+              </div>
+            `;
+            let rosterModal = document.getElementById('roster-modal');
+            if (!rosterModal) {
+              rosterModal = document.createElement('div');
+              rosterModal.className = 'modal-overlay';
+              rosterModal.id = 'roster-modal';
+              document.body.appendChild(rosterModal);
+            }
+            rosterModal.innerHTML = rosterHtml;
+            rosterModal.querySelectorAll('.modal-close-trigger').forEach(c => {
+              c.addEventListener('click', () => rosterModal.classList.remove('is-open'));
+            });
+            rosterModal.classList.add('is-open');
+          } catch (e) {
+            alert('Failed to load roster: ' + e.message);
+          }
+        });
+      });
 
       document.querySelectorAll('.open-add-member-btn').forEach(b => {
         b.addEventListener('click', () => {

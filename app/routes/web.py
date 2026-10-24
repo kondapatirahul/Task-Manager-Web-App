@@ -278,7 +278,13 @@ def employee_meetings():
 @web_bp.route('/employee/notifications')
 @login_required
 def employee_notifications():
-    return render_template('dashboard.html', active_page='dashboard', open_notifications=True)
+    return render_template('notifications.html', active_page='notifications')
+
+
+@web_bp.route('/notifications')
+@login_required
+def notifications():
+    return render_template('notifications.html', active_page='notifications')
 
 
 # ── Dedicated Task Detail View ────────────────────────────────────────────────
@@ -367,14 +373,14 @@ def teams():
 
 @web_bp.route('/organization')
 @login_required
-@web_roles_required('super_admin', 'admin')
+@web_roles_required('super_admin', 'admin', 'admin_hr', 'team_lead')
 def organization():
     return render_template('organization.html', active_page='organization')
 
 
 @web_bp.route('/reports')
 @login_required
-@web_roles_required('super_admin', 'admin')
+@web_roles_required('super_admin', 'admin', 'admin_hr', 'team_lead')
 def reports():
     return render_template('reports.html', active_page='reports')
 

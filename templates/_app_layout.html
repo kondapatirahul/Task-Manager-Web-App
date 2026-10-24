@@ -72,9 +72,15 @@
       {% endif %}
       {% if current_user.role == 'employee' %}
       <li>
-        <a href="{{ url_for('web.employee_dashboard') }}#quick-attendance-widget" class="sidebar-link">
+        <a href="{{ url_for('web.employee_attendance') }}" class="sidebar-link {% if active_page == 'attendance' %}active{% endif %}">
           <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
           <span>Attendance</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('web.calendar') }}" class="sidebar-link {% if active_page == 'calendar' %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          <span>Calendar & Meetings</span>
         </a>
       </li>
       <li>

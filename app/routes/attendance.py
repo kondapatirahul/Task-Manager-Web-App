@@ -114,13 +114,26 @@ def get_today_status():
     else:
         active_duration_seconds = 0
 
+    # Standard Shift: 09:30 AM threshold
+    is_late = False
+    ref_session = active_session or (completed_today[0] if completed_today else None)
+    if ref_session and ref_session.check_in:
+        ci = ref_session.check_in
+        if ci.hour > 9 or (ci.hour == 9 and ci.minute > 30):
+            is_late = True
+
+    status_label = 'working' if active_session else ('completed' if last_completed else 'not_checked_in')
+
     return api_success({
         'is_checked_in': active_session is not None,
         'has_completed_shift': last_completed is not None and active_session is None,
+        'status_label': status_label,
+        'is_late': is_late,
         'active_session': active_session.to_dict() if active_session else None,
         'last_completed_session': last_completed.to_dict() if last_completed else None,
         'today_duration_minutes': total_minutes,
         'today_duration_hours': round(total_minutes / 60.0, 2),
+        'today_duration_display': format_duration(total_minutes),
         'active_duration_seconds': active_duration_seconds,
         'completed_duration_seconds': sum(a.duration_minutes * 60 for a in completed_today),
     })
@@ -218,9 +231,18 @@ def my_attendance():
         Attendance.check_in < datetime.combine(date.today(), datetime.min.time())
     ).count()
 
+    serialized_records = []
+    for r in records:
+        rd = r.to_dict()
+        rd['duration_display'] = format_duration(r.duration_minutes)
+        rd['is_late'] = bool(r.check_in and (r.check_in.hour > 9 or (r.check_in.hour == 9 and r.check_in.minute > 30)))
+        rd['is_missing_checkout'] = bool(r.status == 'active' and r.check_in and r.check_in.date() < date.today())
+        serialized_records.append(rd)
+
     return api_success({
-        'records': [r.to_dict() for r in records],
+        'records': serialized_records,
         'weekly_hours': round(weekly_minutes / 60.0, 2),
+        'weekly_duration_display': format_duration(weekly_minutes),
         'missing_checkouts_count': missing_checkouts,
     })
 
