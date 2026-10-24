@@ -23,14 +23,32 @@ def get_stats():
         query = Task.query.filter(
             or_(Task.is_personal.is_(False), Task.is_personal.is_(None), Task.creator_id == current_user.id)
         )
+    elif current_user.is_team_lead:
+        from app.models import Team, TeamMember
+        led_teams = Team.query.filter_by(lead_id=current_user.id).all()
+        led_team_ids = [t.id for t in led_teams]
+        if current_user.team_id and current_user.team_id not in led_team_ids:
+            led_team_ids.append(current_user.team_id)
+        team_member_ids = [m.user_id for m in TeamMember.query.filter(TeamMember.team_id.in_(led_team_ids)).all()] if led_team_ids else []
+        team_scope = [Task.team_id.in_(led_team_ids)] if led_team_ids else []
+        member_scope = [Task.assignee_id.in_(team_member_ids), Task.user_id.in_(team_member_ids)] if team_member_ids else []
+        query = Task.query.filter(
+            or_(
+                Task.user_id == current_user.id,
+                Task.assignee_id == current_user.id,
+                Task.creator_id == current_user.id,
+                *team_scope,
+                *member_scope
+            ),
+            or_(Task.is_personal.is_(False), Task.is_personal.is_(None), Task.creator_id == current_user.id)
+        )
     else:
         query = Task.query.filter(
             or_(
                 Task.user_id == current_user.id,
                 Task.assignee_id == current_user.id,
                 Task.creator_id == current_user.id
-            ),
-            or_(Task.is_personal.is_(False), Task.is_personal.is_(None), Task.creator_id == current_user.id)
+            )
         )
 
     all_tasks = query.all()
@@ -203,15 +221,16 @@ def get_stats():
 
         for s in submissions:
             t = task_map.get(s.task_id)
+            user_obj = s.submitter
             recent_activity.append({
                 'id': f"sub-{s.id}",
                 'task_id': s.task_id,
                 'task_title': t.title if t else 'Task',
                 'actor_id': s.user_id,
-                'actor_name': (s.user.full_name or s.user.username) if s.user else 'Employee',
+                'actor_name': (user_obj.full_name or user_obj.username) if user_obj else 'Employee',
                 'old_status': 'in_progress',
                 'new_status': 'in_review',
-                'comment': f"Work submitted: {s.comments or 'Deliverables ready'}",
+                'comment': f"Work submitted: {s.notes or 'Deliverables ready'}",
                 'created_at': s.created_at.isoformat() if s.created_at else None,
                 'type': 'work_submission'
             })

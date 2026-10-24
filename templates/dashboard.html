@@ -25,6 +25,10 @@
         <svg class="icon icon-xs" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         <span>Tasks & Board</span>
       </a>
+      <a href="{{ url_for('web.leaves') }}" class="btn btn-secondary btn-xs">
+        <svg class="icon icon-xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>Request Leave</span>
+      </a>
     </div>
     {% endif %}
   </div>
@@ -55,43 +59,47 @@
      ADMIN / HR DASHBOARD
      ========================================================================= -->
 <div class="metrics-grid" id="admin-metrics" style="margin-bottom: 2rem;">
-  <div class="metric-card metric-total">
+  <div class="metric-card metric-total" title="Total active and provisioned user accounts across all departments">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-employees">-</div>
       <div class="metric-label">Total Employees</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Active accounts</div>
     </div>
   </div>
 
-  <div class="metric-card metric-pending">
+  <div class="metric-card metric-pending" title="Cross-functional and departmental teams currently configured">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-teams">-</div>
       <div class="metric-label">Active Teams</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Configured groups</div>
     </div>
   </div>
 
-  <div class="metric-card metric-completed">
+  <div class="metric-card metric-completed" title="Employees currently marked present or active on shift today">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-active-att">-</div>
       <div class="metric-label">Checked In Today</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Staff presence</div>
     </div>
   </div>
 
-  <div class="metric-card metric-overdue">
+  <div class="metric-card metric-overdue" title="All active company work items excluding private personal tasks">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-tasks">-</div>
       <div class="metric-label">Company Tasks</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Excludes private tasks</div>
     </div>
   </div>
 </div>
@@ -156,6 +164,10 @@
           <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           <span>Export Timesheet / Task CSV</span>
         </a>
+        <a href="{{ url_for('web.leaves') }}" class="btn btn-secondary btn-sm" style="justify-content: flex-start;">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span>Manage Leave Requests</span>
+        </a>
       </div>
     </div>
   </div>
@@ -166,43 +178,47 @@
      TEAM LEAD DASHBOARD
      ========================================================================= -->
 <div class="metrics-grid" id="lead-metrics" style="margin-bottom: 2rem;">
-  <div class="metric-card metric-total">
+  <div class="metric-card metric-total" title="Active company tasks assigned across your authorized team">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-total">0</div>
       <div class="metric-label">Team Tasks</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Authorized team scope</div>
     </div>
   </div>
 
-  <div class="metric-card metric-pending">
+  <div class="metric-card metric-pending" title="Work submissions from team members awaiting your review and approval">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="lead-stat-in-review">0</div>
       <div class="metric-label">Awaiting Review</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Submissions queue</div>
     </div>
   </div>
 
-  <div class="metric-card metric-completed">
+  <div class="metric-card metric-completed" title="Tasks verified, approved and marked completed">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-completed">0</div>
       <div class="metric-label">Completed Tasks</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Successfully delivered</div>
     </div>
   </div>
 
-  <div class="metric-card metric-overdue">
+  <div class="metric-card metric-overdue" title="Unfinished tasks past due date or blocked by blockers">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-overdue">0</div>
       <div class="metric-label">Overdue / Blocked</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Needs intervention</div>
     </div>
   </div>
 </div>
@@ -229,13 +245,13 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="margin-top: 1.5rem;">
       <div class="card-header">
-        <h3 class="card-title">Upcoming Meetings</h3>
-        <a href="{{ url_for('web.calendar') }}" class="btn btn-link btn-xs">Calendar</a>
+        <h3 class="card-title">Pending Leave Requests</h3>
+        <a href="{{ url_for('web.leaves') }}" class="btn btn-link btn-xs">View All</a>
       </div>
-      <div id="dashboard-upcoming-list">
-        <p class="text-muted" style="font-size: var(--font-size-sm); padding: 1rem 0;">Checking meetings...</p>
+      <div id="lead-pending-leaves-list" style="display: flex; flex-direction: column; gap: 0.6rem;">
+        <p class="text-muted" style="font-size: var(--font-size-xs);">Checking leave requests...</p>
       </div>
     </div>
   </div>
@@ -247,7 +263,7 @@
      ========================================================================= -->
 <!-- 6 Summary Cards -->
 <div class="metrics-grid" id="dashboard-metrics" style="margin-bottom: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
-  <div class="metric-card metric-total">
+  <div class="metric-card metric-total" title="All tasks assigned to you or created as personal tasks">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
     </div>
@@ -258,53 +274,58 @@
     </div>
   </div>
 
-  <div class="metric-card" style="border-left: 4px solid var(--color-muted);">
+  <div class="metric-card" style="border-left: 4px solid var(--color-muted);" title="Tasks ready to be started">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="emp-stat-todo">0</div>
       <div class="metric-label">To Do</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Not yet started</div>
     </div>
   </div>
 
-  <div class="metric-card metric-pending">
+  <div class="metric-card metric-pending" title="Tasks currently being actively worked on">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-pending">0</div>
       <div class="metric-label">In Progress</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Actively working</div>
     </div>
   </div>
 
-  <div class="metric-card" style="border-left: 4px solid var(--color-accent);">
+  <div class="metric-card" style="border-left: 4px solid var(--color-accent);" title="Deliverables submitted awaiting Team Lead or Admin verification">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M2 12h5l3 5 4-11 3 6h5"></path></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="emp-stat-in-review">0</div>
       <div class="metric-label">Awaiting Review</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Pending approval</div>
     </div>
   </div>
 
-  <div class="metric-card metric-completed">
+  <div class="metric-card metric-completed" title="Tasks successfully verified and approved">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-completed">0</div>
       <div class="metric-label">Completed</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Verified done</div>
     </div>
   </div>
 
-  <div class="metric-card metric-overdue">
+  <div class="metric-card metric-overdue" title="Uncompleted tasks whose due date has passed">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-overdue">0</div>
       <div class="metric-label">Overdue</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Past deadline</div>
     </div>
   </div>
 </div>
@@ -702,20 +723,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    // 3. Upcoming Meetings
-    const meetRes = await fetch('/api/meetings?upcoming=1');
-    if (meetRes.ok) {
-      const meetings = (await meetRes.json()).data || [];
-      const mList = document.getElementById('dashboard-upcoming-list');
-      if (mList) {
-        mList.innerHTML = meetings.length ? meetings.slice(0, 4).map(m => `
-          <div style="padding: 0.6rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid var(--color-accent); margin-bottom: 0.4rem;">
-            <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--color-primary);">${m.title}</div>
-            <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.15rem;">
-              ${new Date(m.start_time).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}
+    // 3. Pending Leave Requests for Team Lead
+    const leavesRes = await fetch('/api/leaves/team?status=pending');
+    if (leavesRes.ok) {
+      const leaves = (await leavesRes.json()).data || [];
+      const lList = document.getElementById('lead-pending-leaves-list');
+      if (lList) {
+        lList.innerHTML = leaves.length ? leaves.slice(0, 4).map(l => `
+          <div style="padding: 0.6rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid #D97706; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+            <div>
+              <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--color-primary);">${l.employee_name || 'Member'} (${l.leave_type})</div>
+              <div style="font-size: 0.65rem; color: var(--color-muted);">${l.start_date} to ${l.end_date} · ${l.days_count} day(s)</div>
             </div>
+            <a href="/leaves" class="btn btn-primary btn-xs">Review</a>
           </div>
-        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.75rem 0; text-align: center;">No upcoming meetings</p>';
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.75rem 0; text-align: center;">No pending leave requests</p>';
       }
     }
   } catch (e) {}

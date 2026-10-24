@@ -252,11 +252,30 @@ def review_submission(task_id, submission_id):
     task = Task.query.get_or_404(task_id)
     sub = WorkSubmission.query.filter_by(id=submission_id, task_id=task.id).first_or_404()
 
+    # Submitter or assignee cannot approve their own work
+    if current_user.id == sub.user_id:
+        return api_error('Employees cannot approve their own work.', 403)
+    if task.assignee_id and current_user.id == task.assignee_id:
+        return api_error('Employees cannot approve their own work.', 403)
+
     # Must be lead/creator or admin to review
     can_review = (
-        current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD) or
+        current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN) or
         current_user.id == task.creator_id
     )
+    if not can_review and current_user.is_team_lead:
+        led_teams = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+        if current_user.team_id and current_user.team_id not in led_teams:
+            led_teams.append(current_user.team_id)
+        if task.team_id in led_teams:
+            can_review = True
+        elif task.assignee_id:
+            from app.models import TeamMember, User
+            if TeamMember.query.filter(TeamMember.team_id.in_(led_teams), TeamMember.user_id == task.assignee_id).first():
+                can_review = True
+            elif User.query.filter(User.id == task.assignee_id, User.team_id.in_(led_teams)).first():
+                can_review = True
+
     if not can_review:
         return api_error('Permission denied to review task submissions.', 403)
 
@@ -272,6 +291,7 @@ def review_submission(task_id, submission_id):
     sub.reviewed_at = now
     sub.review_notes = review_notes
 
+    old_status = task.status
     if decision in ('approve', 'approved'):
         sub.status = 'approved'
         task.status = STATUS_COMPLETED
@@ -279,11 +299,28 @@ def review_submission(task_id, submission_id):
         task.progress = 100
         msg_title = f'Submission Approved: "{task.title}"'
         msg_body = f'Your submission for "{task.title}" was approved by {current_user.full_name or current_user.username}.'
+        from app.models import TaskStatusHistory
+        db.session.add(TaskStatusHistory(
+            task_id=task.id,
+            changed_by_id=current_user.id,
+            old_status=old_status,
+            new_status=STATUS_COMPLETED,
+            comment=f"Submission approved: {review_notes}" if review_notes else "Submission approved"
+        ))
     else:
         sub.status = 'changes_requested'
         task.status = STATUS_CHANGES_REQUESTED
+        task.completed_at = None
         msg_title = f'Changes Requested: "{task.title}"'
         msg_body = f'Changes were requested on "{task.title}": {review_notes[:100]}'
+        from app.models import TaskStatusHistory
+        db.session.add(TaskStatusHistory(
+            task_id=task.id,
+            changed_by_id=current_user.id,
+            old_status=old_status,
+            new_status=STATUS_CHANGES_REQUESTED,
+            comment=f"Changes requested: {review_notes}" if review_notes else "Changes requested"
+        ))
 
     db.session.commit()
 

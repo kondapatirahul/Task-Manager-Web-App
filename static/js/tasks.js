@@ -475,21 +475,23 @@ const TaskManager = {
       item.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} aria-label="Toggle task status" />
         <div class="task-body" style="cursor: pointer;">
-          <div class="task-title">${this.escapeHtml(task.title)}</div>
+          <div style="display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;">
+            <span style="font-size: 0.7rem; font-weight: 700; color: var(--color-muted); font-family: monospace;">#${task.id}</span>
+            <div class="task-title" style="margin-bottom: 0;">${this.escapeHtml(task.title)}</div>
+          </div>
           ${task.description ? `<div class="task-desc-preview">${this.escapeHtml(task.description)}</div>` : ''}
           <div class="task-meta">
             ${task.category_name ? `<span class="badge badge-category"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>${this.escapeHtml(task.category_name)}</span>` : ''}
             <span class="badge badge-${task.priority}">${task.priority}</span>
             <span class="badge badge-${task.status}">${task.status.replace('_', ' ')}</span>
-            ${task.assignee_name ? `<span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name)}</span>` : ''}
+            ${task.team_name ? `<span class="badge badge-category">🏢 ${this.escapeHtml(task.team_name)}</span>` : ''}
+            <span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name || 'Unassigned')}</span>
             ${task.creator_name ? `<span class="badge badge-category">Assigned by ${this.escapeHtml(task.creator_name)}</span>` : ''}
             ${task.recurrence && task.recurrence !== 'none' ? `<span class="badge badge-category">🔁 ${task.recurrence}</span>` : ''}
-            ${task.due_date ? `
-              <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
-                <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                ${formattedDate} ${isOverdue ? '(Overdue)' : ''}
-              </span>
-            ` : ''}
+            <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              ${formattedDate} ${isOverdue ? '(Overdue)' : ''}
+            </span>
           </div>
         </div>
         <div class="task-actions">
@@ -611,8 +613,11 @@ const TaskManager = {
       card.innerHTML = `
         <div>
           <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.35rem;">
-            <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-text);">
-              ${this.escapeHtml(task.title)}
+            <div style="display: flex; align-items: baseline; gap: 0.35rem;">
+              <span style="font-size: 0.65rem; font-weight: 700; color: var(--color-muted); font-family: monospace;">#${task.id}</span>
+              <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-text);">
+                ${this.escapeHtml(task.title)}
+              </div>
             </div>
             ${task.is_personal ? `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #059669; font-weight: 700; font-size: 0.65rem; flex-shrink: 0;">Personal</span>` : ''}
           </div>
@@ -1010,7 +1015,7 @@ const TaskManager = {
     const modal = document.getElementById('task-detail-modal');
     if (!modal) return;
 
-    document.getElementById('task-detail-title').textContent = task.title;
+    document.getElementById('task-detail-title').textContent = `#${task.id} · ${task.title}`;
     const priBadge = document.getElementById('detail-priority-badge');
     if (priBadge) {
       priBadge.className = `badge badge-${task.priority}`;
@@ -1038,6 +1043,8 @@ const TaskManager = {
     document.getElementById('detail-due').textContent = task.due_date || 'No due date';
     const creator = document.getElementById('detail-creator');
     if (creator) creator.textContent = task.is_personal ? 'Self' : (task.creator_name || 'Workspace administrator');
+    const teamEl = document.getElementById('detail-team');
+    if (teamEl) teamEl.textContent = task.team_name || 'General / Unassigned';
 
     // Personal Task Actions vs Assigned Task Deliverable Review
     let personalActionBox = document.getElementById('detail-personal-action-box');
@@ -1079,10 +1086,37 @@ const TaskManager = {
 
     modal.classList.add('is-active');
 
-    // Load subtasks, messages, and submissions
+    // Load subtasks, messages, submissions, and history
     this.loadSubtasks(task.id);
     this.loadMessages(task.id);
     this.loadSubmissions(task.id);
+    this.loadHistory(task.id);
+  },
+
+  async loadHistory(taskId) {
+    const container = document.getElementById('status-history-container');
+    if (!container) return;
+    try {
+      const res = await api('GET', `/tasks/${taskId}/history`);
+      const history = res.data || [];
+      if (!history.length) {
+        container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No activity recorded yet.</span>';
+        return;
+      }
+      container.innerHTML = history.map(h => {
+        const timeStr = h.created_at ? new Date(h.created_at).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '';
+        return `
+          <div style="font-size: var(--font-size-xs); padding: 0.35rem 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 2px solid var(--color-primary); display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+            <div>
+              <strong>${this.escapeHtml(h.changed_by_name || 'System')}</strong>: ${this.escapeHtml(h.comment || (h.new_status ? `Changed to ${h.new_status}` : 'Updated'))}
+            </div>
+            <span style="font-size: 0.65rem; color: var(--color-muted); white-space: nowrap;">${timeStr}</span>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">Activity history unavailable.</span>';
+    }
   },
 
   async loadSubtasks(taskId) {

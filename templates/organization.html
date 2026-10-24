@@ -9,7 +9,7 @@
     <p class="page-subtitle">Configure departments, cross-functional teams, leads, and review administrative audit logs.</p>
   </div>
   <div style="display: flex; gap: 0.75rem;">
-    {% if current_user.role in ['super_admin', 'admin_hr'] %}
+    {% if current_user.role in ['super_admin', 'admin', 'admin_hr'] %}
     <button id="open-add-dept-btn" class="btn btn-secondary btn-sm">
       <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       <span>New Department</span>
@@ -32,7 +32,7 @@
       {% else %}
       <button class="btn btn-ghost btn-sm org-tab-btn active" data-tab="teams" style="font-weight: 700; color: var(--color-primary);">Teams & Rosters</button>
       {% endif %}
-      {% if current_user.role in ['super_admin', 'admin_hr'] %}
+      {% if current_user.role in ['super_admin', 'admin', 'admin_hr'] %}
       <button class="btn btn-ghost btn-sm org-tab-btn" data-tab="audit" style="font-weight: 600;">Audit & Security History</button>
       {% endif %}
     </div>
@@ -55,7 +55,7 @@
   </div>
 
   <!-- Tab 3: Audit Logs -->
-  {% if current_user.role in ['super_admin', 'admin_hr'] %}
+  {% if current_user.role in ['super_admin', 'admin', 'admin_hr'] %}
   <div id="tab-audit" class="org-tab-pane" style="padding: 1.5rem; display: none;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
       <h3 style="font-size: var(--font-size-base); font-weight: 700;">System & Action Logs</h3>
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <button class="btn btn-secondary btn-xs view-roster-btn" data-team-id="${t.id}" data-team-name="${t.name}">
                 View Roster
               </button>
-              {% if current_user.role in ['super_admin', 'admin_hr', 'team_lead'] %}
+              {% if current_user.role in ['super_admin', 'admin', 'admin_hr', 'team_lead'] %}
               <button class="btn btn-ghost btn-xs open-add-member-btn" data-team-id="${t.id}" data-team-name="${t.name}">
                 + Add
               </button>

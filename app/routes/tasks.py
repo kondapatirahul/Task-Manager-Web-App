@@ -904,6 +904,20 @@ def review_task_work(task_id):
     return api_success(task.to_dict(), message='Review decision recorded.')
 
 
+# ── Task Status & Activity History ─────────────────────────────────────────────
+
+@tasks_bp.route('/<int:task_id>/history', methods=['GET'])
+@login_required
+@active_account_required
+def get_task_history(task_id):
+    task = db.session.get(Task, task_id)
+    if not task or not can_view_task(task, current_user):
+        return api_error('Task not found.', 404)
+
+    history = task.status_history.order_by(TaskStatusHistory.created_at.desc()).all()
+    return api_success([h.to_dict() for h in history])
+
+
 # ── Submissions List ───────────────────────────────────────────────────────────
 
 @tasks_bp.route('/<int:task_id>/submissions', methods=['GET'])

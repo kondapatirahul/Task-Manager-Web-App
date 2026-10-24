@@ -888,3 +888,53 @@ class PasswordResetToken(db.Model):
             exp = exp.replace(tzinfo=timezone.utc)
         return not self.is_used and exp > now
 
+
+
+# ── Leave Requests ─────────────────────────────────────────────────────────────
+
+class LeaveRequest(db.Model):
+    __tablename__ = 'leave_requests'
+
+    id               = db.Column(db.Integer, primary_key=True)
+    user_id          = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    leave_type       = db.Column(db.String(50), nullable=False) # 'Casual', 'Sick', 'Annual', 'Maternity/Paternity', 'Unpaid', 'Other'
+    start_date       = db.Column(db.Date, nullable=False)
+    end_date         = db.Column(db.Date, nullable=False)
+    reason           = db.Column(db.Text, nullable=False)
+    status           = db.Column(db.String(20), default='pending', nullable=False) # 'pending', 'approved', 'rejected'
+    reviewer_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    reviewer_comment = db.Column(db.Text, nullable=True)
+    decision_at      = db.Column(db.DateTime, nullable=True)
+    created_at       = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    user     = db.relationship('User', foreign_keys=[user_id], backref='leave_requests')
+    reviewer = db.relationship('User', foreign_keys=[reviewer_id], backref='reviewed_leaves')
+
+    def to_dict(self):
+        user_name = (self.user.full_name or self.user.username) if self.user else None
+        reviewer_name = (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None
+        emp_code = (self.user.employee_id_code or f'EMP-{self.user.id:04d}') if self.user else ''
+        team_name = self.user.team.name if (self.user and getattr(self.user, 'team', None)) else 'No Team'
+        role_name = self.user.role if self.user else ''
+        days = (self.end_date - self.start_date).days + 1 if (self.start_date and self.end_date) else 0
+
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'user_name': user_name,
+            'employee_name': user_name,
+            'employee_id_code': emp_code,
+            'employee_role': role_name,
+            'team_name': team_name,
+            'leave_type': self.leave_type,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'days_count': days,
+            'reason': self.reason,
+            'status': self.status,
+            'reviewer_id': self.reviewer_id,
+            'reviewer_name': reviewer_name,
+            'reviewer_comment': self.reviewer_comment or '',
+            'decision_at': self.decision_at.isoformat() if self.decision_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }

@@ -171,6 +171,7 @@ def create_app(test_config=None):
     from app.routes.teams import teams_bp
     from app.routes.departments import departments_bp
     from app.routes.organizations import organizations_bp
+    from app.routes.leaves import leaves_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
@@ -187,6 +188,7 @@ def create_app(test_config=None):
     app.register_blueprint(teams_bp)
     app.register_blueprint(departments_bp)
     app.register_blueprint(organizations_bp)
+    app.register_blueprint(leaves_bp)
 
     # CLI commands
     @app.cli.command('init-db')

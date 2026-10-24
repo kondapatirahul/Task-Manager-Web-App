@@ -385,6 +385,12 @@ def reports():
     return render_template('reports.html', active_page='reports')
 
 
+@web_bp.route('/leaves')
+@login_required
+def leaves():
+    return render_template('leaves.html', active_page='leaves')
+
+
 @web_bp.route('/profile')
 @login_required
 def profile():
