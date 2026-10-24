@@ -3,189 +3,138 @@
 {% block title %}Attendance & Timesheets — TaskNest Enterprise{% endblock %}
 
 {% block app_content %}
-<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+{% if not current_user.has_role('super_admin', 'admin', 'admin_hr', 'team_lead') %}
+<!-- =========================================================================
+     EMPLOYEE SELF-ATTENDANCE & TIMESHEET VIEW
+     ========================================================================= -->
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
   <div>
-    <h1 class="page-title">Attendance & Timesheets</h1>
-    <p class="page-subtitle">Server-recorded work hours, daily sessions, and correction management.</p>
+    <h1 class="page-title" style="margin-bottom: 0.25rem;">My Attendance & Timesheets</h1>
+    <p class="page-subtitle" style="margin: 0;">Record your shift check-ins, view live working duration, and track attendance history.</p>
   </div>
-  <div style="display: flex; gap: 0.75rem;">
-    <a href="/api/attendance/export" class="btn btn-secondary btn-sm" download>
-      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-      <span>Export CSV</span>
-    </a>
-    <button id="open-correction-modal-btn" class="btn btn-secondary btn-sm">
-      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-      <span>Request Correction</span>
-    </button>
-  </div>
+  <button id="emp-open-corr-btn" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+    <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+    <span>Request Correction</span>
+  </button>
 </div>
 
-<div id="missing-checkout-alert" class="alert alert-warning" style="display: none; margin-bottom: 1.5rem; border-left: 4px solid var(--color-danger);">
-  <strong>Action Required:</strong> You have an uncompleted shift from a previous day. Please submit an attendance correction request to record your actual check-out time.
-</div>
-
-<!-- Shift Control & Metrics Grid -->
-<div class="metrics-grid" style="margin-bottom: 2rem;">
-  <!-- Live Shift Card -->
-  <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-      <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase;">Current Session</span>
-      <span id="att-badge" class="badge badge-employee">Not Active</span>
+<div class="dashboard-grid" style="grid-template-columns: 1fr 2fr; gap: 1.5rem; margin-bottom: 2rem; align-items: start;">
+  <!-- Left: Daily Shift Control -->
+  <div class="card" style="padding: 1.5rem; border-top: 4px solid var(--color-primary);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+      <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.5px;">Today's Shift</span>
+      <span id="emp-shift-status-badge" class="badge badge-employee">Not Checked In</span>
     </div>
-    <div style="font-size: var(--font-size-2xl); font-weight: 800; color: var(--color-primary); margin-bottom: 1rem;" id="att-timer">
+    <div style="font-size: 2.25rem; font-weight: 800; color: var(--color-primary); font-family: monospace; letter-spacing: 1px; margin-bottom: 0.25rem;" id="emp-shift-timer">
       00:00:00
     </div>
-    <div style="display: flex; gap: 0.75rem;">
-      <button id="att-checkin-btn" class="btn btn-primary" style="flex: 1;">
+    <div id="emp-shift-details" style="font-size: var(--font-size-xs); color: var(--color-muted); min-height: 1.5rem; margin-bottom: 1rem;">
+      Ready to start your work session. Standard shift: 09:30 AM – 06:30 PM.
+    </div>
+
+    <!-- Check In / Check Out Action Buttons -->
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      <button id="emp-checkin-btn" class="btn btn-primary" style="flex: 1; justify-content: center; display: inline-flex; align-items: center; gap: 0.5rem;">
         <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
         <span>Check In</span>
       </button>
-      <button id="att-checkout-btn" class="btn btn-secondary" style="flex: 1; border-color: var(--color-danger); color: var(--color-danger); display: none;">
+      <button id="emp-checkout-btn" class="btn btn-secondary" style="flex: 1; justify-content: center; display: none; align-items: center; gap: 0.5rem;">
         <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
         <span>Check Out</span>
       </button>
     </div>
   </div>
 
-  <!-- Weekly Logged Hours -->
-  <div class="metric-card metric-completed">
-    <div class="metric-icon-box">
-      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+  <!-- Right: Metrics Cards -->
+  <div style="display: flex; flex-direction: column; gap: 1rem;">
+    <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 0;">
+      <div class="metric-card metric-total">
+        <div class="metric-info">
+          <div class="metric-value" id="emp-kpi-today-hours">0.0h</div>
+          <div class="metric-label">Today's Duration</div>
+        </div>
+      </div>
+      <div class="metric-card metric-completed">
+        <div class="metric-info">
+          <div class="metric-value" id="emp-kpi-week-hours">0.0h</div>
+          <div class="metric-label">This Week's Total</div>
+        </div>
+      </div>
+      <div class="metric-card metric-overdue">
+        <div class="metric-info">
+          <div class="metric-value" id="emp-kpi-missing-co">0</div>
+          <div class="metric-label">Missing Checkouts</div>
+        </div>
+      </div>
     </div>
-    <div class="metric-info">
-      <div class="metric-value" id="att-weekly-hours">0.0</div>
-      <div class="metric-label">Weekly Recorded Hours</div>
-    </div>
-  </div>
 
-  <!-- Missing Checkouts Indicator -->
-  <div class="metric-card metric-overdue">
-    <div class="metric-icon-box">
-      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-    </div>
-    <div class="metric-info">
-      <div class="metric-value" id="att-missing-count">0</div>
-      <div class="metric-label">Missing Checkouts</div>
-    </div>
-  </div>
-
-  <!-- Today's Total Hours -->
-  <div class="metric-card metric-pending">
-    <div class="metric-icon-box">
-      <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-    </div>
-    <div class="metric-info">
-      <div class="metric-value" id="att-today-hours">0h 0m</div>
-      <div class="metric-label">Today's Hours</div>
+    <div class="card" style="padding: 1rem 1.25rem; background: var(--color-surface-subtle); border: 1px solid var(--color-border-subtle); display: flex; align-items: center; justify-content: space-between;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <svg class="icon icon-md" viewBox="0 0 24 24" style="color: var(--color-primary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <div>
+          <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">Shift Policy & Timing</div>
+          <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Standard work shift begins at 09:30 AM. Check-ins after 09:30 AM are logged as Late Arrival.</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Tabs for Personal Timesheet and Team/Org (if manager) -->
-<div class="card" style="margin-bottom: 2rem;">
-  <div class="card-header" style="border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
-    <div style="display: flex; gap: 1rem;">
-      <button class="btn btn-ghost btn-sm att-tab-btn active" data-tab="my-timesheet" style="font-weight: 700; color: var(--color-primary);">My Timesheet</button>
-      <button class="btn btn-ghost btn-sm att-tab-btn" data-tab="corrections" style="font-weight: 600;">Correction Requests</button>
-      {% if current_user.is_management %}
-      <button class="btn btn-ghost btn-sm att-tab-btn" data-tab="team-attendance" style="font-weight: 600;">Team Timesheet</button>
-      {% endif %}
-    </div>
+<!-- Personal Attendance History Table -->
+<div class="card" style="padding: 1.5rem;">
+  <div class="card-header" style="margin-bottom: 1rem; border-bottom: 1px solid var(--color-border); padding-bottom: 0.75rem;">
+    <h3 class="card-title" style="margin: 0;">Recent Attendance History</h3>
   </div>
-
-  <!-- 1. My Timesheet Tab -->
-  <div id="tab-my-timesheet" class="att-tab-pane" style="padding: 1.25rem;">
-    <div style="overflow-x: auto;">
-      <table class="table attendance-timesheet-table" id="my-timesheet-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Check-In</th>
-            <th>Check-Out</th>
-            <th>Duration</th>
-            <th>Status</th>
-            <th>Notes</th>
-          </tr>
-        </thead>
-        <tbody id="my-timesheet-tbody">
-          <tr><td colspan="6" class="text-muted" style="text-align: center; padding: 2rem;">Loading timesheet records...</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <div style="overflow-x: auto;">
+    <table class="table" id="emp-attendance-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Check-In</th>
+          <th>Check-Out</th>
+          <th>Duration</th>
+          <th>Timing Indicator</th>
+          <th>Status</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="emp-attendance-tbody">
+        <tr>
+          <td colspan="8" class="text-muted" style="text-align: center; padding: 2rem;">Loading attendance records...</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
-
-  <!-- 2. Correction Requests Tab -->
-  <div id="tab-corrections" class="att-tab-pane" style="display: none; padding: 1.25rem;">
-    <div style="overflow-x: auto;">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Date Requested</th>
-            {% if current_user.is_management %}<th>Employee</th>{% endif %}
-            <th>Requested Check-In</th>
-            <th>Requested Check-Out</th>
-            <th>Reason</th>
-            <th>Status</th>
-            {% if current_user.is_management %}<th>Action</th>{% endif %}
-          </tr>
-        </thead>
-        <tbody id="corrections-tbody">
-          <tr><td colspan="7" class="text-muted" style="text-align: center; padding: 2rem;">Loading correction requests...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- 3. Team Timesheet Tab (Managers) -->
-  {% if current_user.is_management %}
-  <div id="tab-team-attendance" class="att-tab-pane" style="display: none; padding: 1.25rem;">
-    <div style="overflow-x: auto;">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Role</th>
-            <th>Status Today</th>
-            <th>Check-In</th>
-            <th>Check-Out</th>
-            <th>Hours Today</th>
-          </tr>
-        </thead>
-        <tbody id="team-timesheet-tbody">
-          <tr><td colspan="6" class="text-muted" style="text-align: center; padding: 2rem;">Loading team attendance...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% endif %}
 </div>
 
-<!-- Attendance Correction Modal -->
-<div class="modal-backdrop" id="correction-modal" style="display: none;">
-  <div class="modal" style="max-width: 500px;">
+<!-- Employee Request Correction Modal -->
+<div class="modal-overlay" id="emp-corr-modal" role="dialog" aria-modal="true" style="display: none;">
+  <div class="modal-card" style="max-width: 500px;">
     <div class="modal-header">
-      <h3 class="modal-title">Request Attendance Correction</h3>
-      <button class="modal-close-btn" id="close-correction-modal" aria-label="Close modal">&times;</button>
+      <h3>Request Attendance Correction</h3>
+      <button type="button" class="modal-close-btn" id="emp-close-corr-modal">&times;</button>
     </div>
-    <form id="correction-form">
-      <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label" for="corr-checkin">Requested Check-In <span class="required">*</span></label>
-          <input type="datetime-local" id="corr-checkin" class="form-control" required>
+    <form id="emp-corr-form">
+      <input type="hidden" id="emp-corr-att-id" value="">
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div>
+          <label class="form-label">Requested Check-In <span class="text-danger">*</span></label>
+          <input type="datetime-local" id="emp-corr-checkin" class="form-control" required>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="corr-checkout">Requested Check-Out <span class="required">*</span></label>
-          <input type="datetime-local" id="corr-checkout" class="form-control" required>
+        <div>
+          <label class="form-label">Requested Check-Out <span class="text-danger">*</span></label>
+          <input type="datetime-local" id="emp-corr-checkout" class="form-control" required>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="corr-reason">Reason for Correction <span class="required">*</span></label>
-          <textarea id="corr-reason" class="form-control" rows="3" placeholder="Forgot to check out / system maintenance / offline work..." required></textarea>
+        <div>
+          <label class="form-label">Reason for Correction <span class="text-danger">*</span></label>
+          <textarea id="emp-corr-reason" class="form-control" rows="3" placeholder="Explain missing check-in/out or network/system issue..." required></textarea>
         </div>
-        <div id="corr-error" class="alert alert-error" style="display: none;"></div>
+        <div id="emp-corr-error" class="alert alert-error" style="display: none; font-size: var(--font-size-xs);"></div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="cancel-correction-btn">Cancel</button>
-        <button type="submit" class="btn btn-primary">Submit Correction</button>
+        <button type="button" class="btn btn-secondary" id="emp-cancel-corr-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="emp-submit-corr-btn">Submit Request</button>
       </div>
     </form>
   </div>
@@ -194,131 +143,809 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-  const checkinBtn = document.getElementById('att-checkin-btn');
-  const checkoutBtn = document.getElementById('att-checkout-btn');
-  const attTimer = document.getElementById('att-timer');
-  const attBadge = document.getElementById('att-badge');
-  const weeklyHours = document.getElementById('att-weekly-hours');
-  const missingCount = document.getElementById('att-missing-count');
-  const todayHours = document.getElementById('att-today-hours');
-  const myTbody = document.getElementById('my-timesheet-tbody');
+  const timerDisplay = document.getElementById('emp-shift-timer');
+  const detailsDisplay = document.getElementById('emp-shift-details');
+  const statusBadge = document.getElementById('emp-shift-status-badge');
+  const checkinBtn = document.getElementById('emp-checkin-btn');
+  const checkoutBtn = document.getElementById('emp-checkout-btn');
+  const tbody = document.getElementById('emp-attendance-tbody');
 
-  let activeCheckinTime = null;
+  let activeShiftStart = null;
   let timerInterval = null;
 
-  function updateTimer() {
-    if (!activeCheckinTime) return;
-    const now = new Date();
-    const diffMs = now - activeCheckinTime;
-    if (diffMs < 0) return;
-    const hours = Math.floor(diffMs / (1000 * 60 * 60));
-    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    const secs = Math.floor((diffMs % (1000 * 60)) / 1000);
-    if (attTimer) {
-      attTimer.textContent = `${String(hours).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
-    }
-    const liveTodayHours = document.getElementById('att-today-hours');
-    if (liveTodayHours) {
-      const totalMinutes = (window.attendanceCompletedTodayMinutes || 0) + Math.floor(diffMs / 60000);
-      liveTodayHours.textContent = `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
-    }
+  function formatHMS(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   }
 
-  async function loadMyAttendance() {
+  function updateTimer() {
+    if (!activeShiftStart || !timerDisplay) return;
+    const elapsed = Math.floor((Date.now() - activeShiftStart.getTime()) / 1000);
+    timerDisplay.textContent = formatHMS(elapsed);
+  }
+
+  async function loadTodayShift() {
     try {
       const res = await fetch('/api/attendance/today');
       if (res.ok) {
-        const json = await res.json();
-        const d = json.data;
-        if (todayHours) {
-          const totalMinutes = d.today_duration_minutes || 0;
-          window.attendanceCompletedTodayMinutes = Math.max(0, totalMinutes - (d.is_checked_in ? Math.floor((Date.now() - new Date(d.active_session.check_in).getTime()) / 60000) : 0));
-          todayHours.textContent = `${Math.floor(totalMinutes / 60)}h ${totalMinutes % 60}m`;
-        }
+        const d = (await res.json()).data;
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 
-        if (d.is_checked_in) {
+        if (d.is_checked_in && d.active_session) {
+          activeShiftStart = new Date(d.active_session.check_in);
+          updateTimer();
+          timerInterval = setInterval(updateTimer, 1000);
+
+          statusBadge.textContent = 'Working';
+          statusBadge.className = 'badge badge-completed';
+
+          const inTime = activeShiftStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const lateBadge = d.is_late ? ' <span class="badge badge-high">Late Arrival</span>' : '';
+          detailsDisplay.innerHTML = `Checked in at <b>${inTime}</b>${lateBadge} · Session currently in progress.`;
+
           checkinBtn.style.display = 'none';
           checkoutBtn.style.display = 'inline-flex';
-          attBadge.className = 'badge badge-completed';
-          attBadge.textContent = 'Active Shift';
-          activeCheckinTime = new Date(d.active_session.check_in);
-          if (timerInterval) clearInterval(timerInterval);
-          timerInterval = setInterval(updateTimer, 1000);
-          updateTimer();
-        } else {
+          checkoutBtn.disabled = false;
+        } else if (d.has_completed_shift && d.last_completed_session) {
+          activeShiftStart = null;
+          timerDisplay.textContent = formatHMS(d.completed_duration_seconds || (d.last_completed_session.duration_minutes * 60));
+
+          statusBadge.textContent = 'Checked Out';
+          statusBadge.className = 'badge badge-category';
+
+          const outTime = d.last_completed_session.check_out ? new Date(d.last_completed_session.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+          detailsDisplay.textContent = `Shift completed (${d.today_duration_hours}h recorded · Checked out ${outTime}).`;
+
           checkinBtn.style.display = 'inline-flex';
+          checkinBtn.disabled = false;
+          checkinBtn.innerHTML = '<span>Check In Again</span>';
           checkoutBtn.style.display = 'none';
-          attBadge.className = 'badge badge-employee';
-          attBadge.textContent = 'Not Checked In';
-          if (attTimer) attTimer.textContent = '00:00:00';
-          if (timerInterval) clearInterval(timerInterval);
-          activeCheckinTime = null;
-        }
-      }
+        } else {
+          activeShiftStart = null;
+          timerDisplay.textContent = '00:00:00';
+          statusBadge.textContent = 'Not Checked In';
+          statusBadge.className = 'badge badge-employee';
+          detailsDisplay.textContent = 'Ready to start your work session. Standard shift: 09:30 AM – 06:30 PM.';
 
-      // Timesheet history
-      const histRes = await fetch('/api/attendance/my');
-      if (histRes.ok) {
-        const hJson = await histRes.json();
-        const hd = hJson.data;
-        if (weeklyHours) weeklyHours.textContent = hd.weekly_hours;
-        if (missingCount) missingCount.textContent = hd.missing_checkouts_count;
-        const missingAlert = document.getElementById('missing-checkout-alert');
-        if (missingAlert) {
-          missingAlert.style.display = hd.missing_checkouts_count > 0 ? 'block' : 'none';
+          checkinBtn.style.display = 'inline-flex';
+          checkinBtn.disabled = false;
+          checkinBtn.innerHTML = '<span>Check In</span>';
+          checkoutBtn.style.display = 'none';
         }
 
-        if (myTbody) {
-          myTbody.innerHTML = hd.records.length ? hd.records.map(r => `
-            <tr>
-              <td style="font-weight: 600;">${new Date(r.check_in).toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric'})}</td>
-              <td>${new Date(r.check_in).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}</td>
-              <td>${r.check_out ? new Date(r.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '<span class="badge badge-high">Active</span>'}</td>
-              <td style="font-weight: 700;">${r.status === 'active' ? 'In progress' : `${Math.floor(r.duration_minutes / 60)}h ${r.duration_minutes % 60}m`}</td>
-              <td><span class="badge ${r.status === 'completed' ? 'badge-completed' : r.status === 'active' ? 'badge-high' : 'badge-team_lead'}">${r.status}</span></td>
-              <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${r.notes || '-'}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="6" class="text-muted" style="text-align:center; padding: 2rem;">No attendance records found.</td></tr>';
-        }
+        const kpiToday = document.getElementById('emp-kpi-today-hours');
+        if (kpiToday) kpiToday.textContent = `${d.today_duration_hours}h`;
       }
     } catch (e) {}
   }
 
-  if (checkinBtn) {
-    checkinBtn.addEventListener('click', async () => {
-      checkinBtn.disabled = true;
-      checkinBtn.innerHTML = '<span>Checking in...</span>';
+  async function loadHistory() {
+    try {
+      const res = await fetch('/api/attendance/my');
+      if (res.ok) {
+        const data = (await res.json()).data;
+        const kpiWeek = document.getElementById('emp-kpi-week-hours');
+        if (kpiWeek) kpiWeek.textContent = `${data.weekly_hours}h`;
+        const missingBadge = document.getElementById('emp-kpi-missing-co');
+        if (missingBadge) {
+          missingBadge.textContent = data.missing_checkouts_count;
+          missingBadge.style.color = data.missing_checkouts_count > 0 ? 'var(--color-danger)' : 'var(--color-primary)';
+        }
+
+        const records = data.records || [];
+        if (!records.length) {
+          tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align: center; padding: 2rem;">No attendance records found.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = records.map(r => {
+          const dObj = r.check_in ? new Date(r.check_in) : new Date(r.created_at);
+          const dateStr = dObj.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+          const inStr = r.check_in ? new Date(r.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+          const outStr = r.check_out ? new Date(r.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (r.status === 'active' ? '<span class="badge badge-high">Active</span>' : '-');
+
+          let timingBadge = '<span class="badge badge-completed">On Time</span>';
+          if (r.is_late) {
+            timingBadge = '<span class="badge badge-high">Late (> 09:30)</span>';
+          }
+          if (r.is_missing_checkout) {
+            timingBadge = '<span class="badge badge-danger">Missing Checkout</span>';
+          }
+
+          const statusClass = r.status === 'completed' ? 'badge-completed' : (r.status === 'active' ? 'badge-high' : 'badge-team_lead');
+
+          return `
+            <tr>
+              <td style="font-weight: 600;">${dateStr}</td>
+              <td>${inStr}</td>
+              <td>${outStr}</td>
+              <td style="font-weight: 700;">${r.duration_display || r.duration_hours + 'h'}</td>
+              <td>${timingBadge}</td>
+              <td><span class="badge ${statusClass}">${r.status}</span></td>
+              <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${r.notes || '-'}</td>
+              <td>
+                <button class="btn btn-secondary btn-xs emp-req-corr-btn" data-id="${r.id}" data-in="${r.check_in || ''}" data-out="${r.check_out || ''}">
+                  Correct
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        document.querySelectorAll('.emp-req-corr-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.getElementById('emp-corr-att-id').value = btn.dataset.id;
+            if (btn.dataset.in) {
+              const inD = new Date(btn.dataset.in);
+              document.getElementById('emp-corr-checkin').value = new Date(inD.getTime() - inD.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            }
+            if (btn.dataset.out) {
+              const outD = new Date(btn.dataset.out);
+              document.getElementById('emp-corr-checkout').value = new Date(outD.getTime() - outD.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            }
+            document.getElementById('emp-corr-modal').style.display = 'flex';
+          });
+        });
+      }
+    } catch (e) {}
+  }
+
+  // Check In Click
+  checkinBtn?.addEventListener('click', async () => {
+    checkinBtn.disabled = true;
+    checkinBtn.innerHTML = '<span>Checking In...</span>';
+    try {
+      await fetch('/api/attendance/check-in', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({notes: 'Self-attendance check-in'})
+      });
+      await loadTodayShift();
+      await loadHistory();
+    } catch (e) {
+      checkinBtn.disabled = false;
+    }
+  });
+
+  // Check Out Click
+  checkoutBtn?.addEventListener('click', async () => {
+    checkoutBtn.disabled = true;
+    checkoutBtn.innerHTML = '<span>Checking Out...</span>';
+    try {
+      await fetch('/api/attendance/check-out', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({notes: 'Self-attendance check-out'})
+      });
+      await loadTodayShift();
+      await loadHistory();
+    } catch (e) {
+      checkoutBtn.disabled = false;
+    }
+  });
+
+  // Correction Modal
+  const corrModal = document.getElementById('emp-corr-modal');
+  document.getElementById('emp-open-corr-btn')?.addEventListener('click', () => {
+    document.getElementById('emp-corr-att-id').value = '';
+    document.getElementById('emp-corr-form').reset();
+    document.getElementById('emp-corr-error').style.display = 'none';
+    corrModal.style.display = 'flex';
+  });
+  document.getElementById('emp-close-corr-modal')?.addEventListener('click', () => corrModal.style.display = 'none');
+  document.getElementById('emp-cancel-corr-btn')?.addEventListener('click', () => corrModal.style.display = 'none');
+
+  document.getElementById('emp-corr-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errBox = document.getElementById('emp-corr-error');
+    errBox.style.display = 'none';
+
+    const attId = document.getElementById('emp-corr-att-id').value;
+    const reqIn = document.getElementById('emp-corr-checkin').value;
+    const reqOut = document.getElementById('emp-corr-checkout').value;
+    const reason = document.getElementById('emp-corr-reason').value.trim();
+
+    try {
+      const res = await fetch('/api/attendance/corrections', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({
+          attendance_id: attId ? parseInt(attId) : null,
+          requested_check_in: reqIn,
+          requested_check_out: reqOut,
+          reason: reason
+        })
+      });
+      if (res.ok) {
+        corrModal.style.display = 'none';
+        await loadHistory();
+      } else {
+        const err = await res.json();
+        errBox.textContent = err.error || 'Failed to submit correction.';
+        errBox.style.display = 'block';
+      }
+    } catch (err) {
+      errBox.textContent = 'Network communication error.';
+      errBox.style.display = 'block';
+    }
+  });
+
+  loadTodayShift();
+  loadHistory();
+});
+</script>
+
+{% else %}
+
+<!-- Page Header -->
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+  <div>
+    <h1 class="page-title" style="margin-bottom: 0.25rem;">Attendance & Timesheets</h1>
+    <p class="page-subtitle" style="margin: 0;">
+      {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
+      Organization-wide attendance tracking, timesheets, duration auditing, and correction approvals.
+      {% else %}
+      Team presence tracking, member timesheets, working duration, and correction reviews.
+      {% endif %}
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <button id="export-csv-btn" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>Export CSV</span>
+    </button>
+    <button id="open-correction-modal-btn" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.4rem;">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+      <span>Request Correction</span>
+    </button>
+  </div>
+</div>
+
+<!-- Alert for Missing Check-Outs -->
+<div id="missing-checkout-alert" class="alert alert-warning" style="display: none; margin-bottom: 1.5rem; border-left: 4px solid var(--color-danger); padding: 0.9rem 1.25rem;">
+  <strong>Notice:</strong> One or more active shifts started on previous dates are missing a check-out. Please review flagged records or submit a correction request.
+</div>
+
+<!-- Top Section: Shift Control & 6 Summary Metric Cards -->
+<div style="display: grid; grid-template-columns: 280px 1fr; gap: 1.25rem; margin-bottom: 1.75rem;">
+  <!-- Live Shift Card (For logged in manager/TL) -->
+  <div class="card" style="padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; border-top: 3px solid var(--color-primary);">
+    <div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.5px;">My Daily Shift</span>
+        <span id="shift-badge" class="badge badge-employee">Not Checked In</span>
+      </div>
+      <div style="font-size: 2rem; font-weight: 800; color: var(--color-primary); font-family: monospace; letter-spacing: 1px; margin-bottom: 0.25rem;" id="shift-timer">
+        00:00:00
+      </div>
+      <div id="shift-details" style="font-size: var(--font-size-xs); color: var(--color-muted); min-height: 1.5rem; margin-bottom: 0.75rem;">
+        No active session
+      </div>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <button id="shift-checkin-btn" class="btn btn-primary btn-sm" style="flex: 1; justify-content: center;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>Check In</span>
+      </button>
+      <button id="shift-checkout-btn" class="btn btn-secondary btn-sm" style="flex: 1; justify-content: center; border-color: var(--color-danger); color: var(--color-danger); display: none;">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+        <span>Check Out</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 6 Real Database Metrics Grid -->
+  <div class="metrics-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 0;">
+    <!-- 1. Currently Checked In -->
+    <div class="metric-card metric-completed" style="padding: 1rem;">
+      <div class="metric-icon-box">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline></svg>
+      </div>
+      <div class="metric-info">
+        <div class="metric-value" id="metric-active-count">0</div>
+        <div class="metric-label">Currently Checked In</div>
+      </div>
+    </div>
+
+    <!-- 2. Checked In Today -->
+    <div class="metric-card metric-total" style="padding: 1rem;">
+      <div class="metric-icon-box">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      </div>
+      <div class="metric-info">
+        <div class="metric-value" id="metric-checked-in-today">0</div>
+        <div class="metric-label">Checked In Today</div>
+      </div>
+    </div>
+
+    <!-- 3. Total Hours Today -->
+    <div class="metric-card metric-pending" style="padding: 1rem;">
+      <div class="metric-icon-box">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+      </div>
+      <div class="metric-info">
+        <div class="metric-value" id="metric-hours-today">0.0h</div>
+        <div class="metric-label">Total Hours Today</div>
+      </div>
+    </div>
+
+    <!-- 4. Total Hours This Week -->
+    <div class="metric-card metric-completed" style="padding: 1rem;">
+      <div class="metric-icon-box">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+      </div>
+      <div class="metric-info">
+        <div class="metric-value" id="metric-hours-week">0.0h</div>
+        <div class="metric-label">Total Hours This Week</div>
+      </div>
+    </div>
+
+    <!-- 5. Missing Check-Outs -->
+    <div class="metric-card metric-overdue" style="padding: 1rem;">
+      <div class="metric-icon-box">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      </div>
+      <div class="metric-info">
+        <div class="metric-value" id="metric-missing-checkouts">0</div>
+        <div class="metric-label">Missing Check-Outs</div>
+      </div>
+    </div>
+
+    <!-- 6. Pending Correction Requests -->
+    <div class="metric-card metric-pending" style="padding: 1rem;">
+      <div class="metric-icon-box">
+        <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path><path d="M12 18v-6"></path><path d="M9 15h6"></path></svg>
+      </div>
+      <div class="metric-info">
+        <div class="metric-value" id="metric-pending-corrections">0</div>
+        <div class="metric-label">Pending Corrections</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Main Management Card & Navigation Tabs -->
+<div class="card" style="margin-bottom: 2rem;">
+  <div class="card-header" style="border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.25rem;">
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      <button class="btn btn-ghost btn-sm att-tab-btn active" data-tab="team-timesheet" style="font-weight: 700; color: var(--color-primary);">
+        Team Timesheet
+      </button>
+      {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
+      <button class="btn btn-ghost btn-sm att-tab-btn" data-tab="org-timesheet" style="font-weight: 600;">
+        Organization Timesheet
+      </button>
+      {% endif %}
+      <button class="btn btn-ghost btn-sm att-tab-btn" data-tab="attendance-history" style="font-weight: 600;">
+        Attendance History & Audits
+      </button>
+      <button class="btn btn-ghost btn-sm att-tab-btn" data-tab="correction-requests" style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+        <span>Correction Requests</span>
+        <span id="tab-correction-badge" class="badge badge-high" style="display: none; padding: 1px 6px; font-size: 0.7rem;">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB 1: Team Timesheet (Live Presence) -->
+  <div id="pane-team-timesheet" class="att-tab-pane" style="padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="font-size: var(--font-size-md); color: var(--color-primary); margin: 0;">Today's Team Shift Overview</h3>
+      <button class="btn btn-ghost btn-xs" id="refresh-team-btn" style="color: var(--color-primary);">
+        <svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        <span>Refresh</span>
+      </button>
+    </div>
+    <div style="overflow-x: auto;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Employee ID</th>
+            <th>Role</th>
+            <th>Team</th>
+            <th>Today's Status</th>
+            <th>Check-In Time</th>
+            <th>Check-Out Time</th>
+            <th>Duration Today</th>
+          </tr>
+        </thead>
+        <tbody id="team-timesheet-tbody">
+          <tr><td colspan="8" class="text-muted" style="text-align: center; padding: 2rem;">Loading team attendance...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {# TAB 2: Org Timesheet (Admin Only) #}
+  {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
+  <div id="pane-org-timesheet" class="att-tab-pane" style="display: none; padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="font-size: var(--font-size-md); color: var(--color-primary); margin: 0;">Company-Wide Attendance Stream</h3>
+      <span class="badge badge-admin">All Organization Records</span>
+    </div>
+    <div style="overflow-x: auto;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Employee</th>
+            <th>Employee ID</th>
+            <th>Role</th>
+            <th>Check-In</th>
+            <th>Check-Out</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="org-timesheet-tbody">
+          <tr><td colspan="9" class="text-muted" style="text-align: center; padding: 2rem;">Loading organization attendance...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- TAB 3: Attendance History & Audits (Filterable & Paginated Table) -->
+  <div id="pane-attendance-history" class="att-tab-pane" style="display: none; padding: 1.25rem;">
+    <!-- Filter Toolbar -->
+    <div class="card" style="background: var(--color-bg); padding: 1rem; margin-bottom: 1.25rem; border: 1px solid var(--color-border);">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; align-items: flex-end;">
+        <div>
+          <label class="form-label" style="font-size: var(--font-size-xs); margin-bottom: 0.25rem;">Search Employee</label>
+          <input type="text" id="filter-q" class="form-control" placeholder="Name or Employee ID...">
+        </div>
+
+        {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
+        <div>
+          <label class="form-label" style="font-size: var(--font-size-xs); margin-bottom: 0.25rem;">Role</label>
+          <select id="filter-role" class="form-control">
+            <option value="">All Roles</option>
+            <option value="employee">Employee</option>
+            <option value="team_lead">Team Lead</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        {% endif %}
+
+        <div>
+          <label class="form-label" style="font-size: var(--font-size-xs); margin-bottom: 0.25rem;">Attendance Status</label>
+          <select id="filter-status" class="form-control">
+            <option value="">All Statuses</option>
+            <option value="active">Active (Checked In)</option>
+            <option value="completed">Completed</option>
+            <option value="corrected">Corrected</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size: var(--font-size-xs); margin-bottom: 0.25rem;">From Date</label>
+          <input type="date" id="filter-date-from" class="form-control">
+        </div>
+
+        <div>
+          <label class="form-label" style="font-size: var(--font-size-xs); margin-bottom: 0.25rem;">To Date</label>
+          <input type="date" id="filter-date-to" class="form-control">
+        </div>
+
+        <div style="display: flex; gap: 0.5rem;">
+          <button id="apply-filters-btn" class="btn btn-primary btn-sm" style="flex: 1;">Filter</button>
+          <button id="reset-filters-btn" class="btn btn-secondary btn-sm" style="flex: 1;">Reset</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 0.75rem; display: flex; gap: 1.5rem; align-items: center; font-size: var(--font-size-xs);">
+        <label style="display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--color-danger); font-weight: 600;">
+          <input type="checkbox" id="filter-missing-co"> Missing Check-Outs Only
+        </label>
+        <label style="display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; color: var(--color-primary); font-weight: 600;">
+          <input type="checkbox" id="filter-has-correction"> Has Correction Request
+        </label>
+      </div>
+    </div>
+
+    <!-- Attendance Table -->
+    <div style="overflow-x: auto;">
+      <table class="table attendance-table" id="history-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Employee ID</th>
+            <th>Role</th>
+            <th>Team</th>
+            <th>Check-In</th>
+            <th>Check-Out</th>
+            <th>Working Duration</th>
+            <th>Status</th>
+            <th>Correction</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody">
+          <tr><td colspan="11" class="text-muted" style="text-align: center; padding: 2rem;">Loading attendance records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination Controls -->
+    <div id="pagination-controls" style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted);" id="pagination-info">
+        Showing 0 records
+      </div>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <button id="prev-page-btn" class="btn btn-secondary btn-xs" disabled>&larr; Previous</button>
+        <span id="current-page-label" style="font-size: var(--font-size-xs); font-weight: 600; padding: 0 0.5rem;">Page 1 of 1</span>
+        <button id="next-page-btn" class="btn btn-secondary btn-xs" disabled>Next &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: Correction Requests -->
+  <div id="pane-correction-requests" class="att-tab-pane" style="display: none; padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="font-size: var(--font-size-md); color: var(--color-primary); margin: 0;">Attendance Correction Requests</h3>
+      <span class="text-muted" style="font-size: var(--font-size-xs);">Self-approval is strictly prevented by security policy.</span>
+    </div>
+    <div style="overflow-x: auto;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date Requested</th>
+            <th>Employee</th>
+            <th>Employee ID</th>
+            <th>Role</th>
+            <th>Requested Check-In</th>
+            <th>Requested Check-Out</th>
+            <th>Reason</th>
+            <th>Review Status</th>
+            <th>Reviewer</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="corrections-tbody">
+          <tr><td colspan="10" class="text-muted" style="text-align: center; padding: 2rem;">Loading correction requests...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Request Correction Modal -->
+<div class="modal-backdrop" id="correction-modal" style="display: none;">
+  <div class="modal" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Submit Attendance Correction</h3>
+      <button class="modal-close-btn" id="close-correction-modal" aria-label="Close modal">&times;</button>
+    </div>
+    <form id="correction-form">
+      <div class="modal-body">
+        <input type="hidden" id="corr-att-id" value="">
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label class="form-label" for="corr-checkin">Requested Check-In Time <span class="required">*</span></label>
+          <input type="datetime-local" id="corr-checkin" class="form-control" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label class="form-label" for="corr-checkout">Requested Check-Out Time <span class="required">*</span></label>
+          <input type="datetime-local" id="corr-checkout" class="form-control" required>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label class="form-label" for="corr-reason">Reason for Correction <span class="required">*</span></label>
+          <textarea id="corr-reason" class="form-control" rows="3" placeholder="Explain the reason for adjustment (e.g. system issue, offline work, forgot checkout)..." required></textarea>
+        </div>
+        <div id="corr-error" class="alert alert-error" style="display: none; font-size: var(--font-size-xs); margin-top: 0.5rem;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancel-correction-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-corr-btn">Submit Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Review Correction Modal (Approve / Reject with Notes) -->
+<div class="modal-backdrop" id="review-modal" style="display: none;">
+  <div class="modal" style="max-width: 480px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="review-modal-title">Review Correction Request</h3>
+      <button class="modal-close-btn" id="close-review-modal" aria-label="Close modal">&times;</button>
+    </div>
+    <form id="review-form">
+      <div class="modal-body">
+        <input type="hidden" id="review-corr-id" value="">
+        <input type="hidden" id="review-action" value="">
+        <p id="review-prompt" style="font-size: var(--font-size-sm); margin-bottom: 1rem;">
+          Please enter optional notes regarding your decision:
+        </p>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label class="form-label" for="review-notes">Reviewer Notes</label>
+          <textarea id="review-notes" class="form-control" rows="3" placeholder="Optional explanation for approval or rejection..."></textarea>
+        </div>
+        <div id="review-error" class="alert alert-error" style="display: none; font-size: var(--font-size-xs);"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancel-review-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="confirm-review-btn">Confirm Decision</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const currentUserId = {{ current_user.id }};
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // DOM Elements
+  const shiftBadge = document.getElementById('shift-badge');
+  const shiftTimer = document.getElementById('shift-timer');
+  const shiftDetails = document.getElementById('shift-details');
+  const shiftCheckinBtn = document.getElementById('shift-checkin-btn');
+  const shiftCheckoutBtn = document.getElementById('shift-checkout-btn');
+
+  const metricActive = document.getElementById('metric-active-count');
+  const metricCheckedInToday = document.getElementById('metric-checked-in-today');
+  const metricHoursToday = document.getElementById('metric-hours-today');
+  const metricHoursWeek = document.getElementById('metric-hours-week');
+  const metricMissing = document.getElementById('metric-missing-checkouts');
+  const metricPending = document.getElementById('metric-pending-corrections');
+  const missingAlert = document.getElementById('missing-checkout-alert');
+  const tabCorrBadge = document.getElementById('tab-correction-badge');
+
+  let activeCheckinDt = null;
+  let timerInterval = null;
+  let currentPage = 1;
+  const perPage = 15;
+
+  function formatHMS(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function updateShiftTimer() {
+    if (!activeCheckinDt) return;
+    const elapsedSecs = Math.max(0, Math.floor((Date.now() - activeCheckinDt.getTime()) / 1000));
+    if (shiftTimer) {
+      shiftTimer.textContent = formatHMS(elapsedSecs);
+    }
+  }
+
+  // 1. Load Personal Shift Status
+  async function loadMyShift() {
+    try {
+      const res = await fetch('/api/attendance/today');
+      if (!res.ok) return;
+      const data = (await res.json()).data;
+
+      if (data.is_checked_in && data.active_session) {
+        shiftCheckinBtn.style.display = 'none';
+        shiftCheckoutBtn.style.display = 'inline-flex';
+        shiftBadge.className = 'badge badge-completed';
+        shiftBadge.textContent = 'Active Shift';
+
+        activeCheckinDt = new Date(data.active_session.check_in);
+        const checkinFormatted = activeCheckinDt.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        shiftDetails.innerHTML = `Started today at <strong>${checkinFormatted}</strong>`;
+
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(updateShiftTimer, 1000);
+        updateShiftTimer();
+      } else {
+        shiftCheckinBtn.style.display = 'inline-flex';
+        shiftCheckoutBtn.style.display = 'none';
+        shiftBadge.className = 'badge badge-employee';
+        shiftBadge.textContent = 'Not Checked In';
+        if (shiftTimer) shiftTimer.textContent = '00:00:00';
+        if (timerInterval) clearInterval(timerInterval);
+        activeCheckinDt = null;
+
+        if (data.has_completed_shift && data.last_completed_session) {
+          const hours = Math.floor(data.today_duration_minutes / 60);
+          const mins = data.today_duration_minutes % 60;
+          shiftDetails.innerHTML = `Completed shifts today: <strong>${hours}h ${mins}m</strong>`;
+        } else {
+          shiftDetails.textContent = 'No active session today';
+        }
+      }
+    } catch (err) {
+      console.error('Error loading shift:', err);
+    }
+  }
+
+  // Shift Check-In
+  if (shiftCheckinBtn) {
+    shiftCheckinBtn.addEventListener('click', async () => {
+      shiftCheckinBtn.disabled = true;
+      shiftCheckinBtn.innerHTML = '<span>Checking in...</span>';
       try {
         const res = await fetch('/api/attendance/check-in', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-          body: JSON.stringify({notes: 'Work shift started'})
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({notes: 'Daily shift started'})
         });
-        await loadMyAttendance();
-      } catch (e) {
-        checkinBtn.disabled = false;
+        if (res.ok) {
+          await loadMyShift();
+          await loadSummaryMetrics();
+          await loadTeamTimesheet();
+          if (document.getElementById('pane-attendance-history').style.display !== 'none') {
+            loadAttendanceHistory(1);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        shiftCheckinBtn.disabled = false;
+        shiftCheckinBtn.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span>Check In</span>';
       }
     });
   }
 
-  if (checkoutBtn) {
-    checkoutBtn.addEventListener('click', async () => {
-      checkoutBtn.disabled = true;
-      checkoutBtn.innerHTML = '<span>Checking out...</span>';
+  // Shift Check-Out
+  if (shiftCheckoutBtn) {
+    shiftCheckoutBtn.addEventListener('click', async () => {
+      shiftCheckoutBtn.disabled = true;
+      shiftCheckoutBtn.innerHTML = '<span>Checking out...</span>';
       try {
         const res = await fetch('/api/attendance/check-out', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-          body: JSON.stringify({notes: 'Work shift ended'})
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({notes: 'Daily shift ended'})
         });
-        await loadMyAttendance();
-      } catch (e) {
-        checkoutBtn.disabled = false;
+        if (res.ok) {
+          await loadMyShift();
+          await loadSummaryMetrics();
+          await loadTeamTimesheet();
+          if (document.getElementById('pane-attendance-history').style.display !== 'none') {
+            loadAttendanceHistory(1);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        shiftCheckoutBtn.disabled = false;
+        shiftCheckoutBtn.innerHTML = '<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg><span>Check Out</span>';
       }
     });
   }
 
-  // Tabs
+  // 2. Load Real Database Summary Metrics
+  async function loadSummaryMetrics() {
+    try {
+      const res = await fetch('/api/attendance/metrics');
+      if (!res.ok) return;
+      const m = (await res.json()).data;
+
+      if (metricActive) metricActive.textContent = m.currently_checked_in ?? 0;
+      if (metricCheckedInToday) metricCheckedInToday.textContent = m.checked_in_today ?? 0;
+      if (metricHoursToday) metricHoursToday.textContent = `${m.total_working_hours_today ?? 0.0}h`;
+      if (metricHoursWeek) metricHoursWeek.textContent = `${m.total_working_hours_week ?? 0.0}h`;
+      if (metricMissing) metricMissing.textContent = m.missing_checkouts ?? 0;
+      if (metricPending) metricPending.textContent = m.pending_corrections ?? 0;
+
+      if (missingAlert) {
+        missingAlert.style.display = (m.missing_checkouts > 0) ? 'block' : 'none';
+      }
+
+      if (tabCorrBadge) {
+        if (m.pending_corrections > 0) {
+          tabCorrBadge.textContent = m.pending_corrections;
+          tabCorrBadge.style.display = 'inline-block';
+        } else {
+          tabCorrBadge.style.display = 'none';
+        }
+      }
+    } catch (err) {
+      console.error('Error loading metrics:', err);
+    }
+  }
+
+  // 3. Tab Navigation
   document.querySelectorAll('.att-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.att-tab-btn').forEach(b => {
@@ -326,125 +953,483 @@ document.addEventListener('DOMContentLoaded', () => {
         b.style.color = '';
       });
       document.querySelectorAll('.att-tab-pane').forEach(p => p.style.display = 'none');
+
       btn.classList.add('active');
       btn.style.color = 'var(--color-primary)';
-      const target = document.getElementById(`tab-${btn.dataset.tab}`);
-      if (target) target.style.display = 'block';
+      const pane = document.getElementById(`pane-${btn.dataset.tab}`);
+      if (pane) pane.style.display = 'block';
 
-      if (btn.dataset.tab === 'corrections') loadCorrections();
-      if (btn.dataset.tab === 'team-attendance') loadTeamAttendance();
+      if (btn.dataset.tab === 'team-timesheet') loadTeamTimesheet();
+      if (btn.dataset.tab === 'org-timesheet') loadOrgTimesheet();
+      if (btn.dataset.tab === 'attendance-history') loadAttendanceHistory(1);
+      if (btn.dataset.tab === 'correction-requests') loadCorrectionRequests();
     });
   });
 
-  async function loadCorrections() {
-    const tbody = document.getElementById('corrections-tbody');
-    try {
-      const res = await fetch('/api/attendance/corrections');
-      if (res.ok) {
-        const list = (await res.json()).data;
-        if (tbody) {
-          tbody.innerHTML = list.length ? list.map(c => `
-            <tr>
-              <td>${new Date(c.created_at).toLocaleDateString()}</td>
-              {% if current_user.is_management %}<td><b>${c.user_name}</b></td>{% endif %}
-              <td>${new Date(c.requested_check_in).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
-              <td>${new Date(c.requested_check_out).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})}</td>
-              <td style="font-size: var(--font-size-xs);">${c.reason}</td>
-              <td><span class="badge ${c.status === 'approved' ? 'badge-completed' : c.status === 'pending' ? 'badge-high' : 'badge-employee'}">${c.status}</span></td>
-              {% if current_user.is_management %}
-              <td>
-                ${c.status === 'pending' ? `
-                  <button class="btn btn-primary btn-xs review-corr-btn" data-id="${c.id}" data-action="approve">Approve</button>
-                  <button class="btn btn-secondary btn-xs review-corr-btn" data-id="${c.id}" data-action="reject">Reject</button>
-                ` : `<span style="font-size: var(--font-size-xs); color: var(--color-muted);">${c.reviewer_name || 'Reviewed'}</span>`}
-              </td>
-              {% endif %}
-            </tr>
-          `).join('') : '<tr><td colspan="7" class="text-muted" style="text-align:center; padding: 2rem;">No correction requests.</td></tr>';
-
-          document.querySelectorAll('.review-corr-btn').forEach(b => {
-            b.addEventListener('click', async () => {
-              const cid = b.dataset.id;
-              const dec = b.dataset.action;
-              await fetch(`/api/attendance/corrections/${cid}/review`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
-                body: JSON.stringify({decision: dec})
-              });
-              loadCorrections();
-              loadMyAttendance();
-            });
-          });
-        }
-      }
-    } catch (e) {}
-  }
-
-  async function loadTeamAttendance() {
+  // 4. Tab 1: Load Team Timesheet
+  async function loadTeamTimesheet() {
     const tbody = document.getElementById('team-timesheet-tbody');
+    if (!tbody) return;
     try {
       const res = await fetch('/api/attendance/team');
-      if (res.ok) {
-        const team = (await res.json()).data;
-        if (tbody) {
-          tbody.innerHTML = team.length ? team.map(m => `
-            <tr>
-              <td><b>${m.name}</b><div style="font-size: var(--font-size-xs); color: var(--color-muted);">${m.email}</div></td>
-              <td>${m.designation || 'Member'}</td>
-              <td><span class="badge ${m.status === 'active' ? 'badge-completed' : 'badge-employee'}">${m.status === 'active' ? 'Checked In' : 'Away'}</span></td>
-              <td>${m.check_in ? new Date(m.check_in).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
-              <td>${m.check_out ? new Date(m.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-'}</td>
-              <td style="font-weight: 700;">${m.status === 'active' ? 'In progress' : `${Math.floor(m.duration_minutes / 60)}h ${m.duration_minutes % 60}m`}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="6" class="text-muted" style="text-align:center; padding: 2rem;">No team members found.</td></tr>';
-        }
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center; padding: 2rem;">Could not load team attendance.</td></tr>';
+        return;
       }
-    } catch (e) {}
+      const members = (await res.json()).data;
+      if (!members || !members.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center; padding: 2rem;">No authorized team members found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = members.map(m => {
+        const statusBadge = m.status === 'active'
+          ? '<span class="badge badge-completed">Checked In</span>'
+          : m.status === 'completed'
+            ? '<span class="badge badge-team_lead">Shift Ended</span>'
+            : '<span class="badge badge-employee">Not Checked In</span>';
+
+        const checkInStr = m.check_in ? new Date(m.check_in).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-';
+        const checkOutStr = m.check_out ? new Date(m.check_out).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : '-';
+        const durationStr = m.status === 'active' ? `${m.duration_hours}h (Active)` : `${m.duration_hours}h`;
+
+        return `
+          <tr>
+            <td>
+              <div style="font-weight: 600; color: var(--color-primary);">${m.name}</div>
+              <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${m.email}</div>
+            </td>
+            <td style="font-family: monospace; font-size: var(--font-size-xs); font-weight: 600;">${m.employee_id_code}</td>
+            <td><span class="badge badge-${m.role}">${m.role.replace('_', ' ').toUpperCase()}</span></td>
+            <td>${m.team_name}</td>
+            <td>${statusBadge}</td>
+            <td>${checkInStr}</td>
+            <td>${checkOutStr}</td>
+            <td style="font-weight: 700;">${durationStr}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) {
+      console.error(err);
+      tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="text-align:center; padding: 2rem;">Error loading team attendance.</td></tr>';
+    }
   }
 
-  // Correction Modal
-  const modal = document.getElementById('correction-modal');
-  const openModalBtn = document.getElementById('open-correction-modal-btn');
-  const closeModalBtn = document.getElementById('close-correction-modal');
-  const cancelBtn = document.getElementById('cancel-correction-btn');
+  const refreshTeamBtn = document.getElementById('refresh-team-btn');
+  if (refreshTeamBtn) refreshTeamBtn.addEventListener('click', loadTeamTimesheet);
+
+  // 5. Tab 2: Load Org Timesheet (Admin Only)
+  async function loadOrgTimesheet() {
+    const tbody = document.getElementById('org-timesheet-tbody');
+    if (!tbody) return;
+    try {
+      const res = await fetch('/api/attendance/organization');
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-muted" style="text-align:center; padding: 2rem;">Could not load organization records.</td></tr>';
+        return;
+      }
+      const data = (await res.json()).data;
+      const records = data.records || [];
+      if (!records.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-muted" style="text-align:center; padding: 2rem;">No organization attendance records found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = records.map(r => `
+        <tr>
+          <td>#${r.id}</td>
+          <td><strong>${r.user_name || 'Unknown'}</strong></td>
+          <td style="font-family: monospace; font-size: var(--font-size-xs);">${r.employee_id_code || '-'}</td>
+          <td><span class="badge badge-${r.role || 'employee'}">${(r.role || 'employee').replace('_', ' ').toUpperCase()}</span></td>
+          <td>${r.check_in ? new Date(r.check_in).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '-'}</td>
+          <td>${r.check_out ? new Date(r.check_out).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '<span class="badge badge-high">Active</span>'}</td>
+          <td style="font-weight: 700;">${r.duration_hours}h</td>
+          <td><span class="badge ${r.status === 'completed' ? 'badge-completed' : r.status === 'active' ? 'badge-high' : 'badge-team_lead'}">${r.status}</span></td>
+          <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${r.notes || '-'}</td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="9" class="text-muted" style="text-align:center; padding: 2rem;">Error loading records.</td></tr>';
+    }
+  }
+
+  // 6. Tab 3: Attendance History & Audits (Filterable & Paginated)
+  async function loadAttendanceHistory(page = 1) {
+    currentPage = page;
+    const tbody = document.getElementById('history-tbody');
+    const pageInfo = document.getElementById('pagination-info');
+    const pageLabel = document.getElementById('current-page-label');
+    const prevBtn = document.getElementById('prev-page-btn');
+    const nextBtn = document.getElementById('next-page-btn');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center; padding: 2rem;">Loading attendance records...</td></tr>';
+
+    const params = new URLSearchParams({
+      page: page,
+      per_page: perPage,
+      q: document.getElementById('filter-q')?.value || '',
+      role: document.getElementById('filter-role')?.value || '',
+      status: document.getElementById('filter-status')?.value || '',
+      start_date: document.getElementById('filter-date-from')?.value || '',
+      end_date: document.getElementById('filter-date-to')?.value || '',
+      missing_checkout: document.getElementById('filter-missing-co')?.checked ? '1' : '',
+      has_correction: document.getElementById('filter-has-correction')?.checked ? '1' : '',
+    });
+
+    try {
+      const res = await fetch(`/api/attendance/records?${params.toString()}`);
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center; padding: 2rem;">Could not load records.</td></tr>';
+        return;
+      }
+      const data = (await res.json()).data;
+      const items = data.items || [];
+
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center; padding: 2rem;">No matching attendance records found.</td></tr>';
+        if (pageInfo) pageInfo.textContent = 'Showing 0 records';
+        if (pageLabel) pageLabel.textContent = 'Page 1 of 1';
+        if (prevBtn) prevBtn.disabled = true;
+        if (nextBtn) nextBtn.disabled = true;
+        return;
+      }
+
+      tbody.innerHTML = items.map(r => {
+        const isMissing = r.is_missing_checkout;
+        const statusBadge = isMissing
+          ? '<span class="badge badge-overdue" title="Active shift from previous day">Missing Checkout</span>'
+          : r.status === 'completed'
+            ? '<span class="badge badge-completed">Completed</span>'
+            : r.status === 'corrected'
+              ? '<span class="badge badge-team_lead">Corrected</span>'
+              : '<span class="badge badge-high">Active</span>';
+
+        const corrBadge = r.correction_status === 'pending'
+          ? '<span class="badge badge-high">Pending Correction</span>'
+          : r.correction_status === 'approved'
+            ? '<span class="badge badge-completed">Correction Approved</span>'
+            : r.correction_status === 'rejected'
+              ? '<span class="badge badge-employee">Correction Rejected</span>'
+              : '<span style="color: var(--color-muted); font-size: var(--font-size-xs);">-</span>';
+
+        const checkInStr = r.check_in ? new Date(r.check_in).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '-';
+        const checkOutStr = r.check_out ? new Date(r.check_out).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : (isMissing ? '<span style="color:var(--color-danger); font-weight:700;">Missing</span>' : '<span class="badge badge-high">Active</span>');
+
+        let actionHtml = '';
+        if (r.can_review) {
+          actionHtml = `<button class="btn btn-primary btn-xs review-trigger-btn" data-corr-id="${r.correction_id}" data-action="approve">Review</button>`;
+        } else if (r.user_id === currentUserId && !r.correction_status) {
+          actionHtml = `<button class="btn btn-secondary btn-xs request-for-record-btn" data-id="${r.id}" data-in="${r.check_in || ''}" data-out="${r.check_out || ''}">Correct</button>`;
+        } else {
+          actionHtml = `<span style="font-size: var(--font-size-xs); color: var(--color-muted);">-</span>`;
+        }
+
+        return `
+          <tr style="${isMissing ? 'background: rgba(220, 53, 69, 0.04);' : ''}">
+            <td style="font-weight: 600; color: var(--color-primary);">${r.employee_name}</td>
+            <td style="font-family: monospace; font-size: var(--font-size-xs); font-weight: 600;">${r.employee_id_code}</td>
+            <td><span class="badge badge-${r.role}">${(r.role || '').replace('_', ' ').toUpperCase()}</span></td>
+            <td>${r.team_name}</td>
+            <td>${checkInStr}</td>
+            <td>${checkOutStr}</td>
+            <td style="font-weight: 700;">${r.duration_display}</td>
+            <td>${statusBadge}</td>
+            <td>${corrBadge}</td>
+            <td style="font-size: var(--font-size-xs); color: var(--color-muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.notes || '-'}</td>
+            <td>${actionHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // Wire action buttons
+      document.querySelectorAll('.request-for-record-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          document.getElementById('corr-att-id').value = b.dataset.id;
+          if (b.dataset.in) document.getElementById('corr-checkin').value = b.dataset.in.slice(0, 16);
+          if (b.dataset.out) document.getElementById('corr-checkout').value = b.dataset.out.slice(0, 16);
+          document.getElementById('correction-modal').style.display = 'flex';
+        });
+      });
+
+      document.querySelectorAll('.review-trigger-btn').forEach(b => {
+        b.addEventListener('click', () => {
+          openReviewModal(b.dataset.corrId, b.dataset.action);
+        });
+      });
+
+      // Update Pagination state
+      const total = data.total || 0;
+      const pages = data.pages || 1;
+      if (pageInfo) pageInfo.textContent = `Showing ${items.length} of ${total} records`;
+      if (pageLabel) pageLabel.textContent = `Page ${page} of ${pages}`;
+      if (prevBtn) prevBtn.disabled = (page <= 1);
+      if (nextBtn) nextBtn.disabled = (page >= pages);
+
+    } catch (err) {
+      console.error(err);
+      tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="text-align:center; padding: 2rem;">Error loading history.</td></tr>';
+    }
+  }
+
+  // Filter Event Listeners
+  const applyFiltersBtn = document.getElementById('apply-filters-btn');
+  if (applyFiltersBtn) {
+    applyFiltersBtn.addEventListener('click', () => loadAttendanceHistory(1));
+  }
+  const resetFiltersBtn = document.getElementById('reset-filters-btn');
+  if (resetFiltersBtn) {
+    resetFiltersBtn.addEventListener('click', () => {
+      if (document.getElementById('filter-q')) document.getElementById('filter-q').value = '';
+      if (document.getElementById('filter-role')) document.getElementById('filter-role').value = '';
+      if (document.getElementById('filter-status')) document.getElementById('filter-status').value = '';
+      if (document.getElementById('filter-date-from')) document.getElementById('filter-date-from').value = '';
+      if (document.getElementById('filter-date-to')) document.getElementById('filter-date-to').value = '';
+      if (document.getElementById('filter-missing-co')) document.getElementById('filter-missing-co').checked = false;
+      if (document.getElementById('filter-has-correction')) document.getElementById('filter-has-correction').checked = false;
+      loadAttendanceHistory(1);
+    });
+  }
+  document.getElementById('filter-missing-co')?.addEventListener('change', () => loadAttendanceHistory(1));
+  document.getElementById('filter-has-correction')?.addEventListener('change', () => loadAttendanceHistory(1));
+
+  // Pagination navigation
+  document.getElementById('prev-page-btn')?.addEventListener('click', () => {
+    if (currentPage > 1) loadAttendanceHistory(currentPage - 1);
+  });
+  document.getElementById('next-page-btn')?.addEventListener('click', () => {
+    loadAttendanceHistory(currentPage + 1);
+  });
+
+  // 7. Tab 4: Correction Requests Table
+  async function loadCorrectionRequests() {
+    const tbody = document.getElementById('corrections-tbody');
+    if (!tbody) return;
+    try {
+      const res = await fetch('/api/attendance/corrections');
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-muted" style="text-align:center; padding: 2rem;">Could not load correction requests.</td></tr>';
+        return;
+      }
+      const list = (await res.json()).data || [];
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-muted" style="text-align:center; padding: 2rem;">No correction requests found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(c => {
+        const isOwn = (c.user_id === currentUserId);
+        const reqIn = c.requested_check_in ? new Date(c.requested_check_in).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '-';
+        const reqOut = c.requested_check_out ? new Date(c.requested_check_out).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '-';
+        const dateReq = c.created_at ? new Date(c.created_at).toLocaleDateString([], {month: 'short', day: 'numeric', year: 'numeric'}) : '-';
+
+        const statusBadge = c.status === 'approved'
+          ? '<span class="badge badge-completed">Approved</span>'
+          : c.status === 'rejected'
+            ? '<span class="badge badge-employee">Rejected</span>'
+            : '<span class="badge badge-high">Pending</span>';
+
+        let actionHtml = '';
+        if (c.status === 'pending') {
+          if (isOwn) {
+            actionHtml = '<span class="badge badge-employee" title="You cannot review your own correction request">Your Request</span>';
+          } else {
+            actionHtml = `
+              <div style="display: flex; gap: 0.35rem;">
+                <button class="btn btn-primary btn-xs approve-corr-btn" data-id="${c.id}">Approve</button>
+                <button class="btn btn-secondary btn-xs reject-corr-btn" data-id="${c.id}" style="border-color: var(--color-danger); color: var(--color-danger);">Reject</button>
+              </div>
+            `;
+          }
+        } else {
+          actionHtml = `<span style="font-size: var(--font-size-xs); color: var(--color-muted);">Decision logged</span>`;
+        }
+
+        return `
+          <tr>
+            <td>${dateReq}</td>
+            <td style="font-weight: 600; color: var(--color-primary);">${c.user_name || 'Employee'}</td>
+            <td style="font-family: monospace; font-size: var(--font-size-xs);">${c.employee_id_code || '-'}</td>
+            <td><span class="badge badge-${c.role || 'employee'}">${(c.role || 'employee').replace('_', ' ').toUpperCase()}</span></td>
+            <td>${reqIn}</td>
+            <td>${reqOut}</td>
+            <td style="font-size: var(--font-size-xs); max-width: 180px;">${c.reason}</td>
+            <td>${statusBadge}</td>
+            <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${c.reviewer_name || '-'}</td>
+            <td>${actionHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      // Wire Approve / Reject buttons
+      document.querySelectorAll('.approve-corr-btn').forEach(b => {
+        b.addEventListener('click', () => openReviewModal(b.dataset.id, 'approve'));
+      });
+      document.querySelectorAll('.reject-corr-btn').forEach(b => {
+        b.addEventListener('click', () => openReviewModal(b.dataset.id, 'reject'));
+      });
+
+    } catch (err) {
+      console.error(err);
+      tbody.innerHTML = '<tr><td colspan="10" class="text-muted" style="text-align:center; padding: 2rem;">Error loading correction requests.</td></tr>';
+    }
+  }
+
+  // 8. Review Modal Logic (Prevent Self-Review & Record Reason)
+  const reviewModal = document.getElementById('review-modal');
+  const reviewModalTitle = document.getElementById('review-modal-title');
+  const reviewPrompt = document.getElementById('review-prompt');
+  const reviewForm = document.getElementById('review-form');
+  const reviewCorrId = document.getElementById('review-corr-id');
+  const reviewAction = document.getElementById('review-action');
+  const reviewNotes = document.getElementById('review-notes');
+  const reviewError = document.getElementById('review-error');
+  const confirmReviewBtn = document.getElementById('confirm-review-btn');
+
+  function openReviewModal(corrId, action) {
+    reviewCorrId.value = corrId;
+    reviewAction.value = action;
+    reviewNotes.value = '';
+    reviewError.style.display = 'none';
+
+    if (action === 'approve') {
+      reviewModalTitle.textContent = 'Approve Attendance Correction';
+      reviewPrompt.textContent = 'Are you sure you want to approve this correction? The check-in and check-out times will be adjusted.';
+      confirmReviewBtn.className = 'btn btn-primary';
+      confirmReviewBtn.textContent = 'Approve Correction';
+    } else {
+      reviewModalTitle.textContent = 'Reject Attendance Correction';
+      reviewPrompt.textContent = 'Are you sure you want to reject this request? Please provide the rejection reason:';
+      confirmReviewBtn.className = 'btn btn-secondary';
+      confirmReviewBtn.style.borderColor = 'var(--color-danger)';
+      confirmReviewBtn.style.color = 'var(--color-danger)';
+      confirmReviewBtn.textContent = 'Reject Correction';
+    }
+    reviewModal.style.display = 'flex';
+  }
+
+  document.getElementById('close-review-modal')?.addEventListener('click', () => reviewModal.style.display = 'none');
+  document.getElementById('cancel-review-btn')?.addEventListener('click', () => reviewModal.style.display = 'none');
+
+  if (reviewForm) {
+    reviewForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      reviewError.style.display = 'none';
+      confirmReviewBtn.disabled = true;
+
+      const cid = reviewCorrId.value;
+      const action = reviewAction.value;
+      const notes = reviewNotes.value.trim();
+
+      try {
+        const res = await fetch(`/api/attendance/corrections/${cid}/review`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+          body: JSON.stringify({decision: action, review_notes: notes})
+        });
+        const json = await res.json();
+        if (res.ok) {
+          reviewModal.style.display = 'none';
+          await loadSummaryMetrics();
+          await loadCorrectionRequests();
+          if (document.getElementById('pane-attendance-history').style.display !== 'none') {
+            loadAttendanceHistory(currentPage);
+          }
+        } else {
+          reviewError.textContent = json.error || 'Failed to submit review decision.';
+          reviewError.style.display = 'block';
+        }
+      } catch (err) {
+        reviewError.textContent = 'Network error occurred while submitting decision.';
+        reviewError.style.display = 'block';
+      } finally {
+        confirmReviewBtn.disabled = false;
+      }
+    });
+  }
+
+  // 9. Request Correction Modal Logic
+  const corrModal = document.getElementById('correction-modal');
+  const openCorrBtn = document.getElementById('open-correction-modal-btn');
+  const closeCorrBtn = document.getElementById('close-correction-modal');
+  const cancelCorrBtn = document.getElementById('cancel-correction-btn');
   const corrForm = document.getElementById('correction-form');
   const corrError = document.getElementById('corr-error');
+  const submitCorrBtn = document.getElementById('submit-corr-btn');
 
-  if (openModalBtn) openModalBtn.addEventListener('click', () => { modal.style.display = 'flex'; });
-  if (closeModalBtn) closeModalBtn.addEventListener('click', () => { modal.style.display = 'none'; });
-  if (cancelBtn) cancelBtn.addEventListener('click', () => { modal.style.display = 'none'; });
+  if (openCorrBtn) {
+    openCorrBtn.addEventListener('click', () => {
+      document.getElementById('corr-att-id').value = '';
+      corrForm.reset();
+      corrError.style.display = 'none';
+      corrModal.style.display = 'flex';
+    });
+  }
+  if (closeCorrBtn) closeCorrBtn.addEventListener('click', () => corrModal.style.display = 'none');
+  if (cancelCorrBtn) cancelCorrBtn.addEventListener('click', () => corrModal.style.display = 'none');
 
   if (corrForm) {
     corrForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       corrError.style.display = 'none';
+      submitCorrBtn.disabled = true;
+
+      const attId = document.getElementById('corr-att-id').value;
+      const reqIn = document.getElementById('corr-checkin').value;
+      const reqOut = document.getElementById('corr-checkout').value;
+      const reason = document.getElementById('corr-reason').value.trim();
+
       try {
         const res = await fetch('/api/attendance/corrections', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
           body: JSON.stringify({
-            requested_check_in: document.getElementById('corr-checkin').value,
-            requested_check_out: document.getElementById('corr-checkout').value,
-            reason: document.getElementById('corr-reason').value
+            attendance_id: attId ? parseInt(attId) : null,
+            requested_check_in: reqIn,
+            requested_check_out: reqOut,
+            reason: reason
           })
         });
         const json = await res.json();
         if (res.ok) {
-          modal.style.display = 'none';
+          corrModal.style.display = 'none';
           corrForm.reset();
-          loadCorrections();
+          await loadSummaryMetrics();
+          await loadCorrectionRequests();
         } else {
           corrError.textContent = json.error || 'Failed to submit correction.';
           corrError.style.display = 'block';
         }
       } catch (err) {
-        corrError.textContent = 'Network error occurred.';
+        corrError.textContent = 'Network communication error.';
         corrError.style.display = 'block';
+      } finally {
+        submitCorrBtn.disabled = false;
       }
     });
   }
 
-  loadMyAttendance();
+  // 10. Export CSV with active filters
+  const exportBtn = document.getElementById('export-csv-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      const params = new URLSearchParams({
+        q: document.getElementById('filter-q')?.value || '',
+        role: document.getElementById('filter-role')?.value || '',
+        status: document.getElementById('filter-status')?.value || '',
+        start_date: document.getElementById('filter-date-from')?.value || '',
+        end_date: document.getElementById('filter-date-to')?.value || '',
+        missing_checkout: document.getElementById('filter-missing-co')?.checked ? '1' : '',
+      });
+      window.location.href = `/api/attendance/export?${params.toString()}`;
+    });
+  }
+
+  // Initial Load
+  loadMyShift();
+  loadSummaryMetrics();
+  loadTeamTimesheet();
 });
 </script>
+{% endif %}
 {% endblock %}

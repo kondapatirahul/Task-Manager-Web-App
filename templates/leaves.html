@@ -1,0 +1,407 @@
+{% extends "_app_layout.html" %}
+
+{% block title %}Leave Management — TaskNest Enterprise{% endblock %}
+
+{% block app_content %}
+<div class="page-intro" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+  <div>
+    <h1 class="page-title">
+      {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
+        Organization Leave Management
+      {% elif current_user.is_team_lead %}
+        Team Leave Requests & Management
+      {% else %}
+        My Leave Requests
+      {% endif %}
+    </h1>
+    <p class="page-subtitle">
+      {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
+        Review, approve, and track employee and lead leave requests across the organization.
+      {% elif current_user.is_team_lead %}
+        Manage your team members' leave requests and submit your own personal leave applications.
+      {% else %}
+        Apply for time off, view your submitted requests, and track approval decisions in real time.
+      {% endif %}
+    </p>
+  </div>
+  <div style="display: flex; gap: 0.75rem;">
+    <button id="open-apply-leave-btn" class="btn btn-primary btn-sm">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>Apply for Leave</span>
+    </button>
+  </div>
+</div>
+
+{% if current_user.has_role('super_admin', 'admin', 'admin_hr', 'team_lead') %}
+<!-- Tab Navigation for Management Roles -->
+<div class="card" style="margin-bottom: 1.5rem;">
+  <div class="card-header" style="border-bottom: 1px solid var(--color-border); padding: 0.75rem 1.25rem;">
+    <div style="display: flex; gap: 1rem;">
+      <button class="btn btn-ghost btn-sm leave-tab-btn active" data-tab="review" style="font-weight: 700; color: var(--color-primary);">
+        {% if current_user.has_role('super_admin', 'admin', 'admin_hr') %}
+          All Leave Requests (Organization)
+        {% else %}
+          Team Leave Requests
+        {% endif %}
+      </button>
+      <button class="btn btn-ghost btn-sm leave-tab-btn" data-tab="my" style="font-weight: 600;">
+        My Personal Requests
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Review Queue Pane (For Admin / TL) -->
+{% if current_user.has_role('super_admin', 'admin', 'admin_hr', 'team_lead') %}
+<div id="pane-review-leaves" class="leave-tab-pane">
+  <div class="card" style="padding: 1.25rem; margin-bottom: 1.5rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase;">Status Filter:</span>
+        <select id="review-status-filter" class="form-control" style="width: auto; margin-bottom: 0; font-size: var(--font-size-xs);">
+          <option value="">All Statuses</option>
+          <option value="pending" selected>Pending Review</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <div id="review-count-badge" class="badge badge-pending">0 Requests</div>
+    </div>
+
+    <div style="overflow-x: auto;">
+      <table class="table" id="review-leaves-table">
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Leave Type</th>
+            <th>Date Range</th>
+            <th>Days</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Reviewer & Notes</th>
+            <th style="text-align: right;">Action</th>
+          </tr>
+        </thead>
+        <tbody id="review-leaves-tbody">
+          <tr>
+            <td colspan="8" style="text-align: center; color: var(--color-muted); padding: 2rem;">Loading leave requests...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Personal Requests Pane -->
+<div id="pane-my-leaves" class="leave-tab-pane" {% if current_user.has_role('super_admin', 'admin', 'admin_hr', 'team_lead') %}style="display: none;"{% endif %}>
+  <div class="card" style="padding: 1.25rem;">
+    <h3 style="font-size: var(--font-size-base); font-weight: 700; margin-bottom: 1rem; color: var(--color-primary);">My Submitted Requests</h3>
+    <div style="overflow-x: auto;">
+      <table class="table" id="my-leaves-table">
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Date Range</th>
+            <th>Days</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Review Notes</th>
+            <th>Submitted On</th>
+          </tr>
+        </thead>
+        <tbody id="my-leaves-tbody">
+          <tr>
+            <td colspan="7" style="text-align: center; color: var(--color-muted); padding: 2rem;">Loading your leave history...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Apply for Leave -->
+<div class="modal-overlay" id="apply-leave-modal" role="dialog" aria-modal="true" aria-labelledby="apply-leave-title">
+  <div class="modal-card" style="max-width: 520px;">
+    <div class="modal-header">
+      <h3 id="apply-leave-title" style="margin: 0;">Apply for Leave</h3>
+      <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="apply-leave-form">
+      <div class="modal-body" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="leave-type-select">Leave Type <span class="text-danger">*</span></label>
+          <select id="leave-type-select" class="form-control" required>
+            <option value="Casual" selected>Casual Leave</option>
+            <option value="Sick">Sick / Medical Leave</option>
+            <option value="Annual">Annual Paid Time Off</option>
+            <option value="Maternity/Paternity">Maternity / Paternity Leave</option>
+            <option value="Unpaid">Unpaid Leave</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="leave-start-date">Start Date <span class="text-danger">*</span></label>
+            <input type="date" id="leave-start-date" class="form-control" required>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label" for="leave-end-date">End Date <span class="text-danger">*</span></label>
+            <input type="date" id="leave-end-date" class="form-control" required>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+          <label class="form-label" for="leave-reason-text">Reason for Leave <span class="text-danger">*</span></label>
+          <textarea id="leave-reason-text" class="form-control" rows="3" placeholder="Provide details regarding your leave request..." required></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 1rem 1.25rem; border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: 0.75rem;">
+        <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="submit-leave-btn">Submit Request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const isManagement = {{ 'true' if current_user.has_role('super_admin', 'admin', 'admin_hr', 'team_lead') else 'false' }};
+  const isSuperAdmin = {{ 'true' if current_user.has_role('super_admin', 'admin', 'admin_hr') else 'false' }};
+
+  // Tab switching
+  const tabBtns = document.querySelectorAll('.leave-tab-btn');
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => {
+        b.classList.remove('active');
+        b.style.fontWeight = '600';
+        b.style.color = 'var(--color-text)';
+      });
+      btn.classList.add('active');
+      btn.style.fontWeight = '700';
+      btn.style.color = 'var(--color-primary)';
+
+      const tab = btn.dataset.tab;
+      const reviewPane = document.getElementById('pane-review-leaves');
+      const myPane = document.getElementById('pane-my-leaves');
+      if (tab === 'review') {
+        if (reviewPane) reviewPane.style.display = 'block';
+        if (myPane) myPane.style.display = 'none';
+        loadReviewLeaves();
+      } else {
+        if (reviewPane) reviewPane.style.display = 'none';
+        if (myPane) myPane.style.display = 'block';
+        loadMyLeaves();
+      }
+    });
+  });
+
+  // Modal handlers
+  const applyModal = document.getElementById('apply-leave-modal');
+  function openModal(m) { if (m) m.classList.add('is-open'); }
+  function closeModal(m) { if (m) m.classList.remove('is-open'); }
+  document.querySelectorAll('.modal-close-trigger').forEach(b => {
+    b.addEventListener('click', () => closeModal(applyModal));
+  });
+  document.getElementById('open-apply-leave-btn')?.addEventListener('click', () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    document.getElementById('leave-start-date').min = todayStr;
+    document.getElementById('leave-end-date').min = todayStr;
+    openModal(applyModal);
+  });
+
+  // Load My Leaves
+  async function loadMyLeaves() {
+    const tbody = document.getElementById('my-leaves-tbody');
+    if (!tbody) return;
+    try {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;">Loading your leave history...</td></tr>';
+      const res = await fetch('/api/leaves/my');
+      const json = await res.json();
+      const leaves = json.data || [];
+
+      if (!leaves.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--color-muted); padding: 2rem;">You have not submitted any leave requests yet.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = leaves.map(l => {
+        let badgeClass = 'badge-pending';
+        if (l.status === 'approved') badgeClass = 'badge-completed';
+        if (l.status === 'rejected') badgeClass = 'badge-overdue';
+
+        return `
+          <tr>
+            <td><strong>${l.leave_type}</strong></td>
+            <td>${l.start_date} to ${l.end_date}</td>
+            <td><strong>${l.days_count}</strong> day(s)</td>
+            <td style="max-width: 250px; white-space: pre-wrap; font-size: var(--font-size-xs);">${escapeHtml(l.reason)}</td>
+            <td><span class="badge ${badgeClass}">${l.status.toUpperCase()}</span></td>
+            <td style="font-size: var(--font-size-xs); color: var(--color-muted);">
+              ${l.reviewer_name ? `<div>Reviewed by <strong>${escapeHtml(l.reviewer_name)}</strong></div>` : ''}
+              ${l.reviewer_comment ? `<div style="font-style: italic;">"${escapeHtml(l.reviewer_comment)}"</div>` : (l.status !== 'pending' ? '—' : 'Pending decision')}
+            </td>
+            <td style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(l.created_at).toLocaleDateString()}</td>
+          </tr>
+        `;
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" style="color: var(--color-danger); text-align: center; padding: 2rem;">Failed to load leaves: ${e.message}</td></tr>`;
+    }
+  }
+
+  // Load Review Leaves (For Admin / TL)
+  async function loadReviewLeaves() {
+    const tbody = document.getElementById('review-leaves-tbody');
+    if (!tbody) return;
+    const filter = document.getElementById('review-status-filter')?.value || '';
+    const badge = document.getElementById('review-count-badge');
+
+    try {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;">Loading leave requests...</td></tr>';
+      const endpoint = isSuperAdmin ? `/api/leaves?status=${filter}` : `/api/leaves/team?status=${filter}`;
+      const res = await fetch(endpoint);
+      const json = await res.json();
+      const leaves = json.data || [];
+
+      if (badge) badge.textContent = `${leaves.length} Requests`;
+
+      if (!leaves.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--color-muted); padding: 2rem;">No leave requests found for the selected filter.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = leaves.map(l => {
+        let badgeClass = 'badge-pending';
+        if (l.status === 'approved') badgeClass = 'badge-completed';
+        if (l.status === 'rejected') badgeClass = 'badge-overdue';
+
+        const isPending = l.status === 'pending';
+
+        return `
+          <tr>
+            <td>
+              <strong style="color: var(--color-primary);">${escapeHtml(l.employee_name || 'Employee')}</strong>
+              <div style="font-size: 0.65rem; color: var(--color-muted);">${l.employee_id_code || ''} · ${l.team_name}</div>
+            </td>
+            <td><span class="badge badge-category">${l.leave_type}</span></td>
+            <td style="font-size: var(--font-size-xs);">${l.start_date} <span style="color: var(--color-muted);">to</span> ${l.end_date}</td>
+            <td><strong>${l.days_count}</strong></td>
+            <td style="max-width: 220px; font-size: var(--font-size-xs);">${escapeHtml(l.reason)}</td>
+            <td><span class="badge ${badgeClass}">${l.status.toUpperCase()}</span></td>
+            <td style="font-size: var(--font-size-xs); color: var(--color-muted);">
+              ${l.reviewer_name ? `<div>By <strong>${escapeHtml(l.reviewer_name)}</strong></div>` : '—'}
+              ${l.reviewer_comment ? `<div style="font-size: 0.65rem;">"${escapeHtml(l.reviewer_comment)}"</div>` : ''}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              ${isPending ? `
+                <button class="btn btn-primary btn-xs review-decision-btn" data-id="${l.id}" data-action="approve" style="margin-right: 0.25rem;">
+                  Approve
+                </button>
+                <button class="btn btn-secondary btn-xs review-decision-btn" data-id="${l.id}" data-action="reject">
+                  Reject
+                </button>
+              ` : `
+                <span style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(l.decision_at || l.created_at).toLocaleDateString()}</span>
+              `}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // Wire review action buttons
+      document.querySelectorAll('.review-decision-btn').forEach(b => {
+        b.addEventListener('click', async () => {
+          const leaveId = b.dataset.id;
+          const action = b.dataset.action;
+          const comment = prompt(action === 'approve' ? 'Optional approval notes:' : 'Reason for rejection (optional):');
+          if (comment === null) return; // user cancelled prompt
+
+          try {
+            const revRes = await fetch(`/api/leaves/${leaveId}/review`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+              },
+              body: JSON.stringify({ decision: action, comment: comment })
+            });
+            const revJson = await revRes.json();
+            if (!revRes.ok || revJson.ok === false) {
+              throw new Error(revJson.error || 'Failed to review request');
+            }
+            showToast(`Leave request has been ${action}d!`, 'success');
+            loadReviewLeaves();
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+      });
+
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="8" style="color: var(--color-danger); text-align: center; padding: 2rem;">Failed to load leaves: ${e.message}</td></tr>`;
+    }
+  }
+
+  document.getElementById('review-status-filter')?.addEventListener('change', loadReviewLeaves);
+
+  // Submit Leave Form
+  document.getElementById('apply-leave-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submit-leave-btn');
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/leaves', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({
+          leave_type: document.getElementById('leave-type-select').value,
+          start_date: document.getElementById('leave-start-date').value,
+          end_date: document.getElementById('leave-end-date').value,
+          reason: document.getElementById('leave-reason-text').value.trim()
+        })
+      });
+
+      const json = await res.json();
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.error || 'Failed to submit leave request');
+      }
+
+      showToast('Leave request submitted successfully!', 'success');
+      closeModal(applyModal);
+      e.target.reset();
+
+      loadMyLeaves();
+      if (isManagement) loadReviewLeaves();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+
+  // Initial load
+  if (isManagement) {
+    loadReviewLeaves();
+  } else {
+    loadMyLeaves();
+  }
+});
+</script>
+{% endblock %}
+

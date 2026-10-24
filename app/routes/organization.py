@@ -5,7 +5,7 @@ from flask import Blueprint, request
 from flask_login import current_user, login_required
 from app import db
 from app.models import (
-    Organization, Department, Team, TeamMember, User, AuditLog,
+    Organization, Department, Team, TeamMember, User, AuditLog, Task,
     ROLE_SUPER_ADMIN, ROLE_ADMIN, ROLE_TEAM_LEAD
 )
 from app.routes.utils import api_success, api_error, roles_required, active_account_required, log_audit
@@ -82,11 +82,26 @@ def teams():
         if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
             pass
         elif current_user.is_team_lead:
-            team_query = team_query.filter(Team.lead_id == current_user.id)
+            from sqlalchemy import or_
+            lead_member_teams = [m.team_id for m in TeamMember.query.filter_by(user_id=current_user.id).all()]
+            filters = [Team.lead_id == current_user.id]
+            if current_user.team_id:
+                filters.append(Team.id == current_user.team_id)
+            if lead_member_teams:
+                filters.append(Team.id.in_(lead_member_teams))
+            team_query = team_query.filter(or_(*filters))
         else:
             team_query = team_query.filter(Team.id.in_([m.team_id for m in TeamMember.query.filter_by(user_id=current_user.id).all()]))
         team_list = team_query.order_by(Team.name.asc()).all()
-        return api_success([t.to_dict() for t in team_list])
+        result = []
+        for t in team_list:
+            d = t.to_dict()
+            tasks = Task.query.filter_by(team_id=t.id).all()
+            d['total_tasks'] = len(tasks)
+            d['active_tasks'] = sum(1 for task in tasks if task.status != 'completed')
+            d['completed_tasks'] = sum(1 for task in tasks if task.status == 'completed')
+            result.append(d)
+        return api_success(result)
 
     # POST — create team
     if not current_user.is_management:
@@ -139,7 +154,23 @@ def team_members(team_id):
 
     if request.method == 'GET':
         members = TeamMember.query.filter_by(team_id=team.id).all()
-        return api_success([m.to_dict() for m in members])
+        member_list = []
+        for m in members:
+            d = m.to_dict()
+            u = m.user
+            if u:
+                d['employee_id_code'] = u.employee_id_code
+                d['full_name'] = u.full_name or u.username
+                d['email'] = u.email
+                d['role'] = u.role
+                d['designation'] = u.designation
+                # Calculate member tasks in this team
+                member_tasks = Task.query.filter_by(team_id=team.id, assignee_id=u.id).all()
+                d['active_tasks'] = sum(1 for t in member_tasks if t.status != 'completed')
+                d['completed_tasks'] = sum(1 for t in member_tasks if t.status == 'completed')
+                d['overdue_tasks'] = sum(1 for t in member_tasks if t.is_overdue)
+            member_list.append(d)
+        return api_success(member_list)
 
     # POST — add member
     if not current_user.is_management:

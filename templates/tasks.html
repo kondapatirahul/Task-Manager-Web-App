@@ -15,6 +15,7 @@
     <p class="page-subtitle">Track, prioritize, discuss, and deliver organizational tasks with full lifecycle tracking.</p>
   </div>
   <div style="display: flex; gap: 0.75rem; align-items: center;">
+    {% if current_user.has_role('super_admin', 'admin', 'team_lead') %}
     <div class="btn-group" style="display: flex; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); overflow: hidden;">
       <button id="view-mode-list-btn" class="btn btn-ghost btn-sm active" style="padding: 0.4rem 0.75rem; font-weight: 700; color: var(--color-primary); background-color: var(--color-surface-subtle);" title="List View">
         <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
@@ -25,10 +26,14 @@
         <span>Kanban</span>
       </button>
     </div>
-    {% if current_user.has_role('super_admin', 'admin', 'team_lead') %}
     <button class="btn btn-primary open-add-task-btn">
       <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
       <span>Add Task</span>
+    </button>
+    {% else %}
+    <button id="open-personal-task-btn" class="btn btn-primary">
+      <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      <span>+ Create Personal Task</span>
     </button>
     {% endif %}
   </div>
@@ -71,6 +76,15 @@
     </select>
   </div>
 
+  <!-- Type Filter (Personal vs Assigned) -->
+  <div class="filter-group">
+    <select id="filter-type" class="filter-select" aria-label="Filter by Type">
+      <option value="">All Task Types</option>
+      <option value="assigned">Organization Assigned</option>
+      <option value="personal">Personal Tasks</option>
+    </select>
+  </div>
+
   <!-- Sort Filter -->
   <div class="filter-group">
     <select id="filter-sort" class="filter-select" aria-label="Sort Tasks">
@@ -95,7 +109,7 @@
 
 <!-- 2. Kanban Board Container -->
 <div id="kanban-container" style="display: none; overflow-x: auto; padding-bottom: 1.5rem;">
-  <div style="display: grid; grid-template-columns: repeat(5, minmax(280px, 1fr)); gap: 1.25rem;">
+  <div style="display: grid; grid-template-columns: repeat(6, minmax(260px, 1fr)); gap: 1rem;">
     <!-- Column: To Do -->
     <div class="kanban-column" data-status="pending" style="background-color: var(--color-surface-subtle); border-radius: var(--radius-md); padding: 1rem; border-top: 4px solid var(--color-muted);">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
@@ -130,6 +144,15 @@
         <span class="badge" id="kanban-count-in_review">0</span>
       </div>
       <div class="kanban-cards-wrapper" id="kanban-in_review" style="display: flex; flex-direction: column; gap: 0.75rem; min-height: 250px;"></div>
+    </div>
+
+    <!-- Column: Changes Requested -->
+    <div class="kanban-column" data-status="changes_requested" style="background-color: var(--color-surface-subtle); border-radius: var(--radius-md); padding: 1rem; border-top: 4px solid #D97706;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <span style="font-weight: 700; font-size: var(--font-size-sm); color: #D97706;">Changes Requested</span>
+        <span class="badge" id="kanban-count-changes_requested" style="background-color: #FEF3C7; color: #92400E;">0</span>
+      </div>
+      <div class="kanban-cards-wrapper" id="kanban-changes_requested" style="display: flex; flex-direction: column; gap: 0.75rem; min-height: 250px;"></div>
     </div>
 
     <!-- Column: Completed -->
@@ -171,10 +194,19 @@
           <p id="detail-criteria" style="font-size: var(--font-size-xs); margin: 0; color: var(--color-text);"></p>
         </div>
 
-        <div style="display: flex; gap: 1rem; font-size: var(--font-size-xs); color: var(--color-muted);">
+        <div style="display: flex; gap: 1rem; font-size: var(--font-size-xs); color: var(--color-muted); flex-wrap: wrap;">
           <div>Assignee: <strong id="detail-assignee" style="color: var(--color-text);">—</strong></div>
           <div>Due: <strong id="detail-due" style="color: var(--color-text);">—</strong></div>
           <div>Assigned by: <strong id="detail-creator" style="color: var(--color-text);">—</strong></div>
+          <div>Team: <strong id="detail-team" style="color: var(--color-text);">—</strong></div>
+        </div>
+
+        <!-- Task Activity & Status History -->
+        <div style="border-top: 1px solid var(--color-border); padding-top: 1rem;">
+          <h4 style="font-size: var(--font-size-sm); font-weight: 700; margin-bottom: 0.5rem;">Audit & Status History</h4>
+          <div id="status-history-container" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 160px; overflow-y: auto;">
+            <span style="font-size: var(--font-size-xs); color: var(--color-muted);">Loading activity history...</span>
+          </div>
         </div>
 
         <!-- Subtasks Checklist -->
@@ -226,6 +258,86 @@
         </form>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Personal Task Modal for Employees -->
+<div class="modal-overlay" id="personal-task-modal" role="dialog" aria-modal="true" aria-labelledby="personal-task-title">
+  <div class="modal-card" style="max-width: 550px;">
+    <div class="modal-header">
+      <h3 id="personal-task-title" style="margin: 0; font-size: var(--font-size-lg);">Create Personal Task</h3>
+      <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="personal-task-form">
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem;">
+        <div>
+          <label for="personal-task-title-input" class="form-label" style="font-weight: 600;">Title <span class="text-danger">*</span></label>
+          <input type="text" id="personal-task-title-input" class="form-control" placeholder="What do you need to work on?" required>
+        </div>
+        <div>
+          <label for="personal-task-desc-input" class="form-label" style="font-weight: 600;">Description</label>
+          <textarea id="personal-task-desc-input" class="form-control" rows="3" placeholder="Additional details, notes, or objectives..."></textarea>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div>
+            <label for="personal-task-priority-input" class="form-label" style="font-weight: 600;">Priority</label>
+            <select id="personal-task-priority-input" class="form-control">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div>
+            <label for="personal-task-due-input" class="form-label" style="font-weight: 600;">Due Date</label>
+            <input type="date" id="personal-task-due-input" class="form-control">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div>
+            <label for="personal-task-start-input" class="form-label" style="font-weight: 600;">Start Date</label>
+            <input type="date" id="personal-task-start-input" class="form-control">
+          </div>
+          <div>
+            <label for="personal-task-ref-input" class="form-label" style="font-weight: 600;">Reference Link</label>
+            <input type="url" id="personal-task-ref-input" class="form-control" placeholder="https://...">
+          </div>
+        </div>
+        <div>
+          <label for="personal-task-subtasks-input" class="form-label" style="font-weight: 600;">Checklist Items (one per line)</label>
+          <textarea id="personal-task-subtasks-input" class="form-control" rows="3" placeholder="Draft outline&#10;Implement solution&#10;Review and wrap up"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem; padding: 1rem 1.25rem; border-top: 1px solid var(--color-border);">
+        <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="save-personal-task-btn">Create Task</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Block Reason Modal -->
+<div class="modal-overlay" id="block-reason-modal" role="dialog" aria-modal="true" aria-labelledby="block-modal-title">
+  <div class="modal-card" style="max-width: 450px;">
+    <div class="modal-header">
+      <h3 id="block-modal-title" style="margin: 0; font-size: var(--font-size-md); color: var(--color-danger);">Mark Task as Blocked</h3>
+      <button type="button" class="modal-close-btn modal-close-trigger" aria-label="Close modal">
+        <svg class="icon" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <form id="block-reason-form">
+      <input type="hidden" id="block-task-id" value="">
+      <div class="modal-body" style="padding: 1.25rem;">
+        <p style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0;">Please explain what is blocking this task so your team lead or assigner can assist:</p>
+        <textarea id="block-reason-input" class="form-control" rows="3" placeholder="e.g. Waiting on client confirmation or access credentials..." required></textarea>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 0.75rem; padding: 0.75rem 1.25rem; border-top: 1px solid var(--color-border);">
+        <button type="button" class="btn btn-secondary modal-close-trigger">Cancel</button>
+        <button type="submit" class="btn btn-danger">Confirm Blocked</button>
+      </div>
+    </form>
   </div>
 </div>
 {% endblock %}

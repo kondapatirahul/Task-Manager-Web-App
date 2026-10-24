@@ -174,6 +174,7 @@ class User(UserMixin, db.Model):
 
     # Relationships
     manager = db.relationship('User', remote_side=[id], backref='direct_reports')
+    team    = db.relationship('Team', foreign_keys=[team_id], backref='assigned_users')
 
     # Tasks: explicitly bind user_id to prevent ambiguity with creator_id/assignee_id
     tasks      = db.relationship('Task', foreign_keys='Task.user_id', backref='user', lazy='dynamic',
@@ -330,6 +331,7 @@ class Task(db.Model):
     acceptance_criteria  = db.Column(db.Text, nullable=True)
     progress             = db.Column(db.Integer, default=0, nullable=False) # 0 to 100
     is_recurring         = db.Column(db.Boolean, default=False, nullable=False)
+    is_personal          = db.Column(db.Boolean, default=False, nullable=True)
     recurrence_interval  = db.Column(db.String(20), nullable=True) # 'daily', 'weekly', 'monthly'
     next_recurrence_date = db.Column(db.Date, nullable=True)
 
@@ -438,10 +440,12 @@ class Task(db.Model):
             'recurrence_interval':  self.recurrence_interval,
             'next_recurrence_date': self.next_recurrence_date.isoformat() if self.next_recurrence_date else None,
             'subtask_count':        self.subtasks.count() if hasattr(self.subtasks, 'count') else 0,
+            'subtasks_completed_count': sum(1 for st in self.subtasks if st.is_completed) if hasattr(self, 'subtasks') else 0,
             'message_count':        self.messages.count() if hasattr(self.messages, 'count') else 0,
             'attachment_count':     self.attachments.count() if hasattr(self.attachments, 'count') else 0,
             'submission_count':     self.submissions.count() if hasattr(self.submissions, 'count') else 0,
             'status_history':       [h.to_dict() for h in self.status_history.all()] if hasattr(self, 'status_history') else [],
+            'is_personal':          bool(self.is_personal),
             'reference_attachments': self.reference_attachments,
         }
 
@@ -677,10 +681,16 @@ class Attendance(db.Model):
 
     def to_dict(self):
         user_name = (self.user.full_name or self.user.username) if self.user else None
+        emp_code = (self.user.employee_id_code or f'EMP-{self.user.id:04d}') if self.user else ''
+        role = self.user.role if self.user else None
+        team_name = self.user.team.name if (self.user and getattr(self.user, 'team', None)) else None
         return {
             'id': self.id,
             'user_id': self.user_id,
             'user_name': user_name,
+            'employee_id_code': emp_code,
+            'role': role,
+            'team_name': team_name,
             'organization_id': self.organization_id,
             'check_in': self.check_in.isoformat() if self.check_in else None,
             'check_out': self.check_out.isoformat() if self.check_out else None,
@@ -712,11 +722,17 @@ class AttendanceCorrection(db.Model):
     def to_dict(self):
         user_name = (self.user.full_name or self.user.username) if self.user else None
         reviewer_name = (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None
+        emp_code = (self.user.employee_id_code or f'EMP-{self.user.id:04d}') if self.user else ''
+        role_name = self.user.role if self.user else ''
+        team_name = self.user.team.name if (self.user and getattr(self.user, 'team', None)) else 'No Team'
         return {
             'id': self.id,
             'attendance_id': self.attendance_id,
             'user_id': self.user_id,
             'user_name': user_name,
+            'employee_id_code': emp_code,
+            'role': role_name,
+            'team_name': team_name,
             'requested_check_in': self.requested_check_in.isoformat() if self.requested_check_in else None,
             'requested_check_out': self.requested_check_out.isoformat() if self.requested_check_out else None,
             'reason': self.reason,
@@ -792,39 +808,39 @@ class MeetingAttendee(db.Model):
 
 
 
-class LeaveRequest(db.Model):
-    """Employee leave request and review audit record."""
-    __tablename__ = 'leave_requests'
+#  class LeaveRequest(db.Model):
+#     """Employee leave request and review audit record."""
+#     __tablename__ = 'leave_requests'
 
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
-    leave_type = db.Column(db.String(20), nullable=False)
-    start_date = db.Column(db.Date, nullable=False)
-    end_date = db.Column(db.Date, nullable=False)
-    days = db.Column(db.Integer, nullable=False)
-    reason = db.Column(db.Text, nullable=False)
-    status = db.Column(db.String(20), nullable=False, default='pending', index=True)
-    reviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    reviewer_comment = db.Column(db.Text, nullable=True)
-    decided_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+#     id = db.Column(db.Integer, primary_key=True)
+#     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+#     leave_type = db.Column(db.String(20), nullable=False)
+#     start_date = db.Column(db.Date, nullable=False)
+#     end_date = db.Column(db.Date, nullable=False)
+#     days = db.Column(db.Integer, nullable=False)
+#     reason = db.Column(db.Text, nullable=False)
+#     status = db.Column(db.String(20), nullable=False, default='pending', index=True)
+#     reviewer_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+#     reviewer_comment = db.Column(db.Text, nullable=True)
+#     decided_at = db.Column(db.DateTime, nullable=True)
+#     created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
 
-    employee = db.relationship('User', foreign_keys=[user_id], backref='leave_requests')
-    reviewer = db.relationship('User', foreign_keys=[reviewer_id])
+#     employee = db.relationship('User', foreign_keys=[user_id], backref='leave_requests')
+#     reviewer = db.relationship('User', foreign_keys=[reviewer_id])
 
-    def to_dict(self):
-        return {
-            'id': self.id, 'user_id': self.user_id,
-            'employee_name': (self.employee.full_name or self.employee.username) if self.employee else 'Unknown',
-            'leave_type': self.leave_type, 'start_date': self.start_date.isoformat(),
-            'end_date': self.end_date.isoformat(), 'days': self.days,
-            'reason': self.reason, 'status': self.status,
-            'reviewer_id': self.reviewer_id,
-            'reviewer_name': (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None,
-            'reviewer_comment': self.reviewer_comment or '',
-            'decided_at': self.decided_at.isoformat() if self.decided_at else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-        }
+#     def to_dict(self):
+#         return {
+#             'id': self.id, 'user_id': self.user_id,
+#             'employee_name': (self.employee.full_name or self.employee.username) if self.employee else 'Unknown',
+#             'leave_type': self.leave_type, 'start_date': self.start_date.isoformat(),
+#             'end_date': self.end_date.isoformat(), 'days': self.days,
+#             'reason': self.reason, 'status': self.status,
+#             'reviewer_id': self.reviewer_id,
+#             'reviewer_name': (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None,
+#             'reviewer_comment': self.reviewer_comment or '',
+#             'decided_at': self.decided_at.isoformat() if self.decided_at else None,
+#             'created_at': self.created_at.isoformat() if self.created_at else None,
+#         }
 
 # ── Notifications ──────────────────────────────────────────────────────────────
 
@@ -907,3 +923,53 @@ class PasswordResetToken(db.Model):
             exp = exp.replace(tzinfo=timezone.utc)
         return not self.is_used and exp > now
 
+
+
+# ── Leave Requests ─────────────────────────────────────────────────────────────
+
+class LeaveRequest(db.Model):
+    __tablename__ = 'leave_requests'
+
+    id               = db.Column(db.Integer, primary_key=True)
+    user_id          = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    leave_type       = db.Column(db.String(50), nullable=False) # 'Casual', 'Sick', 'Annual', 'Maternity/Paternity', 'Unpaid', 'Other'
+    start_date       = db.Column(db.Date, nullable=False)
+    end_date         = db.Column(db.Date, nullable=False)
+    reason           = db.Column(db.Text, nullable=False)
+    status           = db.Column(db.String(20), default='pending', nullable=False) # 'pending', 'approved', 'rejected'
+    reviewer_id      = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    reviewer_comment = db.Column(db.Text, nullable=True)
+    decision_at      = db.Column(db.DateTime, nullable=True)
+    created_at       = db.Column(db.DateTime, default=utc_now, nullable=False)
+
+    user     = db.relationship('User', foreign_keys=[user_id], backref='leave_requests')
+    reviewer = db.relationship('User', foreign_keys=[reviewer_id], backref='reviewed_leaves')
+
+    def to_dict(self):
+        user_name = (self.user.full_name or self.user.username) if self.user else None
+        reviewer_name = (self.reviewer.full_name or self.reviewer.username) if self.reviewer else None
+        emp_code = (self.user.employee_id_code or f'EMP-{self.user.id:04d}') if self.user else ''
+        team_name = self.user.team.name if (self.user and getattr(self.user, 'team', None)) else 'No Team'
+        role_name = self.user.role if self.user else ''
+        days = (self.end_date - self.start_date).days + 1 if (self.start_date and self.end_date) else 0
+
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'user_name': user_name,
+            'employee_name': user_name,
+            'employee_id_code': emp_code,
+            'employee_role': role_name,
+            'team_name': team_name,
+            'leave_type': self.leave_type,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'days_count': days,
+            'reason': self.reason,
+            'status': self.status,
+            'reviewer_id': self.reviewer_id,
+            'reviewer_name': reviewer_name,
+            'reviewer_comment': self.reviewer_comment or '',
+            'decision_at': self.decision_at.isoformat() if self.decision_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }

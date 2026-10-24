@@ -8,15 +8,29 @@
   <div>
     <div style="display: flex; align-items: center; gap: 0.6rem;">
       <h1 class="page-title" style="margin-bottom: 0;">
-        Hello, {{ (current_user.full_name or current_user.username).split(' ')[0] }}
+        Hello, {{ current_user.full_name or current_user.username }}
       </h1>
       <span class="badge badge-{{ current_user.role }}">
         {{ current_user.role | replace('_', ' ') | title }}
       </span>
     </div>
     <p class="page-subtitle" style="margin-top: 0.35rem;">
-      {{ current_user.designation or 'Team Member' }} • {{ current_user.organization.name if current_user.organization else 'TaskNest Enterprise' }}
+      <span style="font-weight: 600; color: var(--color-text);">ID: {{ current_user.employee_id_code or ('EMP-' ~ ('%04d' % current_user.id)) }}</span> • 
+      <span>Team: {{ current_user.team.name if current_user.team else 'General Member' }}</span> • 
+      <span id="current-date-display">Today</span>
     </p>
+    {% if current_user.role == 'employee' %}
+    <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+      <a href="{{ url_for('web.tasks') }}" class="btn btn-primary btn-xs">
+        <svg class="icon icon-xs" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        <span>Tasks & Board</span>
+      </a>
+      <a href="{{ url_for('web.leaves') }}" class="btn btn-secondary btn-xs">
+        <svg class="icon icon-xs" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>Request Leave</span>
+      </a>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Attendance Quick Action Card -->
@@ -45,43 +59,47 @@
      ADMIN / HR DASHBOARD
      ========================================================================= -->
 <div class="metrics-grid" id="admin-metrics" style="margin-bottom: 2rem;">
-  <div class="metric-card metric-total">
+  <div class="metric-card metric-total" title="Total active and provisioned user accounts across all departments">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-employees">-</div>
       <div class="metric-label">Total Employees</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Active accounts</div>
     </div>
   </div>
 
-  <div class="metric-card metric-pending">
+  <div class="metric-card metric-pending" title="Cross-functional and departmental teams currently configured">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-teams">-</div>
       <div class="metric-label">Active Teams</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Configured groups</div>
     </div>
   </div>
 
-  <div class="metric-card metric-completed">
+  <div class="metric-card metric-completed" title="Employees currently marked present or active on shift today">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-active-att">-</div>
       <div class="metric-label">Checked In Today</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Staff presence</div>
     </div>
   </div>
 
-  <div class="metric-card metric-overdue">
+  <div class="metric-card metric-overdue" title="All active company work items excluding private personal tasks">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="admin-stat-tasks">-</div>
       <div class="metric-label">Company Tasks</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Excludes private tasks</div>
     </div>
   </div>
 </div>
@@ -146,6 +164,10 @@
           <svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           <span>Export Timesheet / Task CSV</span>
         </a>
+        <a href="{{ url_for('web.leaves') }}" class="btn btn-secondary btn-sm" style="justify-content: flex-start;">
+          <svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span>Manage Leave Requests</span>
+        </a>
       </div>
     </div>
   </div>
@@ -156,43 +178,47 @@
      TEAM LEAD DASHBOARD
      ========================================================================= -->
 <div class="metrics-grid" id="lead-metrics" style="margin-bottom: 2rem;">
-  <div class="metric-card metric-total">
+  <div class="metric-card metric-total" title="Active company tasks assigned across your authorized team">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-total">0</div>
       <div class="metric-label">Team Tasks</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Authorized team scope</div>
     </div>
   </div>
 
-  <div class="metric-card metric-pending">
+  <div class="metric-card metric-pending" title="Work submissions from team members awaiting your review and approval">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="lead-stat-in-review">0</div>
       <div class="metric-label">Awaiting Review</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Submissions queue</div>
     </div>
   </div>
 
-  <div class="metric-card metric-completed">
+  <div class="metric-card metric-completed" title="Tasks verified, approved and marked completed">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-completed">0</div>
       <div class="metric-label">Completed Tasks</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Successfully delivered</div>
     </div>
   </div>
 
-  <div class="metric-card metric-overdue">
+  <div class="metric-card metric-overdue" title="Unfinished tasks past due date or blocked by blockers">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-overdue">0</div>
       <div class="metric-label">Overdue / Blocked</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Needs intervention</div>
     </div>
   </div>
 </div>
@@ -219,13 +245,13 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="margin-top: 1.5rem;">
       <div class="card-header">
-        <h3 class="card-title">Upcoming Meetings</h3>
-        <a href="{{ url_for('web.calendar') }}" class="btn btn-link btn-xs">Calendar</a>
+        <h3 class="card-title">Pending Leave Requests</h3>
+        <a href="{{ url_for('web.leaves') }}" class="btn btn-link btn-xs">View All</a>
       </div>
-      <div id="dashboard-upcoming-list">
-        <p class="text-muted" style="font-size: var(--font-size-sm); padding: 1rem 0;">Checking meetings...</p>
+      <div id="lead-pending-leaves-list" style="display: flex; flex-direction: column; gap: 0.6rem;">
+        <p class="text-muted" style="font-size: var(--font-size-xs);">Checking leave requests...</p>
       </div>
     </div>
   </div>
@@ -235,76 +261,181 @@
 <!-- =========================================================================
      EMPLOYEE DASHBOARD
      ========================================================================= -->
-<div class="metrics-grid" id="dashboard-metrics" style="margin-bottom: 2rem;">
-  <div class="metric-card metric-total">
+<!-- 6 Summary Cards -->
+<div class="metrics-grid" id="dashboard-metrics" style="margin-bottom: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+  <div class="metric-card metric-total" title="All tasks assigned to you or created as personal tasks">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-total">0</div>
-      <div class="metric-label">Assigned Tasks</div>
+      <div class="metric-label">Total Assigned</div>
+      <div id="emp-stat-personal-breakdown" style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.15rem;">0 assigned · 0 personal</div>
     </div>
   </div>
 
-  <div class="metric-card metric-pending">
+  <div class="metric-card" style="border-left: 4px solid var(--color-muted);" title="Tasks ready to be started">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="emp-stat-todo">0</div>
+      <div class="metric-label">To Do</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Not yet started</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-pending" title="Tasks currently being actively worked on">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-pending">0</div>
       <div class="metric-label">In Progress</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Actively working</div>
     </div>
   </div>
 
-  <div class="metric-card metric-completed">
+  <div class="metric-card" style="border-left: 4px solid var(--color-accent);" title="Deliverables submitted awaiting Team Lead or Admin verification">
+    <div class="metric-icon-box">
+      <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M2 12h5l3 5 4-11 3 6h5"></path></svg>
+    </div>
+    <div class="metric-info">
+      <div class="metric-value" id="emp-stat-in-review">0</div>
+      <div class="metric-label">Awaiting Review</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Pending approval</div>
+    </div>
+  </div>
+
+  <div class="metric-card metric-completed" title="Tasks successfully verified and approved">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-completed">0</div>
       <div class="metric-label">Completed</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Verified done</div>
     </div>
   </div>
 
-  <div class="metric-card metric-overdue">
+  <div class="metric-card metric-overdue" title="Uncompleted tasks whose due date has passed">
     <div class="metric-icon-box">
       <svg class="icon icon-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
     </div>
     <div class="metric-info">
       <div class="metric-value" id="stat-overdue">0</div>
       <div class="metric-label">Overdue</div>
+      <div style="font-size: 0.65rem; color: var(--color-muted);">Past deadline</div>
+    </div>
+  </div>
+</div>
+
+<!-- Smart Priority Recommendation Banner -->
+<div class="card" id="smart-priority-banner" style="margin-bottom: 1.5rem; padding: 1.25rem; border-left: 5px solid var(--color-primary); background: linear-gradient(to right, var(--color-surface), var(--color-surface-subtle));">
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+    <div style="flex: 1; min-width: 260px;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem;">
+        <span class="badge badge-high" style="text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.65rem;">Smart Priority</span>
+        <span style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted);">What should I work on next?</span>
+      </div>
+      <h3 id="smart-next-title" style="margin: 0 0 0.35rem 0; font-size: var(--font-size-md); color: var(--color-primary);">Analyzing priority tasks...</h3>
+      <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; font-size: var(--font-size-xs);">
+        <span id="smart-next-reason" class="badge badge-overdue" style="font-weight: 600;">Calculating...</span>
+        <span id="smart-next-meta" style="color: var(--color-muted);"></span>
+      </div>
+    </div>
+    <div id="smart-next-action">
+      <a href="{{ url_for('web.tasks') }}" class="btn btn-primary btn-sm">Open Board</a>
+    </div>
+  </div>
+</div>
+
+<!-- Personal Weekly Progress -->
+<div class="card" style="margin-bottom: 1.5rem; padding: 1.25rem;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--color-border-subtle); padding-bottom: 0.75rem;">
+    <div>
+      <h3 class="card-title" style="margin-bottom: 0.15rem;">Personal Weekly Progress</h3>
+      <p style="margin: 0; font-size: var(--font-size-xs); color: var(--color-muted);" id="weekly-progress-trend">Weekly performance overview</p>
+    </div>
+    <span class="badge badge-completed" id="weekly-progress-rate">Active</span>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; text-align: center;">
+    <div style="background: var(--color-surface-subtle); padding: 0.75rem; border-radius: var(--radius-sm);">
+      <div style="font-size: var(--font-size-lg); font-weight: 800; color: var(--color-primary);" id="weekly-assigned">0</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Assigned This Week</div>
+    </div>
+    <div style="background: var(--color-surface-subtle); padding: 0.75rem; border-radius: var(--radius-sm);">
+      <div style="font-size: var(--font-size-lg); font-weight: 800; color: #10B981;" id="weekly-completed">0</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Completed This Week</div>
+    </div>
+    <div style="background: var(--color-surface-subtle); padding: 0.75rem; border-radius: var(--radius-sm);">
+      <div style="font-size: var(--font-size-lg); font-weight: 800; color: #F59E0B;" id="weekly-review">0</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Awaiting Review</div>
+    </div>
+    <div style="background: var(--color-surface-subtle); padding: 0.75rem; border-radius: var(--radius-sm);">
+      <div style="font-size: var(--font-size-lg); font-weight: 800; color: #EF4444;" id="weekly-overdue">0</div>
+      <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Overdue Items</div>
     </div>
   </div>
 </div>
 
 <div class="dashboard-grid">
-  <!-- Left: My Tasks -->
-  <div class="card">
-    <div class="card-header">
-      <h2 class="card-title">My Active Tasks</h2>
-      <a href="{{ url_for('web.tasks') }}" class="btn btn-ghost btn-sm" style="font-weight: 700; color: var(--color-primary);">Open My Tasks</a>
+  <!-- Left Column: Active Tasks & Recent Activity -->
+  <div>
+    <!-- My Active Tasks -->
+    <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <h2 class="card-title">My Active Tasks</h2>
+        <a href="{{ url_for('web.tasks') }}" class="btn btn-ghost btn-sm" style="font-weight: 700; color: var(--color-primary);">Open Kanban Board</a>
+      </div>
+      <div id="task-list-container"></div>
     </div>
-    <div id="task-list-container"></div>
+
+    <!-- Recent Activity Feed -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">Recent Activity</h3>
+      </div>
+      <div id="emp-recent-activity-list" style="display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0;">
+        <p class="text-muted" style="font-size: var(--font-size-xs); padding: 1rem; text-align: center;">Loading activity...</p>
+      </div>
+    </div>
   </div>
 
-  <!-- Right: Upcoming Deadlines & Meetings -->
+  <!-- Right Column: Personal Attendance & Upcoming Deadlines -->
   <div>
+    <!-- Employee Attendance Card -->
     <div class="card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <h3 class="card-title">Attendance & Shift History</h3>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div style="background: var(--color-surface-subtle); padding: 0.75rem; border-radius: var(--radius-sm); text-align: center;">
+            <div style="font-size: var(--font-size-md); font-weight: 800; color: var(--color-primary);" id="emp-hours-today">0.0h</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-muted);">Today's Hours</div>
+          </div>
+          <div style="background: var(--color-surface-subtle); padding: 0.75rem; border-radius: var(--radius-sm); text-align: center;">
+            <div style="font-size: var(--font-size-md); font-weight: 800; color: var(--color-primary);" id="emp-hours-week">0.0h</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-muted);">This Week's Hours</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size: var(--font-size-xs); font-weight: 700; color: var(--color-muted); text-transform: uppercase; margin-bottom: 0.5rem;">Recent Shift Sessions</div>
+          <div id="emp-recent-shifts" style="display: flex; flex-direction: column; gap: 0.4rem;">
+            <p class="text-muted" style="font-size: var(--font-size-xs);">Loading sessions...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upcoming Deadlines -->
+    <div class="card">
       <div class="card-header">
         <h3 class="card-title">Upcoming Deadlines</h3>
       </div>
       <div id="dashboard-upcoming-list">
         <p class="text-muted" style="font-size: var(--font-size-sm); padding: 1rem 0;">Checking upcoming tasks...</p>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">Upcoming Meetings</h3>
-        <a href="{{ url_for('web.calendar') }}" class="btn btn-link btn-xs">Calendar</a>
-      </div>
-      <div id="employee-meetings-list" style="display: flex; flex-direction: column; gap: 0.6rem;">
-        <p class="text-muted" style="font-size: var(--font-size-sm);">Checking schedule...</p>
       </div>
     </div>
   </div>
@@ -314,6 +445,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  const dateDisplay = document.getElementById('current-date-display');
+  if (dateDisplay) {
+    dateDisplay.textContent = new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  }
 
   // 1. Attendance widget controller
   const checkinBtn = document.getElementById('quick-checkin-btn');
@@ -500,7 +636,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {}
 
   {% elif current_user.is_team_lead %}
+  // Team Lead Dashboard Data Loader
   try {
+    // 1. Team Attendance
     const teamAttRes = await fetch('/api/attendance/team');
     if (teamAttRes.ok) {
       const teamAtt = (await teamAttRes.json()).data;
@@ -516,25 +654,334 @@ document.addEventListener('DOMContentLoaded', async () => {
               ${m.status === 'active' ? 'Checked In' : 'Away'}
             </span>
           </div>
-        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs);">No team members</p>';
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.5rem 0;">No team members</p>';
+      }
+    }
+
+    // 2. Team Tasks & Review Queue
+    const taskRes = await fetch('/api/tasks');
+    if (taskRes.ok) {
+      const tasks = (await taskRes.json()).data || [];
+      const total = tasks.length;
+      const inReview = tasks.filter(t => t.status === 'in_review').length;
+      const completed = tasks.filter(t => t.status === 'completed').length;
+      const overdue = tasks.filter(t => t.status !== 'completed' && (t.is_overdue || t.status === 'blocked')).length;
+
+      const statTotal = document.getElementById('stat-total');
+      const statReview = document.getElementById('lead-stat-in-review');
+      const statComp = document.getElementById('stat-completed');
+      const statOver = document.getElementById('stat-overdue');
+
+      if (statTotal) statTotal.textContent = total;
+      if (statReview) statReview.textContent = inReview;
+      if (statComp) statComp.textContent = completed;
+      if (statOver) statOver.textContent = overdue;
+
+      const taskContainer = document.getElementById('task-list-container');
+      if (taskContainer) {
+        if (!tasks.length) {
+          taskContainer.innerHTML = '<p class="text-muted" style="text-align: center; padding: 2rem;">No team tasks assigned yet. Click Tasks & Board to create assignments.</p>';
+        } else {
+          // Sort: in_review first, then overdue, then active
+          const sorted = [...tasks].sort((a, b) => {
+            if (a.status === 'in_review' && b.status !== 'in_review') return -1;
+            if (b.status === 'in_review' && a.status !== 'in_review') return 1;
+            if (a.is_overdue && !b.is_overdue) return -1;
+            if (b.is_overdue && !a.is_overdue) return 1;
+            return 0;
+          });
+
+          taskContainer.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 0.65rem; padding: 0.75rem 0;">
+              ${sorted.slice(0, 7).map(t => {
+                const isReview = (t.status === 'in_review');
+                const badgeColor = isReview ? 'var(--color-accent)' : (t.status === 'completed' ? '#25845A' : (t.is_overdue ? '#D94C4C' : '#173F35'));
+                const actionLabel = isReview ? 'Review Work →' : 'View Task →';
+                const assigneeName = t.assignee_name || (t.assignee ? (t.assignee.full_name || t.assignee.username) : 'Unassigned');
+
+                return `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 4px solid ${badgeColor}; gap: 0.75rem; flex-wrap: wrap;">
+                    <div style="min-width: 0; flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">${t.title}</span>
+                        <span class="badge" style="font-size: 0.65rem; background: ${badgeColor}15; color: ${badgeColor}; font-weight: 700; text-transform: uppercase;">${t.status.replace('_', ' ')}</span>
+                        ${t.priority ? `<span class="badge" style="font-size: 0.65rem; background: #fff; border: 1px solid var(--color-border);">${t.priority}</span>` : ''}
+                      </div>
+                      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.2rem;">
+                        Assignee: <b>${assigneeName}</b> · Due: <b>${t.due_date || 'No deadline'}</b>
+                      </div>
+                    </div>
+                    <a href="/tasks/${t.id}" class="btn ${isReview ? 'btn-primary' : 'btn-secondary'} btn-xs" style="white-space: nowrap;">
+                      ${actionLabel}
+                    </a>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }
+      }
+    }
+
+    // 3. Pending Leave Requests for Team Lead
+    const leavesRes = await fetch('/api/leaves/team?status=pending');
+    if (leavesRes.ok) {
+      const leaves = (await leavesRes.json()).data || [];
+      const lList = document.getElementById('lead-pending-leaves-list');
+      if (lList) {
+        lList.innerHTML = leaves.length ? leaves.slice(0, 4).map(l => `
+          <div style="padding: 0.6rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid #D97706; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+            <div>
+              <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--color-primary);">${l.employee_name || 'Member'} (${l.leave_type})</div>
+              <div style="font-size: 0.65rem; color: var(--color-muted);">${l.start_date} to ${l.end_date} · ${l.days_count} day(s)</div>
+            </div>
+            <a href="/leaves" class="btn btn-primary btn-xs">Review</a>
+          </div>
+        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.75rem 0; text-align: center;">No pending leave requests</p>';
       }
     }
   } catch (e) {}
 
   {% else %}
-  // Employee upcoming meetings
+  // Employee Dashboard Data Loader
   try {
-    const meetRes = await fetch('/api/meetings?upcoming=1');
-    if (meetRes.ok) {
-      const meetings = (await meetRes.json()).data;
-      const mList = document.getElementById('employee-meetings-list');
-      if (mList) {
-        mList.innerHTML = meetings.length ? meetings.slice(0, 4).map(m => `
-          <div style="padding: 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary);">
-            <div style="font-weight: 600; font-size: var(--font-size-xs);">${m.title}</div>
-            <div style="font-size: var(--font-size-xs); color: var(--color-muted);">${new Date(m.start_time).toLocaleString([], {weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit'})}</div>
-          </div>
-        `).join('') : '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.5rem 0;">No upcoming meetings</p>';
+    // 1. Employee Attendance & Hours
+    const attMyRes = await fetch('/api/attendance/my');
+    if (attMyRes.ok) {
+      const attData = (await attMyRes.json()).data;
+      const weekHours = document.getElementById('emp-hours-week');
+      if (weekHours) weekHours.textContent = `${attData.weekly_hours}h`;
+
+      const recentShiftsContainer = document.getElementById('emp-recent-shifts');
+      if (recentShiftsContainer) {
+        const records = attData.records || [];
+        if (!records.length) {
+          recentShiftsContainer.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); text-align: center; padding: 0.5rem 0;">No recent shift records</p>';
+        } else {
+          recentShiftsContainer.innerHTML = records.slice(0, 4).map(r => {
+            const dObj = r.check_in ? new Date(r.check_in) : new Date(r.created_at);
+            const dateStr = dObj.toLocaleDateString([], { month: 'short', day: 'numeric' });
+            const inStr = r.check_in ? new Date(r.check_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-';
+            const outStr = r.check_out ? new Date(r.check_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (r.status === 'active' ? 'Active' : '-');
+            const lateBadge = r.is_late ? '<span class="badge badge-high" style="font-size: 0.65rem;">Late</span>' : '';
+
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-xs); font-size: var(--font-size-xs);">
+                <div>
+                  <span style="font-weight: 600;">${dateStr}</span>
+                  <span style="color: var(--color-muted); margin-left: 0.35rem;">(${inStr} – ${outStr})</span>
+                  ${lateBadge}
+                </div>
+                <span style="font-weight: 700; color: var(--color-primary);">${r.duration_display || r.duration_hours + 'h'}</span>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    }
+
+    // 2. Employee Tasks, Summary Metrics, Smart Priority, and Productivity
+    const taskRes = await fetch('/api/tasks');
+    if (taskRes.ok) {
+      const tasks = (await taskRes.json()).data || [];
+      const total = tasks.length;
+      const personalTasks = tasks.filter(t => t.is_personal);
+      const companyTasks = tasks.filter(t => !t.is_personal);
+
+      const todoCount = tasks.filter(t => t.status === 'todo' || t.status === 'pending').length;
+      const inProgressCount = tasks.filter(t => t.status === 'in_progress').length;
+      const inReviewCount = tasks.filter(t => t.status === 'in_review').length;
+      const completedCount = tasks.filter(t => t.status === 'completed').length;
+      const overdueCount = tasks.filter(t => t.status !== 'completed' && (t.is_overdue || t.status === 'blocked')).length;
+
+      // Populate 6 Summary Cards
+      const statTotal = document.getElementById('stat-total');
+      const statBreakdown = document.getElementById('emp-stat-personal-breakdown');
+      const statTodo = document.getElementById('emp-stat-todo');
+      const statPending = document.getElementById('stat-pending');
+      const statReview = document.getElementById('emp-stat-in-review');
+      const statCompleted = document.getElementById('stat-completed');
+      const statOverdue = document.getElementById('stat-overdue');
+
+      if (statTotal) statTotal.textContent = total;
+      if (statBreakdown) statBreakdown.textContent = `${companyTasks.length} assigned · ${personalTasks.length} personal`;
+      if (statTodo) statTodo.textContent = todoCount;
+      if (statPending) statPending.textContent = inProgressCount;
+      if (statReview) statReview.textContent = inReviewCount;
+      if (statCompleted) statCompleted.textContent = completedCount;
+      if (statOverdue) statOverdue.textContent = overdueCount;
+
+      // Populate Weekly Productivity Breakdown
+      const now = new Date();
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const assignedThisWeek = tasks.filter(t => t.created_at && new Date(t.created_at) >= oneWeekAgo).length;
+      const completedThisWeek = tasks.filter(t => t.status === 'completed' && t.completed_at && new Date(t.completed_at) >= oneWeekAgo).length;
+
+      const weeklyAssigned = document.getElementById('weekly-assigned');
+      const weeklyCompleted = document.getElementById('weekly-completed');
+      const weeklyReview = document.getElementById('weekly-review');
+      const weeklyOverdue = document.getElementById('weekly-overdue');
+      const weeklyRate = document.getElementById('weekly-progress-rate');
+      const weeklyTrend = document.getElementById('weekly-progress-trend');
+
+      if (weeklyAssigned) weeklyAssigned.textContent = assignedThisWeek;
+      if (weeklyCompleted) weeklyCompleted.textContent = completedThisWeek;
+      if (weeklyReview) weeklyReview.textContent = inReviewCount;
+      if (weeklyOverdue) weeklyOverdue.textContent = overdueCount;
+
+      const completionPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+      if (weeklyRate) weeklyRate.textContent = `${completionPct}% Complete`;
+      if (weeklyTrend) weeklyTrend.textContent = `${completedCount} of ${total} total assigned tasks completed`;
+
+      // Smart Priority Recommendation Algorithm
+      const activeTasks = tasks.filter(t => t.status !== 'completed');
+      if (activeTasks.length > 0) {
+        // Sort priority: overdue > priority (urgent > high > medium > low) > due date
+        const priorityOrder = { 'urgent': 4, 'high': 3, 'medium': 2, 'low': 1 };
+        activeTasks.sort((a, b) => {
+          if (a.is_overdue && !b.is_overdue) return -1;
+          if (b.is_overdue && !a.is_overdue) return 1;
+          const pa = priorityOrder[a.priority] || 2;
+          const pb = priorityOrder[b.priority] || 2;
+          if (pa !== pb) return pb - pa;
+          if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+          if (a.due_date) return -1;
+          return 0;
+        });
+
+        const topTask = activeTasks[0];
+        const nextTitle = document.getElementById('smart-next-title');
+        const nextReason = document.getElementById('smart-next-reason');
+        const nextMeta = document.getElementById('smart-next-meta');
+        const nextAction = document.getElementById('smart-next-action');
+
+        if (nextTitle) nextTitle.textContent = topTask.title;
+        if (nextReason) {
+          if (topTask.is_overdue) {
+            nextReason.textContent = 'Overdue Deadline';
+            nextReason.className = 'badge badge-overdue';
+          } else if (topTask.priority === 'urgent' || topTask.priority === 'high') {
+            nextReason.textContent = `${topTask.priority.toUpperCase()} Priority`;
+            nextReason.className = 'badge badge-high';
+          } else if (topTask.status === 'in_progress') {
+            nextReason.textContent = 'In Progress';
+            nextReason.className = 'badge badge-pending';
+          } else {
+            nextReason.textContent = 'Next Up';
+            nextReason.className = 'badge badge-employee';
+          }
+        }
+        if (nextMeta) {
+          const typeLabel = topTask.is_personal ? 'Private Personal Task' : 'Company Assigned';
+          nextMeta.textContent = `Due: ${topTask.due_date || 'No deadline'} · ${typeLabel}`;
+        }
+        if (nextAction) {
+          nextAction.innerHTML = `<a href="/tasks/${topTask.id}" class="btn btn-primary btn-sm">Work on Task →</a>`;
+        }
+      } else {
+        const nextTitle = document.getElementById('smart-next-title');
+        const nextReason = document.getElementById('smart-next-reason');
+        const nextMeta = document.getElementById('smart-next-meta');
+        const nextAction = document.getElementById('smart-next-action');
+
+        if (nextTitle) nextTitle.textContent = 'All caught up! No active tasks.';
+        if (nextReason) {
+          nextReason.textContent = 'Completed';
+          nextReason.className = 'badge badge-completed';
+        }
+        if (nextMeta) nextMeta.textContent = 'Great work! You have finished all pending assignments.';
+        if (nextAction) {
+          nextAction.innerHTML = `<a href="/tasks" class="btn btn-secondary btn-sm">+ Create Personal Task</a>`;
+        }
+      }
+
+      // My Active Tasks List
+      const taskContainer = document.getElementById('task-list-container');
+      if (taskContainer) {
+        if (!activeTasks.length) {
+          taskContainer.innerHTML = '<p class="text-muted" style="text-align: center; padding: 2rem;">No active tasks. You are all caught up!</p>';
+        } else {
+          taskContainer.innerHTML = `
+            <div style="display: flex; flex-direction: column; gap: 0.65rem; padding: 0.75rem 0;">
+              ${activeTasks.slice(0, 5).map(t => {
+                const badgeColor = t.status === 'in_review' ? 'var(--color-accent)' : (t.is_overdue ? '#D94C4C' : (t.priority === 'high' ? '#E6A23C' : '#173F35'));
+                const typeBadge = t.is_personal ? '<span class="badge" style="background: #F4EBE2; color: #7D4829; font-size: 0.65rem;">Personal</span>' : '<span class="badge" style="background: #EAF5EF; color: #173F35; font-size: 0.65rem;">Assigned</span>';
+
+                return `
+                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 4px solid ${badgeColor}; gap: 0.75rem; flex-wrap: wrap;">
+                    <div style="min-width: 0; flex: 1;">
+                      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-primary);">${t.title}</span>
+                        ${typeBadge}
+                        <span class="badge" style="font-size: 0.65rem; background: ${badgeColor}15; color: ${badgeColor}; font-weight: 700; text-transform: uppercase;">${t.status.replace('_', ' ')}</span>
+                      </div>
+                      <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.2rem;">
+                        Due: <b>${t.due_date || 'No deadline'}</b> · Priority: <b>${t.priority}</b>
+                      </div>
+                    </div>
+                    <a href="/tasks/${t.id}" class="btn btn-secondary btn-xs" style="white-space: nowrap;">
+                      View Task →
+                    </a>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+        }
+      }
+
+      // Recent Activity List
+      const actList = document.getElementById('emp-recent-activity-list');
+      if (actList) {
+        const activities = [];
+        tasks.forEach(t => {
+          if (t.completed_at) {
+            activities.push({ text: `Completed task: <b>${t.title}</b>`, date: new Date(t.completed_at), type: 'completed' });
+          } else if (t.status === 'in_review') {
+            activities.push({ text: `Submitted task for review: <b>${t.title}</b>`, date: new Date(t.updated_at || t.created_at), type: 'review' });
+          } else if (t.created_at) {
+            activities.push({ text: `Task created: <b>${t.title}</b>`, date: new Date(t.created_at), type: 'created' });
+          }
+        });
+        activities.sort((a, b) => b.date - a.date);
+
+        if (!activities.length) {
+          actList.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.75rem; text-align: center;">No recent task activity</p>';
+        } else {
+          actList.innerHTML = activities.slice(0, 5).map(a => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid var(--color-border-subtle); font-size: var(--font-size-xs);">
+              <div>${a.text}</div>
+              <span style="color: var(--color-muted); font-size: 0.7rem;">${a.date.toLocaleDateString([], {month: 'short', day: 'numeric'})}</span>
+            </div>
+          `).join('');
+        }
+      }
+
+      // Upcoming Deadlines List
+      const upcomingDeadlines = tasks
+        .filter(t => t.status !== 'completed' && t.due_date)
+        .sort((a, b) => a.due_date.localeCompare(b.due_date));
+
+      const deadList = document.getElementById('dashboard-upcoming-list');
+      if (deadList) {
+        if (!upcomingDeadlines.length) {
+          deadList.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 1rem 0; text-align: center;">No upcoming deadlines</p>';
+        } else {
+          deadList.innerHTML = upcomingDeadlines.slice(0, 5).map(t => {
+            const isOverdue = t.is_overdue;
+            return `
+              <div style="padding: 0.5rem 0.6rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 3px solid ${isOverdue ? '#D94C4C' : 'var(--color-primary)'}; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
+                <div style="min-width: 0; flex: 1;">
+                  <div style="font-weight: 700; font-size: var(--font-size-xs); color: var(--color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${t.title}</div>
+                  <div style="font-size: 0.7rem; color: ${isOverdue ? 'var(--color-danger)' : 'var(--color-muted)'};">
+                    ${isOverdue ? 'Overdue: ' : 'Due: '} <b>${t.due_date}</b>
+                  </div>
+                </div>
+                <a href="/tasks/${t.id}" class="btn btn-secondary btn-xs" style="margin-left: 0.5rem;">Open</a>
+              </div>
+            `;
+          }).join('');
+        }
       }
     }
   } catch (e) {}

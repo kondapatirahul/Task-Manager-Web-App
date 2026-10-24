@@ -17,10 +17,19 @@ const TaskManager = {
   },
 
   init() {
+    // If no view-mode toggle exists (employee role), default directly to kanban
+    if (!document.getElementById('view-mode-list-btn') && document.getElementById('kanban-container')) {
+      this.viewMode = 'kanban';
+      const lc = document.getElementById('task-list-container');
+      const kc = document.getElementById('kanban-container');
+      if (lc) lc.style.display = 'none';
+      if (kc) kc.style.display = 'block';
+    }
+
     this.bindEvents();
     this.loadCategories().then(() => {
       this.loadEmployeesList();
-      if (document.getElementById('task-list-container')) {
+      if (document.getElementById('task-list-container') || document.getElementById('kanban-container')) {
         this.loadTasks();
       }
       if (document.getElementById('dashboard-metrics')) {
@@ -91,14 +100,23 @@ const TaskManager = {
       });
     }
 
+    const filterType = document.getElementById('filter-type');
+    if (filterType) {
+      filterType.addEventListener('change', (e) => {
+        this.currentFilter.type = e.target.value;
+        this.loadTasks();
+      });
+    }
+
     const clearFiltersBtn = document.getElementById('clear-filters-btn');
     if (clearFiltersBtn) {
       clearFiltersBtn.addEventListener('click', () => {
-        this.currentFilter = { q: '', status: '', priority: '', category_id: '', sort: 'created_at_desc' };
+        this.currentFilter = { q: '', status: '', priority: '', category_id: '', type: '', sort: 'created_at_desc' };
         if (searchInput) searchInput.value = '';
         if (filterStatus) filterStatus.value = '';
         if (filterPriority) filterPriority.value = '';
         if (filterCategory) filterCategory.value = '';
+        if (filterType) filterType.value = '';
         if (filterSort) filterSort.value = 'created_at_desc';
         this.loadTasks();
       });
@@ -135,12 +153,96 @@ const TaskManager = {
         if (kanbanContainer) kanbanContainer.style.display = 'block';
         this.renderKanban(this.tasks);
       });
+    } else if (kanbanContainer) {
+      // Default directly to kanban when list/kanban toggle is not rendered (employee view)
+      this.viewMode = 'kanban';
+      if (listContainer) listContainer.style.display = 'none';
+      kanbanContainer.style.display = 'block';
     }
 
     // Add Task Button
     document.querySelectorAll('.open-add-task-btn').forEach(btn => {
       btn.addEventListener('click', () => this.openTaskModal());
     });
+
+    // Personal Task Modal Button
+    const personalTaskBtn = document.getElementById('open-personal-task-btn');
+    if (personalTaskBtn) {
+      personalTaskBtn.addEventListener('click', () => {
+        const modal = document.getElementById('personal-task-modal');
+        if (modal) modal.classList.add('is-active');
+      });
+    }
+
+    // Personal Task Form Submit
+    const personalTaskForm = document.getElementById('personal-task-form');
+    if (personalTaskForm) {
+      personalTaskForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('personal-task-title-input').value.trim();
+        if (!title) return;
+        const description = document.getElementById('personal-task-desc-input').value.trim();
+        const priority = document.getElementById('personal-task-priority-input').value;
+        const due_date = document.getElementById('personal-task-due-input').value;
+        const start_date = document.getElementById('personal-task-start-input').value;
+        const ref_link = document.getElementById('personal-task-ref-input').value.trim();
+        const subtasksRaw = document.getElementById('personal-task-subtasks-input').value;
+        const subtasks = subtasksRaw.split('\n').map(s => s.trim()).filter(Boolean);
+
+        let fullDesc = description;
+        if (ref_link) {
+          fullDesc = fullDesc ? `${fullDesc}\n\nReference: ${ref_link}` : `Reference: ${ref_link}`;
+        }
+
+        const saveBtn = document.getElementById('save-personal-task-btn');
+        if (saveBtn) saveBtn.disabled = true;
+
+        try {
+          await api('POST', '/tasks', {
+            title,
+            description: fullDesc,
+            priority,
+            due_date: due_date || null,
+            start_date: start_date || null,
+            is_personal: true,
+            subtasks
+          });
+          showToast('Personal task created successfully!', 'success');
+          document.getElementById('personal-task-modal')?.classList.remove('is-active');
+          personalTaskForm.reset();
+          this.loadTasks();
+        } catch (err) {
+          showToast(err.message || 'Failed to create personal task', 'error');
+        } finally {
+          if (saveBtn) saveBtn.disabled = false;
+        }
+      });
+    }
+
+    // Block Reason Form Submit
+    const blockReasonForm = document.getElementById('block-reason-form');
+    if (blockReasonForm) {
+      blockReasonForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const taskId = document.getElementById('block-task-id').value;
+        const reason = document.getElementById('block-reason-input').value.trim();
+        if (!taskId || !reason) return;
+
+        try {
+          await api('PATCH', `/tasks/${taskId}`, {
+            status: 'blocked',
+            block_reason: reason,
+            comment: `Blocked: ${reason}`
+          });
+          showToast('Task marked as blocked', 'success');
+          document.getElementById('block-reason-modal')?.classList.remove('is-active');
+          blockReasonForm.reset();
+          this.loadTasks();
+        } catch (err) {
+          showToast(err.message || 'Failed to block task', 'error');
+        }
+      });
+    }
 
     // Task Form Submit
     const taskForm = document.getElementById('task-form');
@@ -289,6 +391,9 @@ const TaskManager = {
       if (this.currentFilter.status) params.set('status', this.currentFilter.status);
       if (this.currentFilter.priority) params.set('priority', this.currentFilter.priority);
       if (this.currentFilter.category_id) params.set('category_id', this.currentFilter.category_id);
+      if (this.currentFilter.type === 'personal') params.set('is_personal', 'true');
+      else if (this.currentFilter.type === 'assigned') params.set('is_personal', 'false');
+
       if (isDashboard) {
         params.set('sort', 'priority_desc');
       } else if (this.currentFilter.sort) params.set('sort', this.currentFilter.sort);
@@ -307,6 +412,12 @@ const TaskManager = {
       this.renderSmartPriority(this.tasks);
       this.renderTasks(this.tasks, container);
       this.renderKanban(this.tasks);
+
+      if (!isDashboard && this.viewMode === 'kanban') {
+        container.style.display = 'none';
+        const kc = document.getElementById('kanban-container');
+        if (kc) kc.style.display = 'block';
+      }
 
       if (isDashboard) {
         const label = container.closest('.card')?.querySelector('.card-title');
@@ -364,21 +475,23 @@ const TaskManager = {
       item.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${isCompleted ? 'checked' : ''} aria-label="Toggle task status" />
         <div class="task-body" style="cursor: pointer;">
-          <div class="task-title">${this.escapeHtml(task.title)}</div>
+          <div style="display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;">
+            <span style="font-size: 0.7rem; font-weight: 700; color: var(--color-muted); font-family: monospace;">#${task.id}</span>
+            <div class="task-title" style="margin-bottom: 0;">${this.escapeHtml(task.title)}</div>
+          </div>
           ${task.description ? `<div class="task-desc-preview">${this.escapeHtml(task.description)}</div>` : ''}
           <div class="task-meta">
             ${task.category_name ? `<span class="badge badge-category"><svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>${this.escapeHtml(task.category_name)}</span>` : ''}
             <span class="badge badge-${task.priority}">${task.priority}</span>
             <span class="badge badge-${task.status}">${task.status.replace('_', ' ')}</span>
-            ${task.assignee_name ? `<span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name)}</span>` : ''}
+            ${task.team_name ? `<span class="badge badge-category">🏢 ${this.escapeHtml(task.team_name)}</span>` : ''}
+            <span class="badge badge-employee">👤 ${this.escapeHtml(task.assignee_name || 'Unassigned')}</span>
             ${task.creator_name ? `<span class="badge badge-category">Assigned by ${this.escapeHtml(task.creator_name)}</span>` : ''}
             ${task.recurrence && task.recurrence !== 'none' ? `<span class="badge badge-category">🔁 ${task.recurrence}</span>` : ''}
-            ${task.due_date ? `
-              <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
-                <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                ${formattedDate} ${isOverdue ? '(Overdue)' : ''}
-              </span>
-            ` : ''}
+            <span class="task-due-tag ${isOverdue ? 'is-overdue' : ''}">
+              <svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              ${formattedDate} ${isOverdue ? '(Overdue)' : ''}
+            </span>
           </div>
         </div>
         <div class="task-actions">
@@ -436,6 +549,7 @@ const TaskManager = {
       in_progress: document.getElementById('kanban-in_progress'),
       blocked: document.getElementById('kanban-blocked'),
       in_review: document.getElementById('kanban-in_review'),
+      changes_requested: document.getElementById('kanban-changes_requested'),
       completed: document.getElementById('kanban-completed')
     };
 
@@ -444,38 +558,153 @@ const TaskManager = {
       in_progress: document.getElementById('kanban-count-in_progress'),
       blocked: document.getElementById('kanban-count-blocked'),
       in_review: document.getElementById('kanban-count-in_review'),
+      changes_requested: document.getElementById('kanban-count-changes_requested'),
       completed: document.getElementById('kanban-count-completed')
     };
 
     Object.values(cols).forEach(col => { if (col) col.innerHTML = ''; });
-    const colCounters = { pending: 0, in_progress: 0, blocked: 0, in_review: 0, completed: 0 };
+    const colCounters = { pending: 0, in_progress: 0, blocked: 0, in_review: 0, changes_requested: 0, completed: 0 };
 
     tasks.forEach(task => {
       let colKey = task.status;
       if (colKey === 'todo') colKey = 'pending';
-      if (colKey === 'changes_requested') colKey = 'in_review';
       if (!cols[colKey]) colKey = 'pending';
 
       colCounters[colKey]++;
 
+      // Action buttons based on status & task type
+      let actionButtonsHtml = '';
+      if (task.is_personal) {
+        if (task.status === 'completed') {
+          actionButtonsHtml = `<button class="btn btn-ghost btn-xs kanban-quick-btn" data-action="reopen" data-id="${task.id}" style="color: var(--color-muted);">Reopen</button>`;
+        } else {
+          actionButtonsHtml = `<button class="btn btn-secondary btn-xs kanban-quick-btn" data-action="complete" data-id="${task.id}" style="color: #059669; border-color: #10B981; font-weight: 600;">✓ Complete</button>`;
+        }
+      } else {
+        if (['pending', 'todo'].includes(task.status)) {
+          actionButtonsHtml = `<button class="btn btn-primary btn-xs kanban-quick-btn" data-action="start" data-id="${task.id}">Start Work</button>`;
+        } else if (task.status === 'in_progress') {
+          actionButtonsHtml = `
+            <button class="btn btn-secondary btn-xs kanban-quick-btn" data-action="block" data-id="${task.id}" style="color: var(--color-danger); border-color: var(--color-danger);">Block</button>
+            <button class="btn btn-primary btn-xs kanban-quick-btn" data-action="submit" data-id="${task.id}">Submit Work</button>
+          `;
+        } else if (task.status === 'blocked') {
+          actionButtonsHtml = `<button class="btn btn-secondary btn-xs kanban-quick-btn" data-action="resume" data-id="${task.id}">Resume Work</button>`;
+        } else if (task.status === 'changes_requested') {
+          actionButtonsHtml = `<button class="btn btn-primary btn-xs kanban-quick-btn" data-action="submit" data-id="${task.id}">Resubmit</button>`;
+        }
+      }
+
+      // Counters (checklist, comments, attachments)
+      const counters = [];
+      if (task.subtask_count > 0) {
+        counters.push(`<span>☑ ${task.subtasks_completed_count || 0}/${task.subtask_count}</span>`);
+      }
+      if (task.message_count > 0) {
+        counters.push(`<span>💬 ${task.message_count}</span>`);
+      }
+      if (task.attachment_count > 0) {
+        counters.push(`<span>📎 ${task.attachment_count}</span>`);
+      }
+
       const card = document.createElement('div');
       card.className = 'card';
-      card.style.cssText = 'padding: 0.85rem; cursor: pointer; border-radius: var(--radius-sm); border: 1px solid var(--color-border); box-shadow: var(--shadow-sm); transition: transform 0.15s ease;';
+      card.style.cssText = 'padding: 0.85rem; cursor: pointer; border-radius: var(--radius-sm); border: 1px solid var(--color-border); box-shadow: var(--shadow-sm); transition: transform 0.15s ease; display: flex; flex-direction: column; gap: 0.5rem;';
       card.innerHTML = `
-        <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-text); margin-bottom: 0.35rem;">
-          ${this.escapeHtml(task.title)}
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.35rem;">
+            <div style="display: flex; align-items: baseline; gap: 0.35rem;">
+              <span style="font-size: 0.65rem; font-weight: 700; color: var(--color-muted); font-family: monospace;">#${task.id}</span>
+              <div style="font-weight: 700; font-size: var(--font-size-sm); color: var(--color-text);">
+                ${this.escapeHtml(task.title)}
+              </div>
+            </div>
+            ${task.is_personal ? `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #059669; font-weight: 700; font-size: 0.65rem; flex-shrink: 0;">Personal</span>` : ''}
+          </div>
+          ${task.description ? `<p style="font-size: var(--font-size-xs); color: var(--color-muted); margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${this.escapeHtml(task.description)}</p>` : ''}
         </div>
-        ${task.description ? `<p style="font-size: var(--font-size-xs); color: var(--color-muted); margin: 0 0 0.5rem 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${this.escapeHtml(task.description)}</p>` : ''}
+
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.35rem; font-size: var(--font-size-xs);">
           <span class="badge badge-${task.priority}">${task.priority}</span>
+          ${task.is_overdue ? `<span class="badge badge-overdue" style="font-size: 0.65rem;">⚠️ Overdue</span>` : ''}
           ${task.due_date ? `<span style="color: var(--color-muted); font-size: 0.7rem;">📅 ${task.due_date}</span>` : ''}
         </div>
-        ${task.assignee_name ? `<div style="font-size: 0.7rem; color: var(--color-muted); margin-top: 0.4rem;">👤 ${this.escapeHtml(task.assignee_name)}</div>` : ''}
+
+        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; color: var(--color-muted); flex-wrap: wrap; gap: 0.25rem;">
+          <div>
+            ${task.is_personal ? '👤 My Task' : `👤 ${this.escapeHtml(task.creator_name ? `From: ${task.creator_name}` : (task.assignee_name || 'Assigned'))}`}
+            ${task.team_name ? `<span class="badge badge-employee" style="font-size: 0.65rem; margin-left: 0.35rem;">${this.escapeHtml(task.team_name)}</span>` : ''}
+          </div>
+          <div style="display: flex; gap: 0.4rem;">
+            ${counters.join('')}
+          </div>
+        </div>
+
+        ${actionButtonsHtml ? `
+          <div style="display: flex; justify-content: flex-end; gap: 0.4rem; border-top: 1px solid var(--color-border-subtle); padding-top: 0.4rem; margin-top: 0.2rem;">
+            ${actionButtonsHtml}
+          </div>
+        ` : ''}
       `;
 
       card.addEventListener('mouseenter', () => { card.style.transform = 'translateY(-2px)'; });
       card.addEventListener('mouseleave', () => { card.style.transform = 'translateY(0)'; });
       card.addEventListener('click', () => this.openTaskDetailModal(task));
+
+      // Quick action listeners
+      card.querySelectorAll('.kanban-quick-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const action = btn.dataset.action;
+          const id = btn.dataset.id;
+
+          if (action === 'start') {
+            try {
+              await api('PATCH', `/tasks/${id}`, { status: 'in_progress', comment: 'Started working on task' });
+              showToast('Task marked in progress', 'success');
+              this.loadTasks();
+            } catch (err) {
+              showToast(err.message || 'Failed to start task', 'error');
+            }
+          } else if (action === 'block') {
+            const blockModal = document.getElementById('block-reason-modal');
+            const blockIdInput = document.getElementById('block-task-id');
+            if (blockModal && blockIdInput) {
+              blockIdInput.value = id;
+              blockModal.classList.add('is-active');
+            }
+          } else if (action === 'resume') {
+            try {
+              await api('PATCH', `/tasks/${id}`, { status: 'in_progress', comment: 'Resumed task' });
+              showToast('Task resumed in progress', 'success');
+              this.loadTasks();
+            } catch (err) {
+              showToast(err.message || 'Failed to resume task', 'error');
+            }
+          } else if (action === 'submit') {
+            this.openTaskDetailModal(task);
+            setTimeout(() => {
+              document.getElementById('deliverable-message')?.focus();
+            }, 300);
+          } else if (action === 'complete') {
+            try {
+              await api('PATCH', `/tasks/${id}`, { status: 'completed' });
+              showToast('Task completed!', 'success');
+              this.loadTasks();
+            } catch (err) {
+              showToast(err.message || 'Failed to complete task', 'error');
+            }
+          } else if (action === 'reopen') {
+            try {
+              await api('PATCH', `/tasks/${id}`, { status: 'pending' });
+              showToast('Task reopened', 'success');
+              this.loadTasks();
+            } catch (err) {
+              showToast(err.message || 'Failed to reopen task', 'error');
+            }
+          }
+        });
+      });
 
       if (cols[colKey]) {
         cols[colKey].appendChild(card);
@@ -516,6 +745,123 @@ const TaskManager = {
       if (completedEl) completedEl.textContent = stats.completed ?? 0;
       if (overdueEl) overdueEl.textContent = stats.overdue ?? 0;
       if (rateEl) rateEl.textContent = `${stats.completion_rate ?? 0}%`;
+
+      // Employee summary card metrics
+      const empTodoEl = document.getElementById('emp-stat-todo');
+      const empInReviewEl = document.getElementById('emp-stat-in-review');
+      const empBreakdownEl = document.getElementById('emp-stat-personal-breakdown');
+      if (empTodoEl) empTodoEl.textContent = stats.todo ?? stats.pending ?? 0;
+      if (empInReviewEl) empInReviewEl.textContent = stats.in_review ?? 0;
+      if (empBreakdownEl) {
+        empBreakdownEl.textContent = `${stats.assigned_count ?? 0} assigned · ${stats.personal_count ?? 0} personal`;
+      }
+
+      // Smart Priority Banner ("What should I work on next?")
+      const smartTitle = document.getElementById('smart-next-title');
+      const smartReason = document.getElementById('smart-next-reason');
+      const smartMeta = document.getElementById('smart-next-meta');
+      const smartAction = document.getElementById('smart-next-action');
+
+      if (smartTitle) {
+        if (stats.smart_next && stats.smart_next.task) {
+          const sn = stats.smart_next;
+          smartTitle.textContent = sn.task.title;
+          if (smartReason) {
+            smartReason.textContent = sn.reason;
+            smartReason.className = sn.reason.includes('Overdue') ? 'badge badge-overdue' : (sn.reason.includes('Changes') ? 'badge badge-high' : 'badge badge-completed');
+          }
+          if (smartMeta) {
+            smartMeta.textContent = `Priority: ${sn.task.priority.toUpperCase()} · Status: ${sn.task.status_label || sn.task.status}${sn.task.due_date ? ` · Due: ${sn.task.due_date}` : ''}`;
+          }
+          if (smartAction) {
+            smartAction.innerHTML = `<a href="/tasks?task_id=${sn.task.id}" class="btn btn-primary btn-sm">Start Working</a>`;
+          }
+        } else {
+          smartTitle.textContent = 'All caught up!';
+          if (smartReason) {
+            smartReason.textContent = 'No pending tasks';
+            smartReason.className = 'badge badge-completed';
+          }
+          if (smartMeta) smartMeta.textContent = 'Great work! You have no open tasks requiring immediate action.';
+          if (smartAction) {
+            smartAction.innerHTML = `<a href="/tasks" class="btn btn-secondary btn-sm">View Board</a>`;
+          }
+        }
+      }
+
+      // Personal Weekly Progress
+      if (stats.weekly_progress) {
+        const wp = stats.weekly_progress;
+        const wAssigned = document.getElementById('weekly-assigned');
+        const wCompleted = document.getElementById('weekly-completed');
+        const wReview = document.getElementById('weekly-review');
+        const wOverdue = document.getElementById('weekly-overdue');
+        const wTrend = document.getElementById('weekly-progress-trend');
+
+        if (wAssigned) wAssigned.textContent = wp.assigned_this_week ?? 0;
+        if (wCompleted) wCompleted.textContent = wp.completed_this_week ?? 0;
+        if (wReview) wReview.textContent = wp.awaiting_review ?? 0;
+        if (wOverdue) wOverdue.textContent = wp.overdue ?? 0;
+        if (wTrend) wTrend.textContent = wp.completion_trend ?? 'Active week';
+      }
+
+      // Employee Attendance Summary
+      if (stats.attendance_summary) {
+        const attSummary = stats.attendance_summary;
+        const hToday = document.getElementById('emp-hours-today');
+        const hWeek = document.getElementById('emp-hours-week');
+        const shiftsList = document.getElementById('emp-recent-shifts');
+
+        if (hToday) hToday.textContent = `${attSummary.today_hours ?? 0}h`;
+        if (hWeek) hWeek.textContent = `${attSummary.week_hours ?? 0}h`;
+        if (shiftsList) {
+          if (!attSummary.recent_sessions || !attSummary.recent_sessions.length) {
+            shiftsList.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 0.5rem 0;">No shifts recorded this week.</p>';
+          } else {
+            shiftsList.innerHTML = attSummary.recent_sessions.map(s => {
+              const inStr = s.check_in ? new Date(s.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '—';
+              const outStr = s.check_out ? new Date(s.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : (s.status === 'active' ? 'Active' : '—');
+              const hrs = (s.duration_minutes ? (s.duration_minutes / 60).toFixed(1) : '0.0') + 'h';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0; border-bottom: 1px solid var(--color-border-subtle); font-size: var(--font-size-xs);">
+                  <div>
+                    <span style="font-weight: 600;">${s.work_date || (s.check_in ? s.check_in.split('T')[0] : 'Today')}</span>
+                    <span style="color: var(--color-muted); margin-left: 0.35rem;">${inStr} – ${outStr}</span>
+                  </div>
+                  <span class="badge ${s.status === 'active' ? 'badge-completed' : 'badge-employee'}">${hrs}</span>
+                </div>
+              `;
+            }).join('');
+          }
+        }
+      }
+
+      // Recent Activity Feed
+      const activityContainer = document.getElementById('emp-recent-activity-list');
+      if (activityContainer) {
+        if (!stats.recent_activity || !stats.recent_activity.length) {
+          activityContainer.innerHTML = '<p class="text-muted" style="font-size: var(--font-size-xs); padding: 1.5rem; text-align: center;">No recent activity on your tasks.</p>';
+        } else {
+          activityContainer.innerHTML = stats.recent_activity.map(a => {
+            const timeStr = a.created_at ? new Date(a.created_at).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+            return `
+              <div style="display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid var(--color-border-subtle);">
+                <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--color-primary); margin-top: 6px; flex-shrink: 0;"></div>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;">
+                    <span style="font-weight: 600; font-size: var(--font-size-xs); color: var(--color-text);">${this.escapeHtml(a.task_title)}</span>
+                    <span style="font-size: 0.65rem; color: var(--color-muted);">${timeStr}</span>
+                  </div>
+                  <div style="font-size: var(--font-size-xs); color: var(--color-muted); margin-top: 0.15rem;">
+                    <strong>${this.escapeHtml(a.actor_name)}</strong>: ${this.escapeHtml(a.comment)}
+                    ${a.new_status ? `<span class="badge badge-employee" style="margin-left: 0.35rem; font-size: 0.65rem;">${a.new_status.replace('_', ' ')}</span>` : ''}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
 
       const upcomingContainer = document.getElementById('dashboard-upcoming-list');
       if (upcomingContainer) {
@@ -669,7 +1015,7 @@ const TaskManager = {
     const modal = document.getElementById('task-detail-modal');
     if (!modal) return;
 
-    document.getElementById('task-detail-title').textContent = task.title;
+    document.getElementById('task-detail-title').textContent = `#${task.id} · ${task.title}`;
     const priBadge = document.getElementById('detail-priority-badge');
     if (priBadge) {
       priBadge.className = `badge badge-${task.priority}`;
@@ -693,17 +1039,84 @@ const TaskManager = {
       critBox.style.display = 'none';
     }
 
-    document.getElementById('detail-assignee').textContent = task.assignee_name || 'Self / Unassigned';
+    document.getElementById('detail-assignee').textContent = task.is_personal ? 'Self (Personal Task)' : (task.assignee_name || 'Self / Unassigned');
     document.getElementById('detail-due').textContent = task.due_date || 'No due date';
     const creator = document.getElementById('detail-creator');
-    if (creator) creator.textContent = task.creator_name || 'Workspace administrator';
+    if (creator) creator.textContent = task.is_personal ? 'Self' : (task.creator_name || 'Workspace administrator');
+    const teamEl = document.getElementById('detail-team');
+    if (teamEl) teamEl.textContent = task.team_name || 'General / Unassigned';
+
+    // Personal Task Actions vs Assigned Task Deliverable Review
+    let personalActionBox = document.getElementById('detail-personal-action-box');
+    if (!personalActionBox) {
+      personalActionBox = document.createElement('div');
+      personalActionBox.id = 'detail-personal-action-box';
+      const leftCol = modal.querySelector('.modal-body > div:first-child');
+      if (leftCol) leftCol.insertBefore(personalActionBox, leftCol.firstChild);
+    }
+
+    const delivSection = document.getElementById('submit-deliverable-form')?.closest('div');
+
+    if (task.is_personal) {
+      personalActionBox.style.display = 'block';
+      const isDone = task.status === 'completed';
+      personalActionBox.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: var(--radius-sm); padding: 0.6rem 0.85rem; margin-bottom: 0.75rem;">
+          <span style="font-size: var(--font-size-xs); font-weight: 700; color: #059669;">Personal Task</span>
+          <button class="btn ${isDone ? 'btn-secondary' : 'btn-primary'} btn-sm" id="detail-toggle-personal-btn">
+            ${isDone ? 'Reopen Task' : '✓ Mark Complete'}
+          </button>
+        </div>
+      `;
+      document.getElementById('detail-toggle-personal-btn')?.addEventListener('click', async () => {
+        try {
+          await api('PATCH', `/tasks/${task.id}`, { status: isDone ? 'pending' : 'completed' });
+          showToast(isDone ? 'Task reopened' : 'Personal task completed!', 'success');
+          this.closeModals();
+          this.loadTasks();
+        } catch (e) {
+          showToast(e.message || 'Failed to update personal task', 'error');
+        }
+      });
+      if (delivSection) delivSection.style.display = 'none';
+    } else {
+      personalActionBox.style.display = 'none';
+      if (delivSection) delivSection.style.display = 'block';
+    }
 
     modal.classList.add('is-active');
 
-    // Load subtasks, messages, and submissions
+    // Load subtasks, messages, submissions, and history
     this.loadSubtasks(task.id);
     this.loadMessages(task.id);
     this.loadSubmissions(task.id);
+    this.loadHistory(task.id);
+  },
+
+  async loadHistory(taskId) {
+    const container = document.getElementById('status-history-container');
+    if (!container) return;
+    try {
+      const res = await api('GET', `/tasks/${taskId}/history`);
+      const history = res.data || [];
+      if (!history.length) {
+        container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">No activity recorded yet.</span>';
+        return;
+      }
+      container.innerHTML = history.map(h => {
+        const timeStr = h.created_at ? new Date(h.created_at).toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}) : '';
+        return `
+          <div style="font-size: var(--font-size-xs); padding: 0.35rem 0.5rem; background: var(--color-surface-subtle); border-radius: var(--radius-sm); border-left: 2px solid var(--color-primary); display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+            <div>
+              <strong>${this.escapeHtml(h.changed_by_name || 'System')}</strong>: ${this.escapeHtml(h.comment || (h.new_status ? `Changed to ${h.new_status}` : 'Updated'))}
+            </div>
+            <span style="font-size: 0.65rem; color: var(--color-muted); white-space: nowrap;">${timeStr}</span>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<span style="font-size: var(--font-size-xs); color: var(--color-muted);">Activity history unavailable.</span>';
+    }
   },
 
   async loadSubtasks(taskId) {

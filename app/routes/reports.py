@@ -41,8 +41,11 @@ def productivity_metrics():
 
     query = Task.query
     if current_user.role == ROLE_TEAM_LEAD:
-        if current_user.team_id:
-            query = query.filter((Task.team_id == current_user.team_id) | (Task.assignee_id == current_user.id) | (Task.user_id == current_user.id))
+        led_teams = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+        if current_user.team_id and current_user.team_id not in led_teams:
+            led_teams.append(current_user.team_id)
+        if led_teams:
+            query = query.filter((Task.team_id.in_(led_teams)) | (Task.assignee_id == current_user.id) | (Task.user_id == current_user.id))
         else:
             query = query.filter((Task.assignee_id == current_user.id) | (Task.user_id == current_user.id))
     elif current_user.role not in (ROLE_SUPER_ADMIN, ROLE_ADMIN, 'admin_hr'):
@@ -88,7 +91,13 @@ def productivity_metrics():
     if current_user.role in (ROLE_SUPER_ADMIN, ROLE_ADMIN, 'admin_hr', ROLE_TEAM_LEAD):
         users_query = User.query.filter_by(account_active=True)
         if current_user.role == ROLE_TEAM_LEAD:
-            users_query = users_query.filter((User.team_id == current_user.team_id) if current_user.team_id else (User.id == current_user.id))
+            led_teams = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+            if current_user.team_id and current_user.team_id not in led_teams:
+                led_teams.append(current_user.team_id)
+            if led_teams:
+                users_query = users_query.filter((User.team_id.in_(led_teams)) | (User.id == current_user.id))
+            else:
+                users_query = users_query.filter(User.id == current_user.id)
         for user in users_query.order_by(User.full_name, User.username).all():
             assigned = [t for t in tasks if (t.assignee_id or t.user_id) == user.id]
             active_count = sum(1 for t in assigned if t.status != 'completed')
@@ -130,8 +139,14 @@ def export_tasks_csv():
         return api_error('Permission denied to export reports.', 403)
 
     query = Task.query
-    if current_user.role == ROLE_TEAM_LEAD and current_user.team_id:
-        query = query.filter(Task.team_id == current_user.team_id)
+    if current_user.role == ROLE_TEAM_LEAD:
+        led_teams = [t.id for t in Team.query.filter_by(lead_id=current_user.id).all()]
+        if current_user.team_id and current_user.team_id not in led_teams:
+            led_teams.append(current_user.team_id)
+        if led_teams:
+            query = query.filter(Task.team_id.in_(led_teams))
+        else:
+            query = query.filter(Task.assignee_id == current_user.id)
 
     tasks = query.order_by(Task.created_at.desc()).all()
 
