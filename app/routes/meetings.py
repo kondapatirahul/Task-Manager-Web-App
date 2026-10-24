@@ -106,12 +106,19 @@ def meetings():
     try:
         start_time = datetime.fromisoformat(start_str)
         end_time = datetime.fromisoformat(end_str)
-    except ValueError:
+        # datetime-local inputs submit a timezone-naive local wall time. Keep those
+        # values as entered; do not silently apply UTC or an extra +05:30 offset.
+        # If an API client explicitly sends an offset, normalize it to naive UTC.
+        if start_time.tzinfo is not None:
+            start_time = start_time.astimezone(timezone.utc).replace(tzinfo=None)
+        if end_time.tzinfo is not None:
+            end_time = end_time.astimezone(timezone.utc).replace(tzinfo=None)
+    except (ValueError, TypeError):
         return api_error('Invalid datetime format. Use ISO format (YYYY-MM-DDTHH:MM).', 400)
 
     if end_time <= start_time:
         return api_error('End time must be after start time.', 400)
-    if not _valid_location(location_or_link):
+    if not _valid_location(raw_location):
         return api_error('Meeting link must be a valid HTTP(S) URL or a room name.', 400)
     if end_time - start_time > timedelta(hours=24):
         return api_error('Meeting duration cannot exceed 24 hours.', 400)

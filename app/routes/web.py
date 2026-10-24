@@ -151,6 +151,36 @@ def admin_dashboard():
     return render_template('dashboard.html', active_page='admin_dashboard')
 
 
+@web_bp.route('/admin/enterprise-operations')
+@web_roles_required('super_admin', 'admin_hr')
+def admin_enterprise_operations():
+    return render_template('enterprise_console.html', active_page='enterprise_operations')
+
+
+@web_bp.route('/service-desk')
+@login_required
+def service_desk_page():
+    return render_template('service_desk.html', active_page='service_desk')
+
+
+@web_bp.route('/time-tracking')
+@login_required
+def time_tracking_page():
+    return render_template('time_tracking.html', active_page='time_tracking')
+
+
+@web_bp.route('/admin/vendors')
+@web_roles_required('super_admin', 'admin_hr')
+def vendor_management_page():
+    return render_template('vendor_management.html', active_page='vendors')
+
+
+@web_bp.route('/admin/compliance')
+@web_roles_required('super_admin', 'admin_hr')
+def compliance_management_page():
+    return render_template('compliance.html', active_page='compliance')
+
+
 @web_bp.route('/admin/employees')
 @web_roles_required('super_admin', 'admin_hr')
 def admin_employees():

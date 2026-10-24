@@ -1,0 +1,23 @@
+{% extends '_app_layout.html' %}
+{% block title %}Operations Governance Center · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-governance">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><a href="{{ url_for('operations.operations_hub') }}">Operations</a><span>/</span><span>Governance center</span></nav>
+  <header class="ops-header"><div><div class="ops-eyebrow">Controls and decision accountability</div><h1>Operations governance center</h1><p class="ops-description">Review control failures, overdue commitments, pending approvals, and recent decisions across your organization's operational workspaces.</p></div><div class="ops-header-actions"><button class="ops-button" id="gov-refresh">Refresh governance data</button><a class="ops-button" href="{{ url_for('operations.operations_policies_page') }}">Manage policies</a></div></header>
+  <nav class="ops-nav"><a href="{{ url_for('operations.operations_hub') }}">All workspaces</a><a class="active" href="{{ url_for('operations.operations_governance_page') }}">Governance</a><a href="{{ url_for('operations.operations_analytics_page') }}">Analytics</a><a href="{{ url_for('operations.operations_workflow_matrix_page') }}">Workflow matrix</a><a href="{{ url_for('operations.operations_playbooks_page') }}">Playbooks</a></nav>
+  <section class="ops-metrics"><article class="ops-metric"><div class="ops-metric-label">Critical control failures</div><div class="ops-metric-value" id="gov-critical">—</div><div class="ops-metric-note">High-severity control gaps</div></article><article class="ops-metric"><div class="ops-metric-label">Blocked records</div><div class="ops-metric-value" id="gov-blocked">—</div><div class="ops-metric-note">Cannot pass critical controls</div></article><article class="ops-metric"><div class="ops-metric-label">Overdue records</div><div class="ops-metric-value" id="gov-overdue">—</div><div class="ops-metric-note">Active records past due date</div></article><article class="ops-metric"><div class="ops-metric-label">Pending approvals</div><div class="ops-metric-value" id="gov-pending">—</div><div class="ops-metric-note">Awaiting a decision</div></article></section>
+  <div class="ops-alert"><span>!</span><div><strong>Human review remains required.</strong><br>Automated control findings are indicators for triage. They do not independently grant access, approve spending, or authorize production changes.</div></div>
+  <section class="ops-grid">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Control health by module</h2><p>Completion of expected operational controls.</p></div><a class="ops-button small" href="{{ url_for('operations.operations_data_quality_page') }}">Data quality →</a></div><div class="ops-card-body" id="gov-control-modules"><div class="ops-skeleton"></div></div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Pending decisions</h2><p>Approval assignments still awaiting action.</p></div></div><div class="ops-card-body" id="gov-approval-queue"><div class="ops-skeleton"></div></div></article>
+  </section>
+  <section class="ops-grid" style="margin-top:18px">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Critical control blockers</h2><p>Records that need remediation before review.</p></div><span class="ops-chip" id="gov-blocked-count">Loading</span></div><div class="ops-card-body" id="gov-blocked-list"><div class="ops-skeleton"></div></div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Overdue work</h2><p>Records with the greatest overdue age.</p></div><span class="ops-chip" id="gov-overdue-count">Loading</span></div><div class="ops-card-body" id="gov-overdue-list"><div class="ops-skeleton"></div></div></article>
+  </section>
+  <section class="ops-card" style="margin-top:18px"><div class="ops-card-head"><div><h2>Decision and activity log</h2><p>Recent status changes, approvals, comments, and evidence events.</p></div></div><div class="ops-card-body" id="gov-activity"><div class="ops-skeleton"></div></div></section>
+  <div class="ops-toast" id="gov-toast" role="status" aria-live="polite"></div>
+</main>
+<script src="{{ url_for('static', filename='js/operations-governance.js') }}" defer></script>
+{% endblock %}

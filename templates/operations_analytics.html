@@ -1,0 +1,26 @@
+{% extends '_app_layout.html' %}
+{% block title %}Operations Analytics · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-analytics">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><a href="{{ url_for('operations.operations_hub') }}">Operations</a><span>/</span><span>Analytics</span></nav>
+  <header class="ops-header"><div><div class="ops-eyebrow">Leadership reporting</div><h1>Operations analytics</h1><p class="ops-description">A cross-workspace view of active work, overdue commitments, approval queues, and record aging. The report respects your organization scope.</p></div><div class="ops-header-actions"><button class="ops-button" id="analytics-refresh">Refresh reports</button><button class="ops-button" id="analytics-export">Export summary</button></div></header>
+  <nav class="ops-nav"><a href="{{ url_for('operations.operations_hub') }}">All workspaces</a><a class="active" href="{{ url_for('operations.operations_analytics_page') }}">Analytics</a>{% for key,item in modules.items() %}<a href="{{ url_for('operations.operations_page', module_key=key) }}">{{ item.title }}</a>{% endfor %}</nav>
+  <section class="ops-metrics"><article class="ops-metric"><div class="ops-metric-label">Total records</div><div class="ops-metric-value" id="an-total">—</div><div class="ops-metric-note">Across all operational modules</div></article><article class="ops-metric"><div class="ops-metric-label">Open work</div><div class="ops-metric-value" id="an-open">—</div><div class="ops-metric-note">Not in terminal states</div></article><article class="ops-metric"><div class="ops-metric-label">Overdue</div><div class="ops-metric-value" id="an-overdue">—</div><div class="ops-metric-note">Past due and still active</div></article><article class="ops-metric"><div class="ops-metric-label">Pending approvals</div><div class="ops-metric-value" id="an-approvals">—</div><div class="ops-metric-note">Approval decisions outstanding</div></article></section>
+  <section class="ops-grid">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Module workload</h2><p>Active and overdue records by operational domain.</p></div></div><div class="ops-card-body" id="an-modules"><div class="ops-skeleton"></div></div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Age of active work</h2><p>Age buckets based on record creation date.</p></div></div><div class="ops-card-body" id="an-aging"><div class="ops-skeleton"></div></div></article>
+  </section>
+  <section class="ops-grid" style="margin-top:18px">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Overdue register</h2><p>Prioritized list of active records past their due date.</p></div><span class="ops-chip" id="an-overdue-count">Loading</span></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Record</th><th>Module</th><th>Status</th><th>Priority</th><th>Due date</th><th>Days overdue</th></tr></thead><tbody id="an-overdue-rows"><tr><td colspan="6">Loading…</td></tr></tbody></table></div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Approval queue</h2><p>Items awaiting decisions from your account.</p></div></div><div class="ops-card-body" id="an-approval-list"><div class="ops-skeleton"></div></div></article>
+  </section>
+  <section class="ops-grid" style="margin-top:18px">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Control readiness</h2><p>Required controls and evidence gaps identified by domain policies.</p></div><a class="ops-button small" href="/api/operations/analytics/controls.csv">Export controls CSV</a></div><div class="ops-card-body" id="an-controls-summary"><div class="ops-skeleton"></div></div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Records blocked by critical controls</h2><p>Prioritize records missing high-severity controls.</p></div></div><div class="ops-card-body" id="an-controls-blocked"><div class="ops-skeleton"></div></div></article>
+  </section>
+  <section class="ops-card" style="margin-top:18px"><div class="ops-card-head"><div><h2>Recent operational activity</h2><p>Latest changes and comments across visible workspaces.</p></div></div><div class="ops-card-body" id="an-activity"><div class="ops-skeleton"></div></div></section>
+  <div class="ops-toast" id="an-toast" role="status" aria-live="polite"></div>
+</main>
+<script src="{{ url_for('static', filename='js/operations-analytics.js') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends '_app_layout.html' %}
+{% block title %}Operational Playbooks · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-playbooks">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><a href="{{ url_for('operations.operations_hub') }}">Operations</a><span>/</span><span>Playbooks</span></nav>
+  <header class="ops-header"><div><div class="ops-eyebrow">Standard operating procedures</div><h1>Operational playbooks</h1><p class="ops-description">Practical runbooks for incidents, changes, quality, capacity, people lifecycle, data governance, procurement, baselines, and releases. These are starting points; organization policy remains authoritative.</p></div><div class="ops-header-actions"><button class="ops-button" id="playbook-expand-all">Expand all</button><button class="ops-button" id="playbook-collapse-all">Collapse all</button></div></header>
+  <nav class="ops-nav"><a href="{{ url_for('operations.operations_hub') }}">All workspaces</a><a class="active" href="{{ url_for('operations.operations_playbooks_page') }}">Playbooks</a><a href="{{ url_for('operations.operations_analytics_page') }}">Analytics</a>{% for key,item in modules.items() %}<a href="{{ url_for('operations.operations_page', module_key=key) }}">{{ item.title }}</a>{% endfor %}</nav>
+  <div class="ops-alert info"><span>ⓘ</span><div><strong>Use the runbook as a checklist, not as a substitute for judgment.</strong><br>Critical events, regulatory obligations, and production deployments must follow approved internal procedures and named escalation paths.</div></div>
+  <section class="ops-card" style="margin-bottom:16px"><div class="ops-card-body"><div class="ops-toolbar"><div class="ops-field"><label for="playbook-search">Search runbooks</label><input id="playbook-search" type="search" placeholder="Search phases, evidence, roles, or escalation guidance"></div><button class="ops-button" id="playbook-print">Print / Save PDF</button><span class="ops-filter-count" id="playbook-filter-count">9 runbooks</span></div><p class="ops-muted">Expand a runbook to inspect the full procedure. Use Print / Save PDF to share an approved copy with your team.</p></div></section>
+  <section class="ops-playbook-grid">
+  {% for playbook in playbooks %}
+    <details class="ops-card ops-playbook-card" data-playbook="{{ playbook.key }}">
+      <summary class="ops-playbook-summary"><span class="ops-playbook-key">{{ playbook.key|upper }}</span><span class="ops-playbook-title"><strong>{{ playbook.title }}</strong><small>{{ playbook.objective }}</small></span><span class="ops-playbook-meta">{{ playbook.phase_count }} phases</span></summary>
+      <div class="ops-card-body">
+        <div class="ops-playbook-loading" data-playbook-body>Loading detailed runbook…</div>
+        <a class="ops-button small primary" href="{{ url_for('operations.operations_page', module_key=playbook.key) }}">Open workspace →</a>
+      </div>
+    </details>
+  {% endfor %}
+  </section>
+  <section class="ops-card" style="margin-top:20px"><div class="ops-card-head"><div><h2>Operational maturity principles</h2><p>Practices that apply across all nine domains.</p></div></div><div class="ops-card-body"><div class="ops-two-col">
+    <div><div class="ops-section-label">Ownership and accountability</div><ul class="ops-guidance-list"><li>Every active record has one directly responsible owner.</li><li>Escalation includes the decision needed and the time it is needed by.</li><li>Approval decisions record the approver, timestamp, and reason.</li><li>Closed work retains evidence and a clear outcome.</li></ul></div>
+    <div><div class="ops-section-label">Data quality and safety</div><ul class="ops-guidance-list"><li>Use dates, amounts, and identifiers in consistent formats.</li><li>Do not put passwords, tokens, or unnecessary personal data in notes.</li><li>Preserve history instead of silently overwriting material decisions.</li><li>Use the smallest practical audience for exports and attachments.</li></ul></div>
+  </div></div></section>
+</main>
+<style>
+.ops-playbook-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.ops-playbook-card summary{list-style:none;cursor:pointer}.ops-playbook-card summary::-webkit-details-marker{display:none}
+.ops-playbook-summary{display:flex;align-items:flex-start;gap:12px;padding:17px}
+.ops-playbook-key{display:flex;align-items:center;justify-content:center;min-width:42px;height:32px;border-radius:8px;background:#eaf3ee;color:#245e4c;font-size:10px;font-weight:850}
+.ops-playbook-title{flex:1;min-width:0}.ops-playbook-title strong{display:block;font-size:13px;margin:2px 0 6px}.ops-playbook-title small{display:block;font-size:11px;color:#758092;line-height:1.5}
+.ops-playbook-meta{font-size:10px;color:#718092;white-space:nowrap}
+.ops-playbook-phase{padding:12px 0;border-bottom:1px solid #edf0f4}.ops-playbook-phase:last-child{border-bottom:0}
+.ops-playbook-phase h3{font-size:12px;margin:0 0 8px}.ops-playbook-phase ul,.ops-guidance-list{margin:0;padding-left:19px;font-size:11px;line-height:1.75;color:#687486}
+.ops-playbook-evidence{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 16px}.ops-playbook-evidence span{border:1px solid #e1e8e4;background:#f6faf7;border-radius:6px;padding:5px 7px;font-size:10px;color:#3d6652}
+@media(max-width:800px){.ops-playbook-grid{grid-template-columns:1fr}}
+</style>
+<script src="{{ url_for('static', filename='js/operations-playbooks.js') }}" defer></script>
+{% endblock %}

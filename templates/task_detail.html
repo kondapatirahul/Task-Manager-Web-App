@@ -55,6 +55,34 @@
       </p>
     </div>
 
+    {% if current_user.has_role('super_admin', 'admin') %}
+    <!-- Budget overview is restricted to administrators. -->
+    <section class="card" id="task-budget-overview" style="padding:1.5rem;border-left:4px solid var(--color-accent);" aria-labelledby="task-budget-overview-title">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
+        <h3 id="task-budget-overview-title" style="font-size:var(--font-size-sm);font-weight:700;color:var(--color-primary);margin:0;text-transform:uppercase;letter-spacing:.04em;">Task Budget</h3>
+        {% if (task.spent_budget or 0) > (task.actual_budget or 0) %}
+        <span class="badge badge-high">Over budget</span>
+        {% else %}
+        <span class="badge badge-low">Within budget</span>
+        {% endif %}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;">
+        <div><span class="text-muted" style="font-size:var(--font-size-xs);">Actual Budget</span><div style="font-size:1.25rem;font-weight:700;">₹{{ '%.2f'|format(task.actual_budget or 0) }}</div></div>
+        <div><span class="text-muted" style="font-size:var(--font-size-xs);">Spent Budget</span><div style="font-size:1.25rem;font-weight:700;">₹{{ '%.2f'|format(task.spent_budget or 0) }}</div></div>
+        <div><span class="text-muted" style="font-size:var(--font-size-xs);">Remaining</span><div style="font-size:1.25rem;font-weight:700;">₹{{ '%.2f'|format((task.actual_budget or 0) - (task.spent_budget or 0)) }}</div></div>
+      </div>
+      {% set budget_actual = (task.actual_budget or 0)|float %}
+      {% set budget_spent = (task.spent_budget or 0)|float %}
+      {% set budget_percent = ((budget_spent / budget_actual) * 100) if budget_actual > 0 else (100 if budget_spent > 0 else 0) %}
+      <div style="margin-top:1rem;">
+        <div style="height:8px;background:var(--color-border);border-radius:999px;overflow:hidden;" role="progressbar" aria-label="Task budget consumed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ [budget_percent, 100]|min|round|int }}">
+          <div style="height:100%;width:{{ [budget_percent, 100]|min }}%;background:{% if budget_spent > budget_actual %}#c0392b{% else %}var(--color-accent){% endif %};"></div>
+        </div>
+        <p class="text-muted" style="font-size:var(--font-size-xs);margin:.5rem 0 0;">{{ '%.1f'|format(budget_percent) }}% of actual budget spent{% if budget_percent > 100 %} · {{ '%.1f'|format(budget_percent - 100) }}% over budget{% endif %}</p>
+      </div>
+    </section>
+    {% endif %}
+
     <!-- Acceptance Criteria -->
     {% if task.acceptance_criteria %}
     <div class="card" style="padding: 1.5rem; border-left: 4px solid var(--color-primary); background-color: #FAF7F2;">

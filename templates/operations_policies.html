@@ -1,0 +1,39 @@
+{% extends '_app_layout.html' %}
+{% block title %}Operations Policies · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-policies">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><a href="{{ url_for('operations.operations_hub') }}">Operations</a><span>/</span><span>Policy administration</span></nav>
+  <header class="ops-header"><div><div class="ops-eyebrow">Administrative controls</div><h1>Operations policies</h1><p class="ops-description">Configure organization-specific response targets, escalation roles, evidence requirements, and approval defaults for each operational domain.</p></div><div class="ops-header-actions"><button class="ops-button" id="policy-refresh">Refresh policies</button></div></header>
+  <nav class="ops-nav"><a href="{{ url_for('operations.operations_hub') }}">All workspaces</a><a href="{{ url_for('operations.operations_analytics_page') }}">Analytics</a><a class="active" href="{{ url_for('operations.operations_policies_page') }}">Policies</a><a href="{{ url_for('operations.operations_playbooks_page') }}">Playbooks</a></nav>
+  <div class="ops-alert"><span>!</span><div><strong>Policy changes affect future handling.</strong><br>Before changing a target, confirm it matches the organization's service commitments and escalation rota. These defaults do not replace legal, security, or regulated approval requirements.</div></div>
+  <section class="ops-grid">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Domain policy register</h2><p>Select a module to inspect or edit its policy.</p></div><span class="ops-chip" id="policy-count">Loading</span></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Module</th><th>Acknowledge</th><th>Resolve / review</th><th>Escalate</th><th>Approval</th><th>Active</th><th></th></tr></thead><tbody id="policy-rows"><tr><td colspan="7">Loading policies…</td></tr></tbody></table></div></article>
+    <aside class="ops-card"><div class="ops-card-head"><div><h2>Policy guardrails</h2><p>Recommended controls.</p></div></div><div class="ops-card-body"><div class="ops-side-list">
+      <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Keep thresholds measurable</div><div class="ops-side-meta">Use minutes and named roles; avoid ambiguous language such as “soon”.</div></div></div>
+      <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Separate review from execution</div><div class="ops-side-meta">High-risk actions should have explicit approval and evidence.</div></div></div>
+      <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Revisit policy periodically</div><div class="ops-side-meta">Review target performance, escalations, and exception patterns each quarter.</div></div></div>
+    </div></div></aside>
+  </section>
+  <div class="ops-modal" id="policy-modal" role="dialog" aria-modal="true" aria-labelledby="policy-modal-title">
+    <div class="ops-modal-card"><div class="ops-modal-head"><div><h2 id="policy-modal-title">Edit operational policy</h2><p>Policy values are scoped to the current organization.</p></div><button class="ops-button small" id="policy-close">Close</button></div>
+      <form id="policy-form"><div class="ops-modal-body"><div class="ops-form-error" id="policy-error"></div><input type="hidden" id="policy-module">
+        <div class="ops-form-grid">
+          <div class="ops-field"><label for="policy-ack">Acknowledgement target (minutes)</label><input type="number" min="0" max="525600" id="policy-ack" required></div>
+          <div class="ops-field"><label for="policy-resolution">Resolution / review target (minutes)</label><input type="number" min="0" max="525600" id="policy-resolution" required></div>
+          <div class="ops-field"><label for="policy-escalation">Escalation target (minutes)</label><input type="number" min="0" max="525600" id="policy-escalation" required></div>
+          <div class="ops-field"><label for="policy-owner-role">Default owner role</label><select id="policy-owner-role"><option>employee</option><option>team_lead</option><option>hr</option><option>admin</option></select></div>
+          <div class="ops-field"><label for="policy-escalation-role">Escalation role</label><select id="policy-escalation-role"><option>team_lead</option><option>hr</option><option>admin</option><option>super_admin</option></select></div>
+          <div class="ops-field"><label class="ops-check"><input type="checkbox" id="policy-high-risk" checked><span>Require approval for high-risk work</span></label></div>
+          <div class="ops-field"><label class="ops-check"><input type="checkbox" id="policy-evidence"><span>Require evidence before closure</span></label></div>
+          <div class="ops-field"><label class="ops-check"><input type="checkbox" id="policy-active" checked><span>Policy active</span></label></div>
+          <div class="ops-field wide"><label for="policy-notes">Policy notes</label><textarea id="policy-notes" maxlength="10000" rows="5"></textarea></div>
+        </div>
+      </div><div class="ops-modal-foot"><button type="button" class="ops-button" id="policy-cancel">Cancel</button><button type="submit" class="ops-button primary" id="policy-save">Save policy</button></div></form>
+    </div>
+  </div>
+  <div class="ops-toast" id="policy-toast" role="status" aria-live="polite"></div>
+</main>
+<script>window.TASKNEST_POLICY_MODULES = {{ modules|tojson }};</script>
+<script src="{{ url_for('static', filename='js/operations-policies.js') }}" defer></script>
+{% endblock %}

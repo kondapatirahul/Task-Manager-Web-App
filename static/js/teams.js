@@ -363,7 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border);">
           <div style="display: flex; gap: var(--space-3); align-items: center;">
             <div class="user-avatar-badge" style="width: 32px; height: 32px; font-size: 13px;">
-              ${(m.full_name || m.username || '?')[:1].toUpperCase()}
+              ${(m.full_name || m.username || '?').slice(0, 1).toUpperCase()}
             </div>
             <div>
               <div style="font-weight: 600; font-size: var(--font-size-sm);">${m.full_name || m.username}</div>

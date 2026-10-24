@@ -5,7 +5,7 @@
   <h1 class="page-title">{% if review_mode %}Leave Requests{% else %}Leave Management{% endif %}</h1>
   <p class="page-subtitle">{% if review_mode %}Review requests from employees assigned to your team.{% else %}Request time off and track balances, decisions, and reviewer comments.{% endif %}</p>
 </section>
-<!-- <div id="leave-error" class="alert alert-error" hidden></div> -->
+<div id="leave-error" class="alert alert-error" role="alert" hidden></div>
 {% if not review_mode %}
 <div class="dashboard-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));" id="leave-balances"></div>
 <div class="card" style="margin-top:1rem;">
@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const errorBox = document.getElementById('leave-error');
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   async function load() {
-    errorBox.hidden = true;
+    if (errorBox) errorBox.hidden = true;
     try {
       const response = await fetch('/api/leaves');
       const result = await response.json();
@@ -45,15 +45,38 @@ document.addEventListener('DOMContentLoaded', () => {
       const requests = payload.requests || [];
       if (!requests.length) { rows.innerHTML = `<tr><td colspan="9" class="text-muted">No leave requests found.</td></tr>`; return; }
       rows.innerHTML = requests.map(r => `<tr>${reviewMode ? `<td>${esc(r.employee_name)}</td>` : ''}<td>${esc(r.leave_type)}</td><td>${esc(r.start_date)} – ${esc(r.end_date)}</td><td>${r.days}</td><td class="leave-reason">${esc(r.reason)}</td><td><span class="badge">${esc(r.status)}</span></td><td>${esc(r.reviewer_comment || '—')}</td><td>${esc(r.created_at ? new Date(r.created_at).toLocaleDateString() : '—')}</td>${reviewMode ? `<td>${r.status === 'pending' ? `<button class="btn btn-primary btn-xs" data-id="${r.id}" data-decision="approved">Approve</button> <button class="btn btn-secondary btn-xs" data-id="${r.id}" data-decision="rejected">Reject</button>` : '—'}</td>` : ''}</tr>`).join('');
-    } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+    } catch (error) { if (errorBox) { errorBox.textContent = error.message; errorBox.hidden = false; } }
   }
   document.getElementById('leave-form')?.addEventListener('submit', async e => {
-    e.preventDefault(); errorBox.hidden = true;
+    e.preventDefault();
+    if (errorBox) { errorBox.hidden = true; errorBox.textContent = ''; }
+    const form = e.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const originalLabel = submitButton?.textContent || 'Submit Leave Request';
+    if (submitButton) { submitButton.disabled = true; submitButton.textContent = 'Submitting…'; }
     try {
-      const response = await fetch('/api/leaves', {method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({leave_type:document.getElementById('leave-type').value,start_date:document.getElementById('leave-start').value,end_date:document.getElementById('leave-end').value,reason:document.getElementById('leave-reason').value})});
-      const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Request failed.');
-      e.target.reset(); await load();
-    } catch(error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+      const response = await fetch('/api/leaves', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf},
+        body: JSON.stringify({
+          leave_type: document.getElementById('leave-type').value,
+          start_date: document.getElementById('leave-start').value,
+          end_date: document.getElementById('leave-end').value,
+          reason: document.getElementById('leave-reason').value.trim()
+        })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || result.message || `Request failed (${response.status}).`);
+      form.reset();
+      if (errorBox) { errorBox.hidden = true; errorBox.textContent = ''; }
+      if (typeof showToast === 'function') showToast(result.message || 'Leave request submitted successfully.', 'success');
+      await load();
+    } catch(error) {
+      if (errorBox) { errorBox.textContent = error.message || 'Could not submit the leave request.'; errorBox.hidden = false; }
+      else alert(error.message || 'Could not submit the leave request.');
+    } finally {
+      if (submitButton) { submitButton.disabled = false; submitButton.textContent = originalLabel; }
+    }
   });
   rows.addEventListener('click', async e => {
     const button = e.target.closest('button[data-decision]'); if (!button) return;

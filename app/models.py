@@ -1,4 +1,5 @@
 from datetime import datetime, date, timezone
+from decimal import Decimal
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app import db
@@ -327,6 +328,10 @@ class Task(db.Model):
     team_id     = db.Column(db.Integer, db.ForeignKey('teams.id', ondelete='SET NULL'), nullable=True)
     organization_id = db.Column(db.Integer, db.ForeignKey('organizations.id'), nullable=True)
 
+    # Budget tracking (editable by administrators only)
+    actual_budget = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal('0.00'))
+    spent_budget = db.Column(db.Numeric(14, 2), nullable=False, default=Decimal('0.00'))
+
     # Enterprise Fields
     acceptance_criteria  = db.Column(db.Text, nullable=True)
     progress             = db.Column(db.Integer, default=0, nullable=False) # 0 to 100
@@ -432,6 +437,10 @@ class Task(db.Model):
             'team_id':              self.team_id,
             'team_name':            self.team.name if self.team else None,
             'organization_id':      self.organization_id,
+            'actual_budget':        float(self.actual_budget or 0),
+            'spent_budget':         float(self.spent_budget or 0),
+            'budget_remaining':     float((self.actual_budget or 0) - (self.spent_budget or 0)),
+            'is_over_budget':       (self.spent_budget or 0) > (self.actual_budget or 0),
             'acceptance_criteria':  self.acceptance_criteria or '',
             'submission_notes':     self.submission_notes,
             'review_notes':         self.review_notes,

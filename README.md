@@ -29,6 +29,10 @@
 
 ---
 
+## Enterprise Audit Log API
+
+Administrators can search the organization-scoped audit trail through `GET /api/audit-logs` with pagination and optional action, entity, actor, and date filters. `GET /api/audit-logs/export.csv` exports a bounded CSV report with spreadsheet-formula injection protection. See [`docs/audit-log-api.md`](docs/audit-log-api.md) for authorization rules and query parameters.
+
 ## Technology Stack
 
 - **Backend**: Python 3.10+ & Flask 3.0.3

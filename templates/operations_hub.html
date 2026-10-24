@@ -1,0 +1,63 @@
+{% extends '_app_layout.html' %}
+{% block title %}Enterprise Operations · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-hub">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><span>Enterprise Operations</span></nav>
+  <header class="ops-header">
+    <div><div class="ops-eyebrow">Cross-functional work management</div><h1>Enterprise Operations</h1>
+    <p class="ops-description">A connected workspace for operational incidents, controlled changes, quality assurance, capacity, people lifecycle, data access, procurement, baselines, and releases.</p></div>
+    <div class="ops-header-actions"><a class="ops-button" href="{{ url_for('operations.operations_analytics_page') }}">Analytics</a><a class="ops-button" href="{{ url_for('operations.operations_work_queue_page') }}">Work queue</a><a class="ops-button" href="{{ url_for('operations.operations_governance_page') }}">Governance</a><a class="ops-button" href="{{ url_for('operations.operations_workflow_matrix_page') }}">Workflow matrix</a><a class="ops-button" href="{{ url_for('operations.operations_playbooks_page') }}">Playbooks</a><a class="ops-button" href="{{ url_for('operations.operations_policies_page') }}">Policies</a><a class="ops-button" href="{{ url_for('operations.operations_import_guide_page') }}">CSV Import</a><a class="ops-button" href="{{ url_for('operations.operations_data_quality_page') }}">Data quality</a><a class="ops-button" href="{{ url_for('operations.operations_sla_report_page') }}">SLA report</a><a class="ops-button" href="{{ url_for('operations.operations_policy_simulator_page') }}">SLA simulator</a><a class="ops-button" href="{{ url_for('operations.operations_api_catalog_page') }}">API catalog</a><button class="ops-button" id="ops-hub-refresh" type="button">Refresh metrics</button></div>
+  </header>
+  <section class="ops-metrics" aria-label="Portfolio overview">
+    <article class="ops-metric"><div class="ops-metric-label">Workspaces</div><div class="ops-metric-value" id="hub-workspaces">9</div><div class="ops-metric-note">Connected operational domains</div></article>
+    <article class="ops-metric"><div class="ops-metric-label">Records</div><div class="ops-metric-value" id="hub-records">—</div><div class="ops-metric-note">Visible in your organization</div></article>
+    <article class="ops-metric"><div class="ops-metric-label">Open work</div><div class="ops-metric-value" id="hub-open">—</div><div class="ops-metric-note">Across all workspaces</div></article>
+    <article class="ops-metric"><div class="ops-metric-label">Needs attention</div><div class="ops-metric-value" id="hub-attention">—</div><div class="ops-metric-note">Overdue or high-priority records</div></article>
+  </section>
+  <div class="ops-alert info"><span>ⓘ</span><div><strong>Shared operating model</strong><br>Every record has organization scope, owner, priority, workflow state, version checks, and append-only activity history. Domain rules remain specific to each workspace.</div></div>
+  <section class="ops-workspace-grid" id="ops-module-grid">
+    {% for key, item in modules.items() %}
+    <article class="ops-card ops-module-card" data-module="{{ key }}">
+      <div class="ops-module-card-head"><span class="ops-module-icon" aria-hidden="true">{{ loop.index }}</span><div><h2>{{ item.title }}</h2><p>{{ item.description }}</p></div></div>
+      <div class="ops-module-metrics"><div><span>Total</span><strong data-metric="total">—</strong></div><div><span>Open</span><strong data-metric="open">—</strong></div></div>
+      <div class="ops-card-body"><div class="ops-progress"><span data-progress style="width:0%"></span></div><div class="ops-module-foot"><span data-module-status>Loading metrics…</span><a class="ops-button small primary" href="{{ url_for('operations.operations_page', module_key=key) }}">Open workspace →</a></div></div>
+    </article>
+    {% endfor %}
+  </section>
+  <section class="ops-grid" style="margin-top:20px">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Operating standards</h2><p>How the operational modules work together.</p></div></div>
+      <div class="ops-card-body"><div class="ops-side-list">
+        <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">One accountable record</div><div class="ops-side-meta">Every item has a reference key, owner, priority, due date, status and version number.</div></div></div>
+        <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Controlled state transitions</div><div class="ops-side-meta">Server-side domain policies validate workflow transitions and required evidence.</div></div></div>
+        <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Traceable decisions</div><div class="ops-side-meta">Comments, checklist changes, approvals and status changes are recorded in activity history.</div></div></div>
+        <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Tenant-scoped data</div><div class="ops-side-meta">Queries are restricted to the current organization, with elevated cross-tenant access reserved for super administrators.</div></div></div>
+      </div></div>
+    </article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Recommended operating rhythm</h2><p>Use these habits to keep records actionable.</p></div></div>
+      <div class="ops-card-body"><div class="ops-checklist">
+        <label class="ops-check"><input type="checkbox"><span>Assign a named owner and a realistic due date.</span></label>
+        <label class="ops-check"><input type="checkbox"><span>Write a business impact statement and acceptance criteria.</span></label>
+        <label class="ops-check"><input type="checkbox"><span>Attach evidence before review or approval.</span></label>
+        <label class="ops-check"><input type="checkbox"><span>Record the reason for significant workflow decisions.</span></label>
+        <label class="ops-check"><input type="checkbox"><span>Review overdue and blocked work during the team cadence.</span></label>
+      </div></div>
+    </article>
+  </section>
+</main>
+<style>
+.ops-workspace-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.ops-module-card{display:flex;flex-direction:column}
+.ops-module-card-head{display:flex;gap:12px;padding:18px 18px 10px}
+.ops-module-icon{width:35px;height:35px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:#e8f3ed;color:#245e4c;font-size:12px;font-weight:850;flex:0 0 auto}
+.ops-module-card h2{font-size:14px;margin:1px 0 7px}.ops-module-card p{font-size:11px;line-height:1.55;color:#737f90;margin:0}
+.ops-module-metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 18px}
+.ops-module-metrics div{padding:10px;border:1px solid #edf0f3;border-radius:9px;display:flex;justify-content:space-between;gap:8px}
+.ops-module-metrics span{font-size:10px;color:#7a8492}.ops-module-metrics strong{font-size:13px}
+.ops-module-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:11px}
+.ops-module-foot span{font-size:10px;color:#7b8593}
+@media(max-width:1050px){.ops-workspace-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.ops-workspace-grid{grid-template-columns:1fr}}
+</style>
+<script src="{{ url_for('static', filename='js/operations-hub.js') }}" defer></script>
+{% endblock %}

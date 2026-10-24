@@ -250,6 +250,28 @@ const TaskManager = {
       taskForm.addEventListener('submit', (e) => this.handleTaskFormSubmit(e));
     }
 
+    // Administrative budget preview: show the remaining amount or an over-budget warning.
+    const actualBudgetInput = document.getElementById('task-actual-budget-input');
+    const spentBudgetInput = document.getElementById('task-spent-budget-input');
+    const budgetPreview = document.getElementById('task-budget-preview');
+    const updateBudgetPreview = () => {
+      if (!actualBudgetInput || !spentBudgetInput || !budgetPreview) return;
+      const actual = Math.max(0, Number(actualBudgetInput.value) || 0);
+      const spent = Math.max(0, Number(spentBudgetInput.value) || 0);
+      const amount = Math.abs(actual - spent).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (spent > actual) {
+        budgetPreview.textContent = `Over budget by ₹${amount}`;
+        budgetPreview.classList.add('text-danger');
+      } else {
+        budgetPreview.textContent = `Remaining budget: ₹${amount}`;
+        budgetPreview.classList.remove('text-danger');
+      }
+    };
+    [actualBudgetInput, spentBudgetInput].forEach(input => {
+      if (input) input.addEventListener('input', updateBudgetPreview);
+    });
+    this.updateTaskBudgetPreview = updateBudgetPreview;
+
     // Category Form Submit
     const catForm = document.getElementById('category-form');
     if (catForm) {
@@ -901,6 +923,8 @@ const TaskManager = {
     const assigneeField = document.getElementById('task-assignee-select');
     const recurrenceField = document.getElementById('task-recurrence-select');
     const criteriaField = document.getElementById('task-acceptance-input');
+    const actualBudgetField = document.getElementById('task-actual-budget-input');
+    const spentBudgetField = document.getElementById('task-spent-budget-input');
 
     if (task) {
       modalTitle.textContent = 'Edit Task';
@@ -914,6 +938,8 @@ const TaskManager = {
       if (assigneeField) assigneeField.value = task.assignee_id || '';
       if (recurrenceField) recurrenceField.value = task.recurrence || 'none';
       if (criteriaField) criteriaField.value = task.acceptance_criteria || '';
+      if (actualBudgetField) actualBudgetField.value = Number(task.actual_budget || 0).toFixed(2);
+      if (spentBudgetField) spentBudgetField.value = Number(task.spent_budget || 0).toFixed(2);
     } else {
       modalTitle.textContent = 'Add New Task';
       taskIdField.value = '';
@@ -926,8 +952,11 @@ const TaskManager = {
       if (assigneeField) assigneeField.value = '';
       if (recurrenceField) recurrenceField.value = 'none';
       if (criteriaField) criteriaField.value = '';
+      if (actualBudgetField) actualBudgetField.value = '0.00';
+      if (spentBudgetField) spentBudgetField.value = '0.00';
     }
 
+    if (typeof this.updateTaskBudgetPreview === 'function') this.updateTaskBudgetPreview();
     modal.classList.add('is-active');
     setTimeout(() => titleField.focus(), 50);
   },
@@ -967,6 +996,24 @@ const TaskManager = {
     }
     if (criteriaField && criteriaField.value.trim()) {
       payload.acceptance_criteria = criteriaField.value.trim();
+    }
+
+    // These inputs are rendered only for administrators; the API independently enforces authorization.
+    const actualBudgetField = document.getElementById('task-actual-budget-input');
+    const spentBudgetField = document.getElementById('task-spent-budget-input');
+    if (actualBudgetField && spentBudgetField) {
+      const actualBudget = actualBudgetField.value.trim();
+      const spentBudget = spentBudgetField.value.trim();
+      if (actualBudget !== '' && Number(actualBudget) < 0) {
+        showToast('Actual budget cannot be negative.', 'error');
+        return;
+      }
+      if (spentBudget !== '' && Number(spentBudget) < 0) {
+        showToast('Spent budget cannot be negative.', 'error');
+        return;
+      }
+      payload.actual_budget = actualBudget === '' ? 0 : Number(actualBudget);
+      payload.spent_budget = spentBudget === '' ? 0 : Number(spentBudget);
     }
 
     const submitBtn = e.target.querySelector('button[type="submit"]');

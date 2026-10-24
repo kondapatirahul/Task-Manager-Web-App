@@ -4,6 +4,7 @@ Supports list, Kanban board, team assignment, subtasks, recurrence, and lifecycl
 """
 import os
 import uuid
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, date, timedelta, timezone
 from werkzeug.utils import secure_filename
 from flask import Blueprint, request, current_app, send_file
@@ -48,6 +49,23 @@ def parse_date(date_str):
         return datetime.strptime(clean_str, '%Y-%m-%d').date()
     except (ValueError, TypeError):
         return None
+
+
+def parse_budget_amount(value, label):
+    """Parse a non-negative monetary amount without binary-float rounding."""
+    if value is None or str(value).strip() == '':
+        return Decimal('0.00'), None
+    try:
+        amount = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError, TypeError):
+        return None, f'{label} must be a valid number.'
+    if not amount.is_finite():
+        return None, f'{label} must be a finite number.'
+    if amount < 0:
+        return None, f'{label} cannot be negative.'
+    if amount > Decimal('999999999999.99'):
+        return None, f'{label} exceeds the supported maximum.'
+    return amount.quantize(Decimal('0.01')), None
 
 
 def can_manage_task(task, user):
@@ -309,6 +327,16 @@ def create_task():
     if not isinstance(data, dict):
         return api_error('A JSON object is required', 400)
 
+    budget_fields = {'actual_budget', 'spent_budget'}
+    if budget_fields.intersection(data) and not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+        return api_error('Only administrators can set task budgets.', 403)
+    actual_budget, budget_error = parse_budget_amount(data.get('actual_budget', 0), 'Actual budget')
+    if budget_error:
+        return api_error(budget_error, 400)
+    spent_budget, budget_error = parse_budget_amount(data.get('spent_budget', 0), 'Spent budget')
+    if budget_error:
+        return api_error(budget_error, 400)
+
     title = (data.get('title') or '').strip()
     if not title:
         return api_error('Title is required.', 400)
@@ -446,6 +474,8 @@ def create_task():
         creator_id=current_user.id,
         team_id=team_id,
         organization_id=current_user.organization_id or 1,
+        actual_budget=actual_budget,
+        spent_budget=spent_budget,
         acceptance_criteria=acceptance_criteria,
         progress=progress,
         is_recurring=is_recurring,
@@ -542,6 +572,10 @@ def update_task(task_id):
     if not isinstance(data, dict):
         return api_error('A JSON object is required', 400)
 
+    budget_fields = {'actual_budget', 'spent_budget'}
+    if budget_fields.intersection(data) and not current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+        return api_error('Only administrators can update task budgets.', 403)
+
     is_manager = can_manage_task(task, current_user)
     is_assigned = (current_user.id in (task.assignee_id, task.user_id))
 
@@ -586,6 +620,19 @@ def update_task(task_id):
             pass
 
     if is_manager:
+        # Budget values are separately protected above so team leads cannot change them.
+        if current_user.has_role(ROLE_SUPER_ADMIN, ROLE_ADMIN):
+            if 'actual_budget' in data:
+                amount, error = parse_budget_amount(data.get('actual_budget'), 'Actual budget')
+                if error:
+                    return api_error(error, 400)
+                task.actual_budget = amount
+            if 'spent_budget' in data:
+                amount, error = parse_budget_amount(data.get('spent_budget'), 'Spent budget')
+                if error:
+                    return api_error(error, 400)
+                task.spent_budget = amount
+
         if 'title' in data:
             title = (data.get('title') or '').strip()
             if not title:

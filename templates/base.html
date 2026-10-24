@@ -100,6 +100,28 @@
           </div>
           {% endif %}
 
+          {% if current_user.has_role('super_admin', 'admin') %}
+          <section class="task-budget-fields" aria-labelledby="task-budget-heading">
+            <div class="form-section-heading">
+              <h4 id="task-budget-heading">Budget Tracking</h4>
+              <p class="text-muted">Set the approved task budget and record the amount spent.</p>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="task-actual-budget-input">Actual Budget (₹)</label>
+                <input type="number" id="task-actual-budget-input" class="form-control" min="0" max="999999999999.99" step="0.01" value="0.00" inputmode="decimal" placeholder="0.00">
+                <small class="text-muted">Approved or allocated budget for this task.</small>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="task-spent-budget-input">Spent Budget (₹)</label>
+                <input type="number" id="task-spent-budget-input" class="form-control" min="0" max="999999999999.99" step="0.01" value="0.00" inputmode="decimal" placeholder="0.00">
+                <small class="text-muted">Amount already spent against this task.</small>
+              </div>
+            </div>
+            <p id="task-budget-preview" class="text-muted" aria-live="polite">Remaining budget: ₹0.00</p>
+          </section>
+          {% endif %}
+
           <div class="form-group">
             <label class="form-label" for="task-acceptance-input">Acceptance Criteria</label>
             <textarea id="task-acceptance-input" class="form-control" rows="2" placeholder="Conditions required for this task to be considered complete..."></textarea>

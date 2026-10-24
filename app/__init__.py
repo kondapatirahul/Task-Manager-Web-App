@@ -173,6 +173,22 @@ def create_app(test_config=None):
     from app.routes.departments import departments_bp
     from app.routes.organizations import organizations_bp
     from app.routes.leaves import leaves_bp
+    from app.routes.audit_logs import audit_logs_bp
+    from app.routes.portfolio import portfolio_bp
+    from app.routes.saved_views import views_bp
+    from app.routes.custom_fields import custom_fields_bp
+    from app.routes.workflows import workflows_bp
+    from app.routes.webhooks import webhooks_bp
+    from app.routes.delivery import delivery_bp
+    from app.routes.finance import finance_bp
+    from app.routes.risks import risks_bp
+    from app.routes.objectives import objectives_bp
+    from app.routes.assets import assets_bp
+    from app.routes.service_desk import service_desk_bp
+    from app.routes.time_tracking import time_tracking_bp
+    from app.routes.vendors import vendors_bp
+    from app.routes.compliance import compliance_bp
+    from app.routes.operations import operations_bp
 
     app.register_blueprint(web_bp)
     app.register_blueprint(auth_bp)
@@ -190,6 +206,22 @@ def create_app(test_config=None):
     app.register_blueprint(departments_bp)
     app.register_blueprint(organizations_bp)
     app.register_blueprint(leaves_bp)
+    app.register_blueprint(audit_logs_bp)
+    app.register_blueprint(portfolio_bp)
+    app.register_blueprint(views_bp)
+    app.register_blueprint(custom_fields_bp)
+    app.register_blueprint(workflows_bp)
+    app.register_blueprint(webhooks_bp)
+    app.register_blueprint(delivery_bp)
+    app.register_blueprint(finance_bp)
+    app.register_blueprint(risks_bp)
+    app.register_blueprint(objectives_bp)
+    app.register_blueprint(assets_bp)
+    app.register_blueprint(service_desk_bp)
+    app.register_blueprint(time_tracking_bp)
+    app.register_blueprint(vendors_bp)
+    app.register_blueprint(compliance_bp)
+    app.register_blueprint(operations_bp)
 
     # CLI commands
     @app.cli.command('init-db')
@@ -288,6 +320,8 @@ def create_app(test_config=None):
                     ('next_recurrence_date', "ALTER TABLE tasks ADD COLUMN next_recurrence_date DATE"),
                     ('updated_at', "ALTER TABLE tasks ADD COLUMN updated_at DATETIME"),
                     ('is_personal', "ALTER TABLE tasks ADD COLUMN is_personal BOOLEAN DEFAULT 0"),
+                    ('actual_budget', "ALTER TABLE tasks ADD COLUMN actual_budget NUMERIC(14, 2) NOT NULL DEFAULT 0.00"),
+                    ('spent_budget', "ALTER TABLE tasks ADD COLUMN spent_budget NUMERIC(14, 2) NOT NULL DEFAULT 0.00"),
                 ]
                 for col_name, sql in task_migrations:
                     if col_name not in task_cols:

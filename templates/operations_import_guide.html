@@ -1,0 +1,38 @@
+{% extends '_app_layout.html' %}
+{% block title %}Operations CSV Import Guide · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-import-guide">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><a href="{{ url_for('operations.operations_hub') }}">Operations</a><span>/</span><span>CSV import guide</span></nav>
+  <header class="ops-header"><div><div class="ops-eyebrow">Bulk onboarding</div><h1>CSV import guide</h1><p class="ops-description">Download a module-specific template, fill it with validated records, and import up to 200 rows at a time. Imports are validated before writes are committed.</p></div><div class="ops-header-actions"><a class="ops-button" href="{{ url_for('operations.operations_hub') }}">All workspaces</a></div></header>
+  <nav class="ops-nav"><a href="{{ url_for('operations.operations_hub') }}">All workspaces</a><a class="active" href="{{ url_for('operations.operations_import_guide_page') }}">CSV import</a><a href="{{ url_for('operations.operations_data_quality_page') }}">Data quality</a><a href="{{ url_for('operations.operations_playbooks_page') }}">Playbooks</a><a href="{{ url_for('operations.operations_policies_page') }}">Policies</a></nav>
+  <div class="ops-alert info"><span>ⓘ</span><div><strong>Import safety</strong><br>Use UTF-8 CSV. The file limit is 2 MB and the row limit is 200. The entire import is rejected if any row fails validation. Do not include passwords, tokens, secrets, or unnecessary personal information.</div></div>
+  <section class="ops-card"><div class="ops-card-head"><div><h2>Choose a module template</h2><p>Required columns are based on each module's server-side domain schema.</p></div></div><div class="ops-card-body"><div class="ops-import-grid">
+  {% for key,module in modules.items() %}
+    <article class="ops-import-module"><div class="ops-import-top"><span class="ops-playbook-key">{{ loop.index }}</span><div><h3>{{ module.title }}</h3><p>{{ module.description }}</p></div></div>
+      <div class="ops-import-fields"><strong>Required domain fields</strong><div class="ops-field-chips">{% for field in required_fields[key] %}<span>{{ field }}</span>{% endfor %}</div></div>
+      <div class="ops-import-actions"><a class="ops-button small primary" href="{{ url_for('operations.download_csv_template', module_key=key) }}">Download CSV template</a><a class="ops-button small" href="{{ url_for('operations.operations_page', module_key=key) }}">Open workspace</a></div>
+    </article>
+  {% endfor %}
+  </div></div></section>
+  <section class="ops-grid" style="margin-top:18px">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Recommended import sequence</h2><p>Use a controlled, repeatable process.</p></div></div><div class="ops-card-body"><div class="ops-side-list">
+      <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">1. Download the current template</div><div class="ops-side-meta">Templates may evolve as domain rules and required fields change.</div></div></div>
+      <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">2. Keep identifiers and enums consistent</div><div class="ops-side-meta">Use the exact date format YYYY-MM-DD and allowed enum values shown by the workspace.</div></div></div>
+      <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">3. Test a small batch first</div><div class="ops-side-meta">Review the first import and confirm owners, due dates, and record keys before importing a larger batch.</div></div></div>
+      <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">4. Review audit history</div><div class="ops-side-meta">Imported records receive keys and creation events. Keep the source file under your retention policy.</div></div></div>
+    </div></div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>CSV formatting rules</h2><p>Common errors to avoid.</p></div></div><div class="ops-card-body"><dl class="ops-kv"><dt>Encoding</dt><dd>UTF-8 or UTF-8 with BOM.</dd></dl><dl class="ops-kv"><dt>Dates</dt><dd>Use ISO dates, for example 2026-10-24.</dd></dl><dl class="ops-kv"><dt>Numbers</dt><dd>Use plain decimals without currency symbols or thousands separators.</dd></dl><dl class="ops-kv"><dt>Booleans</dt><dd>Use clear true/false values for checkbox fields.</dd></dl><dl class="ops-kv"><dt>Quotes and commas</dt><dd>Let a CSV writer quote values containing commas, quotes, or line breaks.</dd></dl><dl class="ops-kv"><dt>Formula safety</dt><dd>Exports neutralize formula-leading cells; avoid entering spreadsheet formulas as data.</dd></dl></div></article>
+  </section>
+</main>
+<style>
+.ops-import-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.ops-import-module{border:1px solid #e4e9ef;border-radius:12px;padding:15px;min-width:0}
+.ops-import-top{display:flex;gap:10px;align-items:flex-start}.ops-import-top h3{font-size:13px;margin:2px 0 6px}.ops-import-top p{font-size:10px;line-height:1.5;color:#758092;margin:0}
+.ops-import-fields{margin:15px 0}.ops-import-fields strong{display:block;font-size:10px;color:#697587;margin-bottom:8px}
+.ops-field-chips{display:flex;flex-wrap:wrap;gap:5px}.ops-field-chips span{font-family:ui-monospace,monospace;font-size:9px;border-radius:5px;background:#f3f6f8;color:#596577;padding:4px 5px;overflow-wrap:anywhere}
+.ops-import-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+@media(max-width:1050px){.ops-import-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.ops-import-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}

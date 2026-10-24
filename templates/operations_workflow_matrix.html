@@ -1,0 +1,46 @@
+{% extends '_app_layout.html' %}
+{% block title %}Workflow Matrix · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-workflow-matrix">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><a href="{{ url_for('operations.operations_hub') }}">Operations</a><span>/</span><span>Workflow matrix</span></nav>
+  <header class="ops-header"><div><div class="ops-eyebrow">Workflow transparency</div><h1>Workflow matrix</h1><p class="ops-description">Inspect the allowed state transitions and required fields for each operational domain. This is a read-only reference generated from the server-side domain policies.</p></div><div class="ops-header-actions"><button class="ops-button" id="matrix-expand">Expand all</button><button class="ops-button" id="matrix-collapse">Collapse all</button></div></header>
+  <nav class="ops-nav"><a href="{{ url_for('operations.operations_hub') }}">All workspaces</a><a href="{{ url_for('operations.operations_governance_page') }}">Governance</a><a class="active" href="{{ url_for('operations.operations_workflow_matrix_page') }}">Workflow matrix</a><a href="{{ url_for('operations.operations_playbooks_page') }}">Playbooks</a></nav>
+  <div class="ops-toolbar"><div class="ops-field"><label for="matrix-search">Find module, status, or field</label><input id="matrix-search" type="search" placeholder="Search workflows…"></div><span class="ops-filter-count" id="matrix-count">9 workflows</span></div>
+  <section class="ops-matrix-list" id="matrix-list">
+  {% for key, item in matrix.items() %}
+    <details class="ops-card ops-matrix-card" data-matrix-module="{{ key }}">
+      <summary class="ops-matrix-summary"><div><strong>{{ item.title }}</strong><small>{{ item.description }}</small></div><span class="ops-chip">{{ item.statuses|length }} statuses</span></summary>
+      <div class="ops-card-body">
+        <div class="ops-section-label">Statuses</div><div class="ops-matrix-statuses">{% for status in item.statuses %}<span class="ops-badge status-{{ status }}">{{ status.replace('_',' ') }}</span>{% endfor %}</div>
+        <div class="ops-section-label">Allowed transitions</div><div class="ops-transition-grid">
+          {% for source, targets in item.transitions.items() %}
+          <div class="ops-transition-row"><strong>{{ source.replace('_',' ') }}</strong><span aria-hidden="true">→</span><div>{% for target in targets %}<span class="ops-chip">{{ target.replace('_',' ') }}</span>{% else %}<span class="ops-muted">No outgoing transitions</span>{% endfor %}</div></div>
+          {% endfor %}
+        </div>
+        <div class="ops-two-col" style="margin-top:16px">
+          <div><div class="ops-section-label">Required fields</div><div class="ops-field-chips">{% for field in item.required_fields %}<span>{{ field }}</span>{% endfor %}</div></div>
+          <div><div class="ops-section-label">Enumerated values</div>{% for field, values in item.enum_fields.items() %}<dl class="ops-kv"><dt>{{ field }}</dt><dd>{{ values|join(', ') }}</dd></dl>{% endfor %}</div>
+        </div>
+        <div style="margin-top:16px"><a class="ops-button small primary" href="{{ url_for('operations.operations_page', module_key=key) }}">Open workspace →</a></div>
+      </div>
+    </details>
+  {% endfor %}
+  </section>
+  <div class="ops-alert info" style="margin-top:18px"><span>ⓘ</span><div><strong>Policy enforcement</strong><br>The matrix describes allowed transitions, not an automatic permission grant. Role checks, required evidence, organization scope, and any configured approval policy are evaluated separately by the server.</div></div>
+</main>
+<style>
+.ops-matrix-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ops-matrix-card summary{list-style:none;cursor:pointer}.ops-matrix-card summary::-webkit-details-marker{display:none}
+.ops-matrix-summary{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:17px}
+.ops-matrix-summary strong{display:block;font-size:13px;margin-bottom:6px}.ops-matrix-summary small{display:block;color:#7a8594;font-size:10px;line-height:1.5}
+.ops-matrix-statuses{display:flex;gap:6px;flex-wrap:wrap}
+.ops-transition-grid{display:flex;flex-direction:column;gap:7px}
+.ops-transition-row{display:grid;grid-template-columns:105px 20px 1fr;gap:7px;align-items:center;padding:8px;border-bottom:1px solid #edf0f4}
+.ops-transition-row>strong{font-size:10px;text-transform:capitalize}.ops-transition-row>span{color:#8993a0}
+.ops-transition-row>div{display:flex;gap:5px;flex-wrap:wrap}.ops-transition-row .ops-chip{font-size:9px}
+@media(max-width:900px){.ops-matrix-list{grid-template-columns:1fr}}
+@media(max-width:520px){.ops-transition-row{grid-template-columns:1fr}.ops-transition-row>span{display:none}}
+</style>
+<script src="{{ url_for('static', filename='js/operations-workflow-matrix.js') }}" defer></script>
+{% endblock %}

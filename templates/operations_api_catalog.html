@@ -1,0 +1,65 @@
+{% extends '_app_layout.html' %}
+{% block title %}Operations API Catalog · TaskNest{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-api-catalog">
+  <nav class="ops-breadcrumb"><a href="{{ url_for('web.dashboard') }}">Home</a><span>/</span><a href="{{ url_for('operations.operations_hub') }}">Operations</a><span>/</span><span>API catalog</span></nav>
+  <header class="ops-header"><div><div class="ops-eyebrow">Developer enablement</div><h1>Operations API catalog</h1><p class="ops-description">A browsable index of the operational API surface for integration planning, QA, and implementation reviews. Authentication, CSRF protection for writes, tenant scope, and domain validation still apply.</p></div><div class="ops-header-actions"><button class="ops-button" id="api-catalog-reset">Clear search</button></div></header>
+  <nav class="ops-nav"><a href="{{ url_for('operations.operations_hub') }}">All workspaces</a><a href="{{ url_for('operations.operations_work_queue_page') }}">Work queue</a><a href="{{ url_for('operations.operations_governance_page') }}">Governance</a><a class="active" href="{{ url_for('operations.operations_api_catalog_page') }}">API catalog</a><a href="{{ url_for('operations.operations_workflow_matrix_page') }}">Workflow matrix</a></nav>
+  <div class="ops-metrics"><article class="ops-metric"><div class="ops-metric-label">Catalog endpoints</div><div class="ops-metric-value" id="api-catalog-total">{{ endpoints|length }}</div><div class="ops-metric-note">Documented routes in this catalog</div></article><article class="ops-metric"><div class="ops-metric-label">Read endpoints</div><div class="ops-metric-value" id="api-catalog-read">—</div><div class="ops-metric-note">GET requests</div></article><article class="ops-metric"><div class="ops-metric-label">Write endpoints</div><div class="ops-metric-value" id="api-catalog-write">—</div><div class="ops-metric-note">POST, PATCH, PUT</div></article><article class="ops-metric"><div class="ops-metric-label">Visible results</div><div class="ops-metric-value" id="api-catalog-visible">—</div><div class="ops-metric-note">After filtering</div></article></div>
+  <section class="ops-card"><div class="ops-card-body"><div class="ops-toolbar"><div class="ops-field"><label for="api-catalog-search">Search endpoint or purpose</label><input id="api-catalog-search" type="search" placeholder="e.g. approvals, export, work queue"></div><div class="ops-field"><label for="api-catalog-method">HTTP method</label><select id="api-catalog-method"><option value="">All methods</option><option>GET</option><option>POST</option><option>PATCH</option><option>PUT</option><option>DELETE</option></select></div><span class="ops-filter-count" id="api-catalog-count">Loading</span></div></div>
+    <div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th><th></th></tr></thead><tbody id="api-catalog-rows">{% for method,path,purpose in endpoints %}<tr data-api-method="{{ method }}" data-api-search="{{ path }} {{ purpose }}"><td><span class="ops-method ops-method-{{ method|lower }}">{{ method }}</span></td><td><code>{{ path }}</code></td><td>{{ purpose }}</td><td><button class="ops-button small" type="button" data-copy-endpoint="{{ path }}">Copy path</button></td></tr>{% endfor %}</tbody></table></div>
+  </section>
+  <section class="ops-grid" style="margin-top:18px"><article class="ops-card"><div class="ops-card-head"><div><h2>Request conventions</h2><p>Shared behavior across API routes.</p></div></div><div class="ops-card-body"><dl class="ops-kv"><dt>Authentication</dt><dd>Existing Flask-Login session is required.</dd></dl><dl class="ops-kv"><dt>Write protection</dt><dd>Send the CSRF token in the X-CSRFToken header for state-changing requests.</dd></dl><dl class="ops-kv"><dt>Response envelope</dt><dd>Successful JSON responses use ok=true and a data object; errors use ok=false and an error message.</dd></dl><dl class="ops-kv"><dt>Pagination</dt><dd>List APIs accept page and page_size; page sizes are bounded by the server.</dd></dl><dl class="ops-kv"><dt>Tenant isolation</dt><dd>Queries are scoped to the current organization, except for explicitly authorized super-admin operations.</dd></dl></div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Integration checklist</h2><p>Before connecting an external consumer.</p></div></div><div class="ops-card-body"><div class="ops-checklist"><label class="ops-check"><input type="checkbox"><span>Confirm the user role and organization context.</span></label><label class="ops-check"><input type="checkbox"><span>Handle 400, 401, 403, 404, 409, 413, and 422 responses.</span></label><label class="ops-check"><input type="checkbox"><span>Retry only operations that are safe to retry.</span></label><label class="ops-check"><input type="checkbox"><span>Store credentials in a secret manager, never in task notes.</span></label><label class="ops-check"><input type="checkbox"><span>Use bounded pagination and request timeouts.</span></label><label class="ops-check"><input type="checkbox"><span>Test organization isolation and unauthorized access.</span></label></div></div></article></section>
+  <section class="ops-grid" style="margin-top:18px">
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Example create request</h2><p>Use the module-specific required fields from the workflow matrix.</p></div><button class="ops-button small" id="api-copy-curl" type="button">Copy cURL example</button></div><div class="ops-card-body">
+      <p class="ops-muted">Example payload for an incident record. The exact required fields depend on the module policy.</p>
+      <pre class="ops-code-sample"><code>{
+  "title": "Public API elevated error rate",
+  "summary": "Errors increased after the latest deployment.",
+  "priority": "high",
+  "due_date": "2026-10-25",
+  "service": "Public API",
+  "environment": "production",
+  "impact": "high",
+  "urgency": "high",
+  "reported_by": "Monitoring"
+}</code></pre>
+      <p class="ops-muted">Send the JSON body with Content-Type: application/json and the session CSRF token in X-CSRFToken. A successful create returns HTTP 201 and the record in the data field.</p>
+    </div></article>
+    <article class="ops-card"><div class="ops-card-head"><div><h2>Example success envelope</h2><p>Clients should inspect HTTP status and the response envelope.</p></div></div><div class="ops-card-body">
+      <pre class="ops-code-sample"><code>{
+  "ok": true,
+  "message": "Record created.",
+  "data": {
+    "id": 42,
+    "key": "INC-00042",
+    "module": "incidents",
+    "status": "new",
+    "priority": "high",
+    "version": 1
+  }
+}</code></pre>
+      <p class="ops-muted">The example is illustrative. Actual IDs, keys, timestamps, and fields are generated by the server and must not be assumed in clients.</p>
+    </div></article>
+  </section>
+  <section class="ops-card" style="margin-top:18px"><div class="ops-card-head"><div><h2>Error handling reference</h2><p>Common failure classes and the recommended client behavior.</p></div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>HTTP status</th><th>Meaning</th><th>Recommended behavior</th></tr></thead><tbody>
+    <tr><td><span class="ops-method">400</span></td><td>Invalid input, unsupported enum, malformed identifier, or invalid date.</td><td>Show the field or request error and ask the user to correct it.</td></tr>
+    <tr><td><span class="ops-method">401</span></td><td>Authentication is missing or expired.</td><td>Return the user to sign-in and preserve a safe local navigation target.</td></tr>
+    <tr><td><span class="ops-method">403</span></td><td>The caller does not have the required role or permission.</td><td>Do not repeatedly retry; explain that a manager or administrator action is needed.</td></tr>
+    <tr><td><span class="ops-method">404</span></td><td>The record is missing or outside the caller's visible organization scope.</td><td>Refresh the list and avoid revealing cross-tenant record existence.</td></tr>
+    <tr><td><span class="ops-method">409</span></td><td>Workflow transition conflict, duplicate assignment, or stale record version.</td><td>Reload current state and ask the user to reapply their change intentionally.</td></tr>
+    <tr><td><span class="ops-method">413</span></td><td>The CSV import exceeds the supported file size.</td><td>Split the input into smaller batches and preserve the source file.</td></tr>
+    <tr><td><span class="ops-method">422</span></td><td>One or more domain fields failed validation.</td><td>Read the fields/rows error details and fix all reported values before retrying.</td></tr>
+    <tr><td><span class="ops-method">500</span></td><td>Unexpected server-side failure.</td><td>Use a correlation or request ID if available; do not expose stack traces to end users.</td></tr>
+  </tbody></table></div></section>
+  <div class="ops-toast" id="api-catalog-toast" role="status" aria-live="polite"></div>
+</main>
+<style>
+.ops-method{display:inline-flex;padding:5px 7px;border-radius:5px;font-size:9px;font-weight:850;background:#eef1f4;color:#586577}
+.ops-method-get{background:#e8f5ed;color:#28704a}.ops-method-post{background:#eaf1ff;color:#315fa8}.ops-method-patch{background:#fff5df;color:#91611e}.ops-method-put{background:#f0eaff;color:#7046a1}.ops-method-delete{background:#fff0ef;color:#a53c34}
+#ops-api-catalog code{font-size:10px;overflow-wrap:anywhere}
+</style>
+<script src="{{ url_for('static', filename='js/operations-api-catalog.js') }}" defer></script>
+{% endblock %}

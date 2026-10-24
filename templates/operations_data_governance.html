@@ -1,0 +1,193 @@
+{% extends '_app_layout.html' %}
+{% block title %}Data Access Governance · TaskNest Enterprise{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/operations.css') }}">
+{% endblock %}
+{% block app_content %}
+<main class="ops-page" id="ops-workspace" data-module="data-governance">
+  <nav class="ops-breadcrumb" aria-label="Breadcrumb">
+    <a href="{{ url_for('web.dashboard') }}">Home</a><span aria-hidden="true">/</span>
+    <a href="{{ url_for('operations.operations_hub') }}">Operations</a><span aria-hidden="true">/</span>
+    <span>Data Access Governance</span>
+  </nav>
+  <header class="ops-header">
+    <div>
+      <div class="ops-eyebrow">TaskNest enterprise operations</div>
+      <h1>Data Access Governance</h1>
+      <p class="ops-description">{{ module.description }}</p>
+    </div>
+    <div class="ops-header-actions">
+      <button class="ops-button" id="ops-export" type="button" title="Export current workspace records to CSV">Export CSV</button>
+      <button class="ops-button" id="ops-import-trigger" type="button" title="Import validated CSV records">Import CSV</button>
+      <input type="file" id="ops-import-file" accept=".csv,text/csv" hidden>
+      <button class="ops-button" id="ops-refresh" type="button">Refresh data</button>
+      <button class="ops-button primary" id="ops-create" type="button">+ New record</button>
+    </div>
+  </header>
+  <nav class="ops-nav" aria-label="Operations workspaces">
+    <a href="{{ url_for('operations.operations_hub') }}">All workspaces</a>
+    <a href="{{ url_for('operations.operations_analytics_page') }}">Analytics</a>
+    <a href="{{ url_for('operations.operations_playbooks_page') }}">Playbooks</a>
+    <a href="{{ url_for('operations.operations_policies_page') }}">Policies</a>
+    <a href="{{ url_for('operations.operations_import_guide_page') }}">CSV Import</a>
+    <a href="{{ url_for('operations.operations_data_quality_page') }}">Data quality</a>
+    <a href="{{ url_for('operations.operations_governance_page') }}">Governance</a>
+    {% for key, item in modules.items() %}
+    <a href="{{ url_for('operations.operations_page', module_key=key) }}" class="{% if key == module_key %}active{% endif %}">{{ item.title }}</a>
+    {% endfor %}
+  </nav>
+  <section class="ops-metrics" aria-label="Workspace summary">
+    <article class="ops-metric"><div class="ops-metric-label">Total records</div><div class="ops-metric-value" id="metric-total">—</div><div class="ops-metric-note">Records visible to your role</div></article>
+    <article class="ops-metric"><div class="ops-metric-label">Open work</div><div class="ops-metric-value" id="metric-open">—</div><div class="ops-metric-note">Not in a terminal state</div></article>
+    <article class="ops-metric"><div class="ops-metric-label">Overdue</div><div class="ops-metric-value" id="metric-overdue">—</div><div class="ops-metric-note">Past due date and not closed</div></article>
+    <article class="ops-metric"><div class="ops-metric-label">Due in 14 days</div><div class="ops-metric-value" id="metric-due-soon">—</div><div class="ops-metric-note">Upcoming deadlines</div></article>
+  </section>
+  <div class="ops-alert info" id="ops-banner" role="status">
+    <span aria-hidden="true">ⓘ</span><div><strong>Workspace guidance</strong><br>
+    Records are scoped to your organization. Workflow transitions are validated by the server; approval actions may require a manager or administrator.</div>
+  </div>
+  <section class="ops-grid">
+    <article class="ops-card">
+      <div class="ops-card-head"><div><h2>Record register</h2><p>Search, filter, review and update work items.</p></div><span class="ops-filter-count" id="ops-result-count">Loading…</span></div>
+      <div class="ops-card-body">
+        <div class="ops-toolbar" role="search">
+          <div class="ops-field"><label for="ops-search">Search records</label><input id="ops-search" type="search" placeholder="Title, reference, summary…"></div>
+          <div class="ops-field"><label for="ops-status-filter">Status</label><select id="ops-status-filter"><option value="">All statuses</option>{% for status in status_options %}<option value="{{ status }}">{{ status.replace('_',' ')|title }}</option>{% endfor %}</select></div>
+          <div class="ops-field"><label for="ops-priority-filter">Priority</label><select id="ops-priority-filter"><option value="">All priorities</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></div>
+          <button class="ops-button small" id="ops-clear-filters" type="button">Clear filters</button>
+          <div class="ops-field ops-bulk-control"><label for="ops-bulk-status">Bulk transition</label><select id="ops-bulk-status"><option value="">Choose status…</option>{% for status in status_options %}<option value="{{ status }}">{{ status.replace('_',' ')|title }}</option>{% endfor %}</select></div>
+          <button class="ops-button small" id="ops-bulk-apply" type="button" disabled>Apply to selected</button>
+          <span class="ops-filter-count" id="ops-selected-count">0 selected</span><div class="ops-field ops-bulk-control"><label for="ops-bulk-priority">Set priority</label><select id="ops-bulk-priority"><option value="">Keep priority</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></div>
+          <div class="ops-field ops-bulk-control"><label for="ops-bulk-due-date">Set due date</label><input id="ops-bulk-due-date" type="date"></div>
+          <button class="ops-button small" id="ops-bulk-update" type="button" disabled>Update fields</button>
+        </div>
+        <div class="ops-table-wrap">
+          <table class="ops-table">
+            <thead><tr><th scope="col"><label class="sr-only" for="ops-select-all">Select all records on this page</label><input id="ops-select-all" type="checkbox"></th><th scope="col">Record</th><th scope="col">Status</th><th scope="col">Priority</th><th scope="col">Owner</th><th scope="col">Due date</th><th scope="col">Updated</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody id="ops-record-rows"><tr><td colspan="8"><div class="ops-empty"><strong>Loading workspace</strong><p>Fetching organization-scoped records…</p></div></td></tr></tbody>
+          </table>
+        </div>
+        <div class="ops-pagination"><span id="ops-pagination-label">Page 1</span><div class="ops-pagination-actions"><button class="ops-button small" id="ops-prev" type="button" disabled>Previous</button><button class="ops-button small" id="ops-next" type="button" disabled>Next</button></div></div>
+      </div>
+    </article>
+    <aside class="ops-card">
+      <div class="ops-card-head"><div><h2>Operational insights</h2><p>Live indicators for this workspace.</p></div></div>
+      <div class="ops-card-body">
+        <div class="ops-section-label">Status distribution</div>
+        <div id="ops-status-summary" class="ops-side-list"><div class="ops-skeleton"></div></div>
+        <div class="ops-section-label">Recently updated</div>
+        <div id="ops-recent" class="ops-side-list"><div class="ops-skeleton"></div></div>
+        <div class="ops-section-label">Workflow quality</div>
+        <p class="ops-muted">Use readiness checks to identify records missing required evidence before submitting for review.</p>
+        <button class="ops-button small" type="button" id="ops-readiness">Run readiness report</button>
+        <div id="ops-readiness-result" aria-live="polite"></div>
+      </div>
+    </aside>
+  </section>
+  <section class="ops-card" style="margin-top:18px">
+    <div class="ops-card-head"><div><h2>Module-specific workbench</h2><p>Structured data for data access governance.</p></div><span class="ops-chip">Validated fields</span></div>
+    <div class="ops-card-body">
+      <div class="ops-two-col">
+        <div>
+          <div class="ops-section-label">Domain workflow</div>
+          <div class="ops-side-list">
+            <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Capture context</div><div class="ops-side-meta">Document impact, ownership, evidence and business context before moving the record forward.</div></div></div>
+            <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Review readiness</div><div class="ops-side-meta">Check required fields and attach references or evidence required by policy.</div></div></div>
+            <div class="ops-side-item"><span class="ops-side-dot"></span><div><div class="ops-side-title">Transition with accountability</div><div class="ops-side-meta">Every status change is recorded in the activity history with the actor and timestamp.</div></div></div>
+          </div>
+        </div>
+        <div>
+          <div class="ops-section-label">Policy reminders</div>
+          <div class="ops-alert"><span>!</span><div>Do not place passwords, access tokens, payment-card data or other secrets in notes or evidence fields.</div></div>
+          <div class="ops-alert info"><span>i</span><div>CSV exports reflect the records visible to your account and are capped to protect application performance.</div></div>
+          <div class="ops-alert success"><span>✓</span><div>Optimistic version checks help prevent accidental overwrites when two people edit the same record.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<section class="ops-card ops-domain-guide" style="margin-top:18px">
+  <div class="ops-card-head"><div><h2>Data access review checklist</h2><p>Domain-specific controls and field definitions.</p></div><a class="ops-button small" href="{{ url_for('operations.operations_playbooks_page') }}">Full runbooks →</a></div>
+  <div class="ops-card-body"><div class="ops-two-col">
+    <div><div class="ops-section-label">Before moving a record forward</div><div class="ops-checklist">
+      <label class="ops-check"><input type="checkbox" data-guide-check="0"><span>State the exact business purpose and dataset.</span></label>
+      <label class="ops-check"><input type="checkbox" data-guide-check="1"><span>Choose the least privileged access level that works.</span></label>
+      <label class="ops-check"><input type="checkbox" data-guide-check="2"><span>Document legal basis and data classification.</span></label>
+      <label class="ops-check"><input type="checkbox" data-guide-check="3"><span>Set an expiry date and an accountable data owner.</span></label>
+      <label class="ops-check"><input type="checkbox" data-guide-check="4"><span>Verify revocation when access expires or purpose ends.</span></label>
+    </div><p class="ops-muted" style="margin-top:12px">These local checkboxes are a personal review aid; they do not replace the saved checklist or server-side approval state.</p></div>
+    <div><div class="ops-section-label">Field definitions</div>
+      <dl class="ops-kv"><dt>Classification</dt><dd>Sensitivity category used to select controls.</dd></dl>
+      <dl class="ops-kv"><dt>Access level</dt><dd>Read, write, or admin privilege requested.</dd></dl>
+      <dl class="ops-kv"><dt>Purpose</dt><dd>Specific use, not a generic statement.</dd></dl>
+      <dl class="ops-kv"><dt>Legal basis</dt><dd>Approved basis for processing or access.</dd></dl>
+      <dl class="ops-kv"><dt>Expiry date</dt><dd>Date after which access must be reviewed or removed.</dd></dl>
+    </div></div>
+  <div class="ops-section-label">Live readiness assessment</div><div id="ops-domain-assessment"><p class="ops-muted">Open a record to view the server-calculated assessment.</p></div>
+  <div class="ops-section-label">Recommended next actions</div><div id="ops-domain-recommendations"><p class="ops-muted">Recommendations appear when a record is open.</p></div>
+  </div>
+</section>
+<section class="ops-grid" style="margin-top:18px">
+  <article class="ops-card"><div class="ops-card-head"><div><h2>Operational runbook</h2><p>Recommended phases, evidence, and escalation guidance.</p></div><a class="ops-button small" href="{{ url_for('operations.operations_playbooks_page') }}">Open playbooks →</a></div><div class="ops-card-body" id="ops-module-playbook"><p class="ops-muted">Loading runbook…</p></div></article>
+  <article class="ops-card"><div class="ops-card-head"><div><h2>Effective response policy</h2><p>Organization policy or platform defaults.</p></div><a class="ops-button small" href="{{ url_for('operations.operations_policies_page') }}">Policy admin →</a></div><div class="ops-card-body" id="ops-module-policy"><p class="ops-muted">Loading effective policy…</p></div></article>
+</section>
+<div class="ops-modal" id="ops-edit-modal" role="dialog" aria-modal="true" aria-labelledby="ops-modal-title">
+  <div class="ops-modal-card">
+    <div class="ops-modal-head"><div><h2 id="ops-modal-title">Create data access governance record</h2><p class="ops-muted">Fields marked required are validated before save.</p></div><button class="ops-button small" type="button" data-close-modal>Close</button></div>
+    <form id="ops-record-form" novalidate>
+      <div class="ops-modal-body">
+        <div class="ops-form-error" id="ops-form-error" role="alert"></div>
+        <input type="hidden" id="ops-record-id"><input type="hidden" id="ops-record-version">
+        <div class="ops-form-grid">
+          <div class="ops-field"><label for="field-title">Title <span class="ops-required">*</span></label><input id="field-title" name="title" required maxlength="240" autocomplete="off"><span class="help">Use a short, searchable title.</span></div>
+          <div class="ops-field"><label for="field-priority">Priority</label><select id="field-priority" name="priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option><option value="critical">Critical</option></select></div>
+          <div class="ops-field wide"><label for="field-summary">Summary</label><textarea id="field-summary" name="summary" maxlength="10000" placeholder="Context, impact and expected outcome…"></textarea></div>
+          <div class="ops-field"><label for="field-owner">Owner user ID</label><input id="field-owner" name="owner_id" inputmode="numeric" placeholder="Optional"><span class="help">Use an active user in your organization.</span></div>
+          <div class="ops-field"><label for="field-due-date">Due date</label><input id="field-due-date" name="due_date" type="date"></div>
+          <div class="ops-field"><label for="field-requester">Requester</label><input id="field-requester" name="requester" type="text" ></div>\n          <div class="ops-field"><label for="field-dataset">Dataset / system</label><input id="field-dataset" name="dataset" type="text" ></div>\n          <div class="ops-field wide"><label for="field-purpose">Business purpose</label><textarea id="field-purpose" name="purpose" maxlength="20000" rows="4"></textarea><span class="help">Avoid secrets and personal data that are not necessary for this workflow.</span></div>\n          <div class="ops-field "><label for="field-data_classification">Data classification</label><select id="field-data_classification" name="data_classification"><option value="">Select…</option><option value="public">Public</option><option value="internal">Internal</option><option value="confidential">Confidential</option><option value="restricted">Restricted</option></select></div>\n          <div class="ops-field "><label for="field-access_level">Access level</label><select id="field-access_level" name="access_level"><option value="">Select…</option><option value="read">Read</option><option value="write">Write</option><option value="admin">Admin</option></select></div>\n          <div class="ops-field "><label for="field-legal_basis">Legal basis</label><select id="field-legal_basis" name="legal_basis"><option value="">Select…</option><option value="contract">Contract</option><option value="consent">Consent</option><option value="legitimate_interest">Legitimate Interest</option><option value="legal_obligation">Legal Obligation</option><option value="other">Other</option></select></div>\n          <div class="ops-field"><label for="field-expiry_date">Access expiry</label><input id="field-expiry_date" name="expiry_date" type="date" ></div>\n          <div class="ops-field"><label for="field-approver">Data owner / approver</label><input id="field-approver" name="approver" type="text" ></div>\n          <div class="ops-field wide"><label for="field-controls">Required controls</label><textarea id="field-controls" name="controls" maxlength="20000" rows="4"></textarea><span class="help">Avoid secrets and personal data that are not necessary for this workflow.</span></div>\n          <div class="ops-field wide"><label for="field-justification">Additional justification</label><textarea id="field-justification" name="justification" maxlength="20000" rows="4"></textarea><span class="help">Avoid secrets and personal data that are not necessary for this workflow.</span></div>\n          <div class="ops-field"><label for="field-reviewed_at">Review date</label><input id="field-reviewed_at" name="reviewed_at" type="date" ></div>\n        </div>
+      </div>
+      <div class="ops-modal-foot"><button class="ops-button" type="button" data-close-modal>Cancel</button><div style="display:flex;gap:8px"><button class="ops-button" id="ops-save-draft" type="button">Save draft</button><button class="ops-button primary" id="ops-save-record" type="submit">Save record</button></div></div>
+    </form>
+  </div>
+</div>
+<div class="ops-detail" id="ops-detail" role="dialog" aria-modal="true" aria-labelledby="ops-detail-title">
+  <article class="ops-detail-panel">
+    <header class="ops-detail-head"><div><h2 id="ops-detail-title">Record detail</h2><p id="ops-detail-subtitle">Record reference</p></div><button class="ops-button small" id="ops-detail-close" type="button">Close</button></header>
+    <div class="ops-detail-body"><div class="ops-detail-layout">
+      <section><div id="ops-detail-fields"></div><div class="ops-section-label">Workflow actions</div><div id="ops-transition-actions" class="ops-status-bar"></div><div class="ops-section-label">Activity and comments</div><div id="ops-event-list" class="ops-side-list"></div><form id="ops-comment-form"><div class="ops-field"><label for="ops-comment-text">Add comment</label><textarea id="ops-comment-text" rows="3" maxlength="5000" placeholder="Add a useful update…"></textarea></div><button class="ops-button small primary" style="margin-top:8px" type="submit">Post comment</button></form></section>
+      <aside><div class="ops-section-label">Record controls</div><div class="ops-side-list"><button class="ops-button small" id="ops-duplicate" type="button">Duplicate record</button><button class="ops-button small" id="ops-edit-detail" type="button">Edit details</button><button class="ops-button small" id="ops-detail-history" type="button">Refresh history</button><button class="ops-button small danger" id="ops-archive" type="button">Archive record</button></div><div class="ops-section-label">Readiness</div><div id="ops-detail-readiness"></div>
+      <div class="ops-section-label">Saved checklist</div><div id="ops-checklist-items"><p class="ops-muted">Loading checklist…</p></div>
+      <form id="ops-checklist-form" class="ops-checklist-form"><div class="ops-field"><label for="ops-checklist-title">Add checklist item</label><input id="ops-checklist-title" maxlength="240" required></div><label class="ops-check" style="margin-top:8px"><input id="ops-checklist-required" type="checkbox" checked><span>Required for readiness</span></label><button class="ops-button small" type="submit" style="margin-top:8px">Add item</button></form>
+      <div class="ops-section-label">Approval assignments</div><div id="ops-approval-items"><p class="ops-muted">Loading approvals…</p></div>
+      <form id="ops-approval-form" class="ops-checklist-form"><div class="ops-field"><label for="ops-approval-stage">Stage key</label><input id="ops-approval-stage" maxlength="60" placeholder="security_review" required></div><div class="ops-field" style="margin-top:8px"><label for="ops-approval-user">Approver user ID</label><input id="ops-approval-user" type="number" min="1" required></div><button class="ops-button small" type="submit" style="margin-top:8px">Assign approver</button></form>
+      <div class="ops-section-label">Linked records</div><div id="ops-linked-records"><p class="ops-muted">Loading links…</p></div>
+      <form id="ops-link-form" class="ops-checklist-form"><div class="ops-field"><label for="ops-link-target">Target record ID</label><input id="ops-link-target" type="number" min="1" required></div><div class="ops-field" style="margin-top:8px"><label for="ops-link-type">Relationship</label><select id="ops-link-type"><option>relates_to</option><option>blocks</option><option>blocked_by</option><option>duplicates</option><option>caused_by</option><option>causes</option><option>implements</option><option>tests</option><option>depends_on</option><option>parent_of</option></select></div><button class="ops-button small" type="submit" style="margin-top:8px">Link record</button></form>
+      <div class="ops-section-label">SLA clock history</div><div id="ops-sla-events"><p class="ops-muted">Loading SLA events…</p></div>
+      <form id="ops-sla-form" class="ops-checklist-form"><div class="ops-field"><label for="ops-sla-event-type">SLA event</label><select id="ops-sla-event-type"><option>started</option><option>paused</option><option>resumed</option><option>acknowledged</option><option>breached</option><option>resolved</option></select></div>
+      <div class="ops-two-col" style="margin-top:8px"><div class="ops-field"><label for="ops-sla-target">Target minutes</label><input id="ops-sla-target" type="number" min="0" max="525600" value="240"></div><div class="ops-field"><label for="ops-sla-elapsed">Elapsed minutes</label><input id="ops-sla-elapsed" type="number" min="0" max="525600" value="0"></div></div>
+      <div class="ops-field" style="margin-top:8px"><label for="ops-sla-reason">Event reason</label><textarea id="ops-sla-reason" maxlength="1000" rows="2"></textarea></div><button class="ops-button small" type="submit" style="margin-top:8px">Record SLA event</button></form>
+      <div class="ops-section-label">Registered evidence</div><div id="ops-attachment-items"><p class="ops-muted">Loading evidence metadata…</p></div>
+      <form id="ops-attachment-form" class="ops-checklist-form"><p class="ops-muted">Register metadata for an object already stored by your configured private storage adapter. This form does not upload file bytes.</p>
+      <div class="ops-field"><label for="ops-attachment-name">Display name</label><input id="ops-attachment-name" maxlength="240" required></div>
+      <div class="ops-field" style="margin-top:8px"><label for="ops-attachment-key">Storage object key</label><input id="ops-attachment-key" maxlength="500" required></div>
+      <div class="ops-two-col" style="margin-top:8px"><div class="ops-field"><label for="ops-attachment-type">Evidence type</label><select id="ops-attachment-type"><option>supporting</option><option>test_evidence</option><option>approval</option><option>invoice</option><option>screenshot</option><option>other</option></select></div><div class="ops-field"><label for="ops-attachment-size">Bytes</label><input id="ops-attachment-size" type="number" min="0" value="0"></div></div>
+      <div class="ops-field" style="margin-top:8px"><label for="ops-attachment-content-type">Content type</label><input id="ops-attachment-content-type" value="application/octet-stream"></div>
+      <button class="ops-button small" type="submit" style="margin-top:8px">Register evidence</button></form>
+      <div class="ops-section-label">Server assessment</div><div id="ops-server-assessment"><p class="ops-muted">Loading assessment…</p></div>
+      </aside>
+    </div></div>
+  </article>
+</div>
+<div class="ops-toast" id="ops-toast" role="status" aria-live="polite"></div>
+<script>
+window.TASKNEST_OPERATIONS = {
+  module: "data-governance",
+  title: "Data Access Governance",
+  statuses: ["draft", "submitted", "privacy_review", "security_review", "approved", "provisioned", "expired", "rejected", "revoked"],
+  fields: ["requester", "dataset", "purpose", "data_classification", "access_level", "legal_basis", "expiry_date", "approver", "controls", "justification", "reviewed_at"],
+  prefix: "DAR"
+};
+</script>
+<script src="{{ url_for('static', filename='js/operations-core.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/operations_data_governance.js') }}" defer></script>
+{% endblock %}
